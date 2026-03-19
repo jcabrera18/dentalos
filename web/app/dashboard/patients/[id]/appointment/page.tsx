@@ -59,7 +59,7 @@ export default function NewAppointmentPage() {
 
     try {
       // Construir starts_at en UTC desde fecha + hora local Argentina
-      const startsAt = new Date(`${form.date}T${form.time}:00-03:00`).toISOString()
+      const startsAt = `${form.date}T${form.time}:00-03:00`
 
       await apiFetch('/appointments', {
         method: 'POST',

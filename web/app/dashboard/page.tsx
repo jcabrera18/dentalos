@@ -113,7 +113,6 @@ export default function DashboardPage() {
             { label: '📅 Agenda', href: '/dashboard/agenda' },
             { label: '👥 Pacientes', href: '/dashboard/patients' },
             { label: '💰 Cobros', href: '/dashboard/payments' },
-            { label: '⚙️ Configuración', href: '/dashboard/settings' },
           ].map(({ label, href }) => (
             <button
               key={href}

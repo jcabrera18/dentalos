@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
-const HOURS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00']
-const DAYS  = ['Lun','Mar','Mié','Jue','Vie','Sáb']
+const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
+const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 function getWeekDates(offset = 0) {
   const now = new Date()
@@ -37,26 +37,26 @@ function getSlotHeight(startsAt: string, endsAt: string): number {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  pending:    'border-amber-400 bg-amber-950/40 text-amber-300',
-  confirmed:  'border-blue-400 bg-blue-950/40 text-blue-300',
-  completed:  'border-emerald-400 bg-emerald-950/40 text-emerald-300',
-  absent:     'border-red-400 bg-red-950/40 text-red-300',
-  cancelled:  'border-gray-600 bg-gray-800/40 text-gray-500',
-  in_progress:'border-purple-400 bg-purple-950/40 text-purple-300',
+  pending: 'border-amber-400 bg-amber-950/40 text-amber-300',
+  confirmed: 'border-blue-400 bg-blue-950/40 text-blue-300',
+  completed: 'border-emerald-400 bg-emerald-950/40 text-emerald-300',
+  absent: 'border-red-400 bg-red-950/40 text-red-300',
+  cancelled: 'border-gray-600 bg-gray-800/40 text-gray-500',
+  in_progress: 'border-purple-400 bg-purple-950/40 text-purple-300',
 }
 
 export default function AgendaPage() {
   const [appointments, setAppointments] = useState<any[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [token, setToken]               = useState('')
-  const [weekOffset, setWeekOffset]     = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState('')
+  const [weekOffset, setWeekOffset] = useState(0)
   const [selectedAppt, setSelectedAppt] = useState<any>(null)
-  const router   = useRouter()
+  const router = useRouter()
   const supabase = createClient()
 
   const weekDates = getWeekDates(weekOffset)
   const from = formatDate(weekDates[0])
-  const to   = formatDate(weekDates[5])
+  const to = formatDate(weekDates[5])
 
   useEffect(() => {
     async function load() {
@@ -131,9 +131,8 @@ export default function AgendaPage() {
             return (
               <div key={i} className="py-3 text-center border-l border-gray-800">
                 <div className="text-xs text-gray-500 uppercase tracking-wider">{DAYS[i]}</div>
-                <div className={`text-lg font-bold mx-auto mt-0.5 w-8 h-8 flex items-center justify-center rounded-full ${
-                  isToday ? 'bg-blue-500 text-white' : ''
-                }`}>
+                <div className={`text-lg font-bold mx-auto mt-0.5 w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-500 text-white' : ''
+                  }`}>
                   {d.getDate()}
                 </div>
               </div>
@@ -156,10 +155,12 @@ export default function AgendaPage() {
           {weekDates.map((d, dayIdx) => {
             const dateStr = formatDate(d)
             const isToday = dateStr === today
-            const dayAppts = appointments.filter(a =>
-              a.starts_at.startsWith(dateStr) ||
-              new Date(a.starts_at).toISOString().split('T')[0] === dateStr
-            )
+            const dayAppts = appointments.filter(a => {
+              const apptDate = new Date(a.starts_at).toLocaleDateString('en-CA', {
+                timeZone: 'America/Argentina/Buenos_Aires'
+              })
+              return apptDate === dateStr
+            })
 
             return (
               <div key={dayIdx}
@@ -178,7 +179,7 @@ export default function AgendaPage() {
                     onClick={() => setSelectedAppt(appt)}
                     className={`absolute left-1 right-1 rounded-md border-l-2 px-1.5 py-1 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}
                     style={{
-                      top:    getSlotTop(appt.starts_at),
+                      top: getSlotTop(appt.starts_at),
                       height: getSlotHeight(appt.starts_at, appt.ends_at),
                     }}
                   >
@@ -220,18 +221,17 @@ export default function AgendaPage() {
             <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Cambiar estado</div>
             <div className="grid grid-cols-2 gap-2 mb-4">
               {[
-                { status: 'confirmed',  label: '✓ Confirmado' },
-                { status: 'completed',  label: '✅ Atendido' },
-                { status: 'absent',     label: '❌ Ausente' },
-                { status: 'cancelled',  label: '🚫 Cancelado' },
+                { status: 'confirmed', label: '✓ Confirmado' },
+                { status: 'completed', label: '✅ Atendido' },
+                { status: 'absent', label: '❌ Ausente' },
+                { status: 'cancelled', label: '🚫 Cancelado' },
               ].map(({ status, label }) => (
                 <button key={status}
                   onClick={() => updateStatus(selectedAppt.id, status)}
-                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    selectedAppt.status === status
+                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${selectedAppt.status === status
                       ? 'bg-blue-500 text-white'
                       : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                  }`}>
+                    }`}>
                   {label}
                 </button>
               ))}
