@@ -6,11 +6,11 @@ import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
 export default function DashboardPage() {
-  const [user, setUser]           = useState<any>(null)
-  const [agenda, setAgenda]       = useState<any[]>([])
-  const [stats, setStats]         = useState<any>({})
-  const [loading, setLoading]     = useState(true)
-  const router  = useRouter()
+  const [user, setUser] = useState<any>(null)
+  const [agenda, setAgenda] = useState<any[]>([])
+  const [stats, setStats] = useState<any>({})
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -106,6 +106,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
+
+        {/* Navegación rápida */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {[
+            { label: '📅 Agenda', href: '/dashboard/agenda' },
+            { label: '👥 Pacientes', href: '/dashboard/patients' },
+            { label: '💰 Cobros', href: '/dashboard/payments' },
+            { label: '⚙️ Configuración', href: '/dashboard/settings' },
+          ].map(({ label, href }) => (
+            <button
+              key={href}
+              onClick={() => router.push(href)}
+              className="bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-xl py-4 text-sm font-semibold transition-colors text-center"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Agenda del día */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
@@ -135,15 +154,14 @@ export default function DashboardPage() {
                     <div className="font-semibold truncate">{appt.patient_name}</div>
                     <div className="text-sm text-gray-400 truncate">{appt.appointment_type}</div>
                   </div>
-                  <span className={`text-xs font-semibold px-3 py-1 rounded-full flex-shrink-0 ${
-                    appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                    appt.status === 'confirmed' ? 'bg-blue-900/40 text-blue-400' :
-                    appt.status === 'absent'    ? 'bg-red-900/40 text-red-400' :
-                    'bg-amber-900/40 text-amber-400'
-                  }`}>
+                  <span className={`text-xs font-semibold px-3 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
+                      appt.status === 'confirmed' ? 'bg-blue-900/40 text-blue-400' :
+                        appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
+                          'bg-amber-900/40 text-amber-400'
+                    }`}>
                     {appt.status === 'completed' ? 'Atendido' :
-                     appt.status === 'confirmed' ? 'Confirmado' :
-                     appt.status === 'absent'    ? 'Ausente' : 'Pendiente'}
+                      appt.status === 'confirmed' ? 'Confirmado' :
+                        appt.status === 'absent' ? 'Ausente' : 'Pendiente'}
                   </span>
                 </div>
               ))}
