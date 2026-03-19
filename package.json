@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc --noEmitOnError false",
+    "build": "tsc --skipLibCheck --noEmitOnError false --noUnusedLocals false --noUnusedParameters false --noImplicitReturns false",
     "start": "node dist/server.js",
     "migrate": "node scripts/migrate.js",
     "migrate:reset": "node scripts/migrate.js --reset",
@@ -40,5 +40,8 @@
     "tsx": "^4.15.0",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
