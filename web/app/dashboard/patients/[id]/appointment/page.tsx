@@ -259,7 +259,7 @@ export default function NewAppointmentPage() {
               disabled={saving}
               className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors"
             >
-              {saving ? 'Agendando...' : 'Confirmar turno'}
+              {saving ? 'Agendando..' : 'Confirmar turno'}
             </button>
           </div>
         </form>
