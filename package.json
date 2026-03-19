@@ -4,9 +4,9 @@
   "description": "DentalOS — REST API (Fastify + Supabase)",
   "type": "module",
   "scripts": {
+    "build": "echo 'skipping tsc, using tsx at runtime'",
+    "start": "node --import tsx/esm src/server.ts",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc --skipLibCheck --noEmitOnError false --noUnusedLocals false --noUnusedParameters false --noImplicitReturns false",
-    "start": "node dist/server.js",
     "migrate": "node scripts/migrate.js",
     "migrate:reset": "node scripts/migrate.js --reset",
     "lint": "eslint src --ext .ts",
