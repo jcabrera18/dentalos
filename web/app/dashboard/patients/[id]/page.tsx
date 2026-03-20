@@ -54,14 +54,6 @@ export default function PatientDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.push('/dashboard/patients')}
-          className="text-gray-400 hover:text-white transition-colors">
-          ← Pacientes
-        </button>
-        <h1 className="text-xl font-bold">{patient.first_name} {patient.last_name}</h1>
-      </header>
 
       <main className="p-6 max-w-5xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -9,7 +9,11 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [agenda, setAgenda] = useState<any[]>([])
   const [stats, setStats] = useState<any>({})
+  const [inactive, setInactive] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [showNotesModal, setShowNotesModal] = useState(false)
+  const [pendingAppt, setPendingAppt] = useState<any>(null)
+  const [clinicalNotes, setClinicalNotes] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
@@ -25,15 +29,17 @@ export default function DashboardPage() {
       const token = session.access_token
 
       // Cargar perfil + agenda + stats en paralelo
-      const [meData, agendaData, statsData] = await Promise.all([
+      const [meData, agendaData, statsData, inactiveData] = await Promise.all([
         apiFetch('/auth/me', { token }),
         apiFetch('/appointments/today', { token }),
         apiFetch('/appointments/stats/today', { token }),
+        apiFetch('/patients/alerts/inactive?days=90', { token }),
       ])
 
       setUser(meData.data)
       setAgenda(agendaData.data ?? [])
       setStats(statsData.data ?? {})
+      setInactive(inactiveData.data ?? [])
       setLoading(false)
     }
 
@@ -57,31 +63,53 @@ export default function DashboardPage() {
     weekday: 'long', day: 'numeric', month: 'long'
   })
 
+  async function markStatus(id: string, status: string) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await apiFetch(`/appointments/${id}`, {
+      method: 'PATCH',
+      token: session.access_token,
+      body: JSON.stringify({ status })
+    })
+    // Recargar agenda y stats
+    const [agendaData, statsData] = await Promise.all([
+      apiFetch('/appointments/today', { token: session.access_token }),
+      apiFetch('/appointments/stats/today', { token: session.access_token }),
+    ])
+    setAgenda(agendaData.data ?? [])
+    setStats(statsData.data ?? {})
+  }
+
+  async function confirmAttended() {
+    if (!pendingAppt) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    await apiFetch(`/appointments/${pendingAppt.id}/complete`, {
+      method: 'POST',
+      token: session.access_token,
+      body: JSON.stringify({ clinical_notes: clinicalNotes || undefined })
+    })
+
+    const [agendaData, statsData] = await Promise.all([
+      apiFetch('/appointments/today', { token: session.access_token }),
+      apiFetch('/appointments/stats/today', { token: session.access_token }),
+    ])
+    setAgenda(agendaData.data ?? [])
+    setStats(statsData.data ?? {})
+    setShowNotesModal(false)
+    setPendingAppt(null)
+    setClinicalNotes('')
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">
-          Dental<span className="text-blue-400">OS</span>
-        </h1>
-        <div className="flex items-center gap-4">
-          <span className="text-gray-400 text-sm">
-            Dr. {user?.first_name} {user?.last_name}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-gray-500 hover:text-white transition-colors"
-          >
-            Salir
-          </button>
-        </div>
-      </header>
 
       <main className="p-6 max-w-6xl mx-auto">
         {/* Greeting */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold">
-            Buenos días, Dr. {user?.first_name} 👋
+            Buenos días, Od. {user?.first_name} 👋
           </h2>
           <p className="text-gray-400 mt-1 capitalize">{today}</p>
         </div>
@@ -106,23 +134,55 @@ export default function DashboardPage() {
           </div>
         </div>
 
-
-        {/* Navegación rápida */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: '📅 Agenda', href: '/dashboard/agenda' },
-            { label: '👥 Pacientes', href: '/dashboard/patients' },
-            { label: '💰 Cobros', href: '/dashboard/payments' },
-          ].map(({ label, href }) => (
-            <button
-              key={href}
-              onClick={() => router.push(href)}
-              className="bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-xl py-4 text-sm font-semibold transition-colors text-center"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Pacientes inactivos */}
+        {inactive.length > 0 && (
+          <div className="bg-amber-950/20 border border-amber-800/40 rounded-xl overflow-hidden mb-6">
+            <div className="px-6 py-4 border-b border-amber-800/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-amber-400">
+                  Pacientes sin turno hace +90 días
+                </h3>
+              </div>
+              <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-1 rounded-full">
+                {inactive.length}
+              </span>
+            </div>
+            <div className="divide-y divide-amber-800/20">
+              {inactive.slice(0, 5).map((p: any) => (
+                <div key={p.id} className="px-6 py-3 flex items-center gap-3 hover:bg-amber-900/10 transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center text-amber-400 text-xs font-bold flex-shrink-0">
+                    {p.first_name[0]}{p.last_name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {p.first_name} {p.last_name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {p.last_appointment_at
+                        ? new Date(p.last_appointment_at).toLocaleDateString('es-AR', {
+                          day: 'numeric', month: 'short', year: 'numeric'
+                        })
+                        : 'Sin turnos previos'}
+                    </div>
+                  </div>
+                  <a
+                    href={`https://wa.me/${p.phone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs bg-emerald-900/40 hover:bg-emerald-700/40 active:scale-95 text-emerald-400 px-3 py-1.5 rounded-lg transition-all font-semibold flex-shrink-0"
+                  >
+                    WhatsApp
+                  </a>
+                </div>
+              ))}
+              {inactive.length > 5 && (
+                <div className="px-6 py-3 text-center text-sm text-gray-500">
+                  +{inactive.length - 5} pacientes más
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Agenda del día */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -139,7 +199,7 @@ export default function DashboardPage() {
             <div className="divide-y divide-gray-800">
               {agenda.map((appt: any) => (
                 <div key={appt.id} className="px-6 py-4 flex items-center gap-4 hover:bg-gray-800/50 transition-colors">
-                  <div className="font-mono text-sm text-gray-400 w-12 flex-shrink-0">
+                  <div className="font-mono text-sm text-gray-400 w-16 flex-shrink-0">
                     {new Date(appt.starts_at).toLocaleTimeString('es-AR', {
                       hour: '2-digit', minute: '2-digit',
                       timeZone: 'America/Argentina/Buenos_Aires'
@@ -153,20 +213,82 @@ export default function DashboardPage() {
                     <div className="font-semibold truncate">{appt.patient_name}</div>
                     <div className="text-sm text-gray-400 truncate">{appt.appointment_type}</div>
                   </div>
-                  <span className={`text-xs font-semibold px-3 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                      appt.status === 'confirmed' ? 'bg-blue-900/40 text-blue-400' :
-                        appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                          'bg-amber-900/40 text-amber-400'
-                    }`}>
-                    {appt.status === 'completed' ? 'Atendido' :
-                      appt.status === 'confirmed' ? 'Confirmado' :
-                        appt.status === 'absent' ? 'Ausente' : 'Pendiente'}
-                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {appt.status === 'pending' || appt.status === 'confirmed' ? (
+                      <>
+                        <button
+                          onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
+                          className="bg-emerald-900/40 hover:bg-emerald-700/50 active:scale-95 active:opacity-70 text-emerald-400 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                        >
+                          ✓ Atendido
+                        </button>
+                        <button
+                          onClick={() => markStatus(appt.id, 'absent')}
+                          className="bg-red-900/40 hover:bg-red-700/50 active:scale-95 active:opacity-70 text-red-400 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                        >
+                          ✕
+                        </button>
+                      </>
+                    ) : (
+                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
+                        appt.status === 'confirmed' ? 'bg-blue-900/40 text-blue-400' :
+                          appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
+                            'bg-amber-900/40 text-amber-400'
+                        }`}>
+                        {appt.status === 'completed' ? 'Atendido' :
+                          appt.status === 'confirmed' ? 'Confirmado' :
+                            appt.status === 'absent' ? 'Ausente' : 'Pendiente'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Modal notas clínicas */}
+        {showNotesModal && pendingAppt && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setShowNotesModal(false)}>
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md p-6"
+              onClick={e => e.stopPropagation()}>
+              <div className="w-9 h-1 bg-gray-700 rounded-full mx-auto mb-5 sm:hidden" />
+              <div className="mb-4">
+                <div className="font-bold text-lg">{pendingAppt.patient_name}</div>
+                <div className="text-gray-400 text-sm">{pendingAppt.appointment_type}</div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                  Notas de la consulta (opcional)
+                </label>
+                <textarea
+                  value={clinicalNotes}
+                  onChange={e => setClinicalNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Procedimiento realizado, observaciones, indicaciones..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-400 resize-none"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowNotesModal(false)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmAttended}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   )

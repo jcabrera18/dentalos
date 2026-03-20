@@ -107,16 +107,6 @@ export default function NewAppointmentPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center gap-4">
-        <button
-          onClick={() => router.push(`/dashboard/patients/${params.id}`)}
-          className="text-gray-400 hover:text-white transition-colors"
-        >
-          ← {patient?.first_name} {patient?.last_name}
-        </button>
-        <h1 className="text-xl font-bold">Nuevo turno</h1>
-      </header>
 
       <main className="p-6 max-w-lg mx-auto">
         {/* Paciente */}
@@ -141,7 +131,7 @@ export default function NewAppointmentPage() {
                 type="date"
                 value={form.date}
                 onChange={e => set('date', e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400"
                 required
               />

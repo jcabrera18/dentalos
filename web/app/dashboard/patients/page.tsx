@@ -46,21 +46,6 @@ export default function PatientsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-white transition-colors">
-            ← Dashboard
-          </button>
-          <h1 className="text-xl font-bold">Pacientes</h1>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
-        >
-          + Nuevo paciente
-        </button>
-      </header>
 
       <main className="p-6 max-w-4xl mx-auto">
         {/* Search */}
