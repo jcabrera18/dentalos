@@ -425,7 +425,7 @@ const Q3 = [31, 32, 33, 34, 35, 36, 37, 38]
 const Q4 = [48, 47, 46, 45, 44, 43, 42, 41]
 
 type FaceColor = 'red' | 'blue' | null
-type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string }
+type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string; missing?: boolean }
 
 function ToothSVG({ state, onClick, isSelected, number }: {
   state: ToothState
@@ -434,13 +434,14 @@ function ToothSVG({ state, onClick, isSelected, number }: {
   number: number
 }) {
   function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
+    if (state.missing) return '#111827'
     const c = state[face]
     if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
     return 'transparent'
   }
 
-  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f])
+  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing
 
   return (
     <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
@@ -449,39 +450,40 @@ function ToothSVG({ state, onClick, isSelected, number }: {
           ? 'drop-shadow-[0_0_5px_rgba(250,204,21,0.9)]'
           : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
 
-        {/* Círculo exterior */}
         <circle cx="20" cy="20" r="18"
-          fill="transparent"
-          stroke={isSelected ? '#facc15' : '#4b5563'}
+          fill={state.missing ? '#1f2937' : 'transparent'}
+          stroke={isSelected ? '#facc15' : state.missing ? '#374151' : '#4b5563'}
           strokeWidth={isSelected ? "2" : "1.5"}
         />
 
-        {/* Cara V — sector superior */}
-        <path d="M20,20 L4,20 A16,16 0 0,1 20,4 Z"
-          fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
-        {/* Cara L — sector inferior */}
-        <path d="M20,20 L36,20 A16,16 0 0,1 20,36 Z"
-          fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
-        {/* Cara M — sector izquierdo */}
-        <path d="M20,20 L20,36 A16,16 0 0,1 4,20 Z"
-          fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
-        {/* Cara D — sector derecho */}
-        <path d="M20,20 L20,4 A16,16 0 0,1 36,20 Z"
-          fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
+        {!state.missing && (
+          <>
+            <path d="M20,20 L4,20 A16,16 0 0,1 20,4 Z"
+              fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
+            <path d="M20,20 L36,20 A16,16 0 0,1 20,36 Z"
+              fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
+            <path d="M20,20 L20,36 A16,16 0 0,1 4,20 Z"
+              fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
+            <path d="M20,20 L20,4 A16,16 0 0,1 36,20 Z"
+              fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
+            <circle cx="20" cy="20" r="7"
+              fill={fc('O')} stroke="#4b5563" strokeWidth="0.8" />
+            <line x1="20" y1="4" x2="20" y2="36" stroke="#4b5563" strokeWidth="0.8" />
+            <line x1="4" y1="20" x2="36" y2="20" stroke="#4b5563" strokeWidth="0.8" />
+          </>
+        )}
 
-        {/* Centro O */}
-        <circle cx="20" cy="20" r="7"
-          fill={fc('O')}
-          stroke="#4b5563"
-          strokeWidth="0.8"
-        />
-
-        {/* Cruz */}
-        <line x1="20" y1="4" x2="20" y2="36" stroke="#4b5563" strokeWidth="0.8" />
-        <line x1="4" y1="20" x2="36" y2="20" stroke="#4b5563" strokeWidth="0.8" />
-
+        {/* X para ausente/extraído */}
+        {state.missing && (
+          <>
+            <line x1="7" y1="7" x2="33" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+            <line x1="33" y1="7" x2="7" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+          </>
+        )}
       </svg>
-      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' : hasAny ? 'text-gray-400' : 'text-gray-600'
+      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' :
+        state.missing ? 'text-gray-700' :
+          hasAny ? 'text-gray-400' : 'text-gray-600'
         }`}>
         {number}
       </span>
@@ -501,14 +503,18 @@ function OdontogramView({ odontogram, onSaveTooth }: {
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(() => {
     const init: Record<number, ToothState> = {}
     odontogram.forEach(t => {
-      const surfaces: Record<string, FaceColor> = {}
-      if (t.surfaces) {
-        t.surfaces.forEach((s: string) => {
-          const [face, color] = s.split(':')
-          surfaces[face] = color as FaceColor
-        })
+      if (t.surfaces?.includes('missing')) {
+        init[t.tooth_number] = { missing: true, note: t.notes ?? '' }
+      } else {
+        const surfaces: Record<string, FaceColor> = {}
+        if (t.surfaces) {
+          t.surfaces.forEach((s: string) => {
+            const [face, color] = s.split(':')
+            if (face && color) surfaces[face] = color as FaceColor
+          })
+        }
+        init[t.tooth_number] = { ...surfaces, note: t.notes ?? '' }
       }
-      init[t.tooth_number] = { ...surfaces, note: t.notes ?? '' }
     })
     return init
   })
@@ -540,9 +546,11 @@ function OdontogramView({ odontogram, onSaveTooth }: {
   async function handleSave(n: number) {
     setSaving(true)
     const state = teeth[n] ?? {}
-    const surfaces = (['V', 'M', 'O', 'D', 'L'] as const)
-      .filter(f => state[f])
-      .map(f => `${f}:${state[f]}`)
+    const surfaces = state.missing
+      ? ['missing']
+      : (['V', 'M', 'O', 'D', 'L'] as const)
+        .filter(f => state[f])
+        .map(f => `${f}:${state[f]}`)
     await onSaveTooth(n, { surfaces: surfaces.join(',') }, state.note ?? '')
     setSaving(false)
     setSelectedTooth(null)
@@ -623,6 +631,15 @@ function OdontogramView({ odontogram, onSaveTooth }: {
         <text x="9" y="24" textAnchor="middle" fontSize="3.5" fill="#9ca3af">M</text>
         <text x="31" y="18" textAnchor="middle" fontSize="3.5" fill="#9ca3af">D</text>
         <text x="20" y="21" textAnchor="middle" fontSize="3.5" fill="#9ca3af">O</text>
+
+        {/* X para ausente — AGREGÁ ACÁ */}
+        {state.missing && (
+          <>
+            <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
+            <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
+          </>
+        )}
+
       </svg>
     )
   }
@@ -691,19 +708,55 @@ function OdontogramView({ odontogram, onSaveTooth }: {
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-500 resize-none"
                 />
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedTooth(null)}
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-semibold py-2 rounded-xl transition-colors">
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => handleSave(selectedTooth)}
-                  disabled={saving}
-                  className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-gray-900 text-sm font-bold py-2 rounded-xl transition-all active:scale-95">
-                  {saving ? 'Guardando...' : 'Guardar pieza'}
-                </button>
+
+              <div className="flex flex-col gap-2">
+                {/* Fila 1: ausente + borrar */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      const newMissing = !getState(selectedTooth).missing
+                      const newState = { missing: newMissing, note: getState(selectedTooth).note }
+                      setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
+                      // Guardar automáticamente
+                      const surfaces = newMissing ? 'missing' : ''
+                      await onSaveTooth(selectedTooth, { surfaces }, newState.note ?? '')
+                    }}
+                    className={`flex-1 text-xs font-semibold py-2.5 rounded-xl transition-all active:scale-95 border ${getState(selectedTooth).missing
+                      ? 'bg-red-900/60 border-red-600 text-red-300'
+                      : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-red-700 hover:text-red-400'
+                      }`}
+                  >
+                    {getState(selectedTooth).missing ? '✕ Ausente / Extraído' : 'Marcar ausente / extraído'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const newState = { note: getState(selectedTooth).note }
+                      setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
+                      await onSaveTooth(selectedTooth, { surfaces: '' }, newState.note ?? '')
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-gray-800 border border-gray-600 text-gray-400 hover:border-gray-500 transition-all active:scale-95"
+                    title="Borrar colores"
+                  >
+                    Borrar
+                  </button>
+                </div>
+
+                {/* Fila 2: cancelar + guardar */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedTooth(null)}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-semibold py-3 rounded-xl transition-colors">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleSave(selectedTooth)}
+                    disabled={saving}
+                    className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-gray-900 text-sm font-bold py-3 rounded-xl transition-all active:scale-95">
+                    {saving ? 'Guardando...' : 'Guardar pieza'}
+                  </button>
+                </div>
               </div>
+
             </div>
           </div>
         </div>
