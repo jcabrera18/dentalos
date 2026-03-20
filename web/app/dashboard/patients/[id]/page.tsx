@@ -400,9 +400,9 @@ export default function PatientDetailPage() {
                             </div>
                           </div>
                           <span className={`text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                              appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                                appt.status === 'cancelled' ? 'bg-gray-800 text-gray-500' :
-                                  'bg-amber-900/40 text-amber-400'
+                            appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
+                              appt.status === 'cancelled' ? 'bg-gray-800 text-gray-500' :
+                                'bg-amber-900/40 text-amber-400'
                             }`}>
                             {appt.status === 'completed' ? 'Atendido' :
                               appt.status === 'absent' ? 'Ausente' :
@@ -452,15 +452,15 @@ function ToothSVG({ state, onClick, isSelected, number }: {
   isSelected: boolean
   number: number
 }) {
-  function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
+  function fc(face: keyof ToothState): string {
     if (state.missing) return '#111827'
-    const c = state[face]
-    if (c === 'red') return '#dc2626'
+    const c = state[face as 'V'|'M'|'O'|'D'|'L']
+    if (c === 'red')  return '#dc2626'
     if (c === 'blue') return '#2563eb'
     return 'transparent'
   }
 
-  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing
+  const hasAny = (['V','M','O','D','L'] as const).some(f => state[f]) || state.missing
 
   return (
     <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
@@ -470,40 +470,40 @@ function ToothSVG({ state, onClick, isSelected, number }: {
           : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
 
         <circle cx="20" cy="20" r="18"
-          fill={state.missing ? '#1f2937' : 'transparent'}
+          fill="transparent"
           stroke={isSelected ? '#facc15' : state.missing ? '#374151' : '#4b5563'}
           strokeWidth={isSelected ? "2" : "1.5"}
         />
 
         {!state.missing && (
           <>
-            <path d="M20,20 L4,20 A16,16 0 0,1 20,4 Z"
-              fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
-            <path d="M20,20 L36,20 A16,16 0 0,1 20,36 Z"
-              fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
-            <path d="M20,20 L20,36 A16,16 0 0,1 4,20 Z"
-              fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
-            <path d="M20,20 L20,4 A16,16 0 0,1 36,20 Z"
-              fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
+            <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
+              fill={fc('V')} stroke="#4b5563" strokeWidth="0.8"/>
+            <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
+              fill={fc('L')} stroke="#4b5563" strokeWidth="0.8"/>
+            <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
+              fill={fc('M')} stroke="#4b5563" strokeWidth="0.8"/>
+            <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
+              fill={fc('D')} stroke="#4b5563" strokeWidth="0.8"/>
+            <line x1="6" y1="6" x2="34" y2="34" stroke="#4b5563" strokeWidth="0.8"/>
+            <line x1="34" y1="6" x2="6" y2="34" stroke="#4b5563" strokeWidth="0.8"/>
             <circle cx="20" cy="20" r="7"
-              fill={fc('O')} stroke="#4b5563" strokeWidth="0.8" />
-            <line x1="20" y1="4" x2="20" y2="36" stroke="#4b5563" strokeWidth="0.8" />
-            <line x1="4" y1="20" x2="36" y2="20" stroke="#4b5563" strokeWidth="0.8" />
+              fill={fc('O')} stroke="#4b5563" strokeWidth="0.8"/>
           </>
         )}
 
-        {/* X para ausente/extraído */}
         {state.missing && (
           <>
-            <line x1="7" y1="7" x2="33" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
-            <line x1="33" y1="7" x2="7" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+            <line x1="7" y1="7" x2="33" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="33" y1="7" x2="7" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"/>
           </>
         )}
       </svg>
-      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' :
+      <span className={`text-[9px] font-mono font-bold ${
+        isSelected ? 'text-yellow-400' :
         state.missing ? 'text-gray-700' :
-          hasAny ? 'text-gray-400' : 'text-gray-600'
-        }`}>
+        hasAny ? 'text-gray-400' : 'text-gray-600'
+      }`}>
         {number}
       </span>
     </div>
@@ -598,6 +598,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
   function BigToothEditor({ n }: { n: number }) {
     const state = getState(n)
     function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
+      if (state.missing) return '#111827'
       const c = state[face]
       if (c === 'red') return '#dc2626'
       if (c === 'blue') return '#2563eb'
@@ -605,60 +606,51 @@ function OdontogramView({ odontogram, onSaveTooth }: {
     }
 
     return (
-      <svg width="110" height="110" viewBox="0 0 40 40" className="flex-shrink-0">
-        {/* Círculo exterior */}
+      <svg width="110" height="110" viewBox="0 0 40 40" className="flex-shrink-0" style={{ userSelect: 'none' }}>
         <circle cx="20" cy="20" r="18"
           fill="transparent"
           stroke="#facc15"
           strokeWidth="1.5"
         />
 
-        {/* Cara V — superior */}
-        <path d="M20,20 L4,20 A16,16 0 0,1 20,4 Z"
-          fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-70"
-          onClick={() => toggleFace(n, 'V')} />
-        {/* Cara L — inferior */}
-        <path d="M20,20 L36,20 A16,16 0 0,1 20,36 Z"
-          fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-70"
-          onClick={() => toggleFace(n, 'L')} />
-        {/* Cara M — izquierdo */}
-        <path d="M20,20 L20,36 A16,16 0 0,1 4,20 Z"
-          fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-70"
-          onClick={() => toggleFace(n, 'M')} />
-        {/* Cara D — derecho */}
-        <path d="M20,20 L20,4 A16,16 0 0,1 36,20 Z"
-          fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-70"
-          onClick={() => toggleFace(n, 'D')} />
+        {!state.missing && (
+          <>
+            <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
+              fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
+              className="cursor-pointer hover:opacity-70"
+              onClick={() => toggleFace(n, 'V')} />
+            <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
+              fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
+              className="cursor-pointer hover:opacity-70"
+              onClick={() => toggleFace(n, 'L')} />
+            <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
+              fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
+              className="cursor-pointer hover:opacity-70"
+              onClick={() => toggleFace(n, 'M')} />
+            <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
+              fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
+              className="cursor-pointer hover:opacity-70"
+              onClick={() => toggleFace(n, 'D')} />
+            <line x1="6" y1="6" x2="34" y2="34" stroke="#6b7280" strokeWidth="0.8" />
+            <line x1="34" y1="6" x2="6" y2="34" stroke="#6b7280" strokeWidth="0.8" />
+            <circle cx="20" cy="20" r="7"
+              fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
+              className="cursor-pointer hover:opacity-70"
+              onClick={() => toggleFace(n, 'O')} />
+            <text x="20" y="10" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">V</text>
+            <text x="20" y="33" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">P</text>
+            <text x="8" y="22" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">M</text>
+            <text x="32" y="22" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">D</text>
+            <text x="20" y="21.5" textAnchor="middle" fontSize="3.5" fill="#9ca3af" pointerEvents="none">O</text>
+          </>
+        )}
 
-        {/* Centro O */}
-        <circle cx="20" cy="20" r="7"
-          fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-70"
-          onClick={() => toggleFace(n, 'O')} />
-
-        {/* Cruz */}
-        <line x1="20" y1="4" x2="20" y2="36" stroke="#6b7280" strokeWidth="0.8" />
-        <line x1="4" y1="20" x2="36" y2="20" stroke="#6b7280" strokeWidth="0.8" />
-
-        {/* Labels */}
-        <text x="11" y="13" textAnchor="middle" fontSize="3.5" fill="#9ca3af">V</text>
-        <text x="29" y="29" textAnchor="middle" fontSize="3.5" fill="#9ca3af">L</text>
-        <text x="9" y="24" textAnchor="middle" fontSize="3.5" fill="#9ca3af">M</text>
-        <text x="31" y="18" textAnchor="middle" fontSize="3.5" fill="#9ca3af">D</text>
-        <text x="20" y="21" textAnchor="middle" fontSize="3.5" fill="#9ca3af">O</text>
-
-        {/* X para ausente — AGREGÁ ACÁ */}
         {state.missing && (
           <>
             <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
             <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
           </>
         )}
-
       </svg>
     )
   }
