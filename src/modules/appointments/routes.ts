@@ -34,6 +34,65 @@ const CalendarQuerySchema = z.object({
   professional_id: z.string().uuid().optional(),
 })
 
+async function sendImmediateReminder(
+  appointmentId: string,
+  startsAt: string,
+  patientId: string,
+  token: string
+) {
+  const { supabaseAdmin } = await import('../../lib/supabase.js')
+
+  const { data: appt } = await supabaseAdmin
+    .from('appointments')
+    .select(`
+      starts_at,
+      patients(first_name, last_name, phone),
+      professionals(first_name, last_name),
+      clinics(name)
+    `)
+    .eq('id', appointmentId)
+    .single()
+
+  if (!appt) return
+
+  const patient = appt.patients as any
+  const professional = appt.professionals as any
+  const clinic = appt.clinics as any
+
+  const startsAtDate = new Date(appt.starts_at)
+  const dateStr = startsAtDate.toLocaleDateString('es-AR', {
+    weekday: 'long', day: 'numeric', month: 'long',
+    timeZone: 'America/Argentina/Buenos_Aires'
+  })
+  const timeStr = startsAtDate.toLocaleTimeString('es-AR', {
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Argentina/Buenos_Aires'
+  })
+
+  const message = `Hola ${patient.first_name} 👋 Te confirmamos tu turno en *${clinic.name}* con el/la Dr/a *${professional.last_name}* el *${dateStr}* a las *${timeStr}*. ¡Te esperamos! 🦷`
+
+  // Normalizar teléfono argentino
+  let phone = patient.phone.replace(/\D/g, '')
+  if (phone.startsWith('0')) phone = phone.slice(1)
+  if (!phone.startsWith('54')) phone = `54${phone}`
+
+  if (!process.env.TWILIO_ACCOUNT_SID) {
+    console.log(`[Twilio DEV] Would send to ${phone}: ${message}`)
+    return
+  }
+
+  const twilio = (await import('twilio')).default
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+
+  await client.messages.create({
+    from: process.env.TWILIO_WHATSAPP_FROM!,
+    to: `whatsapp:+${phone}`,
+    body: message,
+  })
+
+  console.log(`[Twilio] ✅ Confirmación enviada a +${phone}`)
+}
+
 // ── Routes ────────────────────────────────────
 
 export async function appointmentsRoutes(app: FastifyInstance) {
@@ -123,7 +182,8 @@ export async function appointmentsRoutes(app: FastifyInstance) {
     if (error) return reply.code(500).send({ error: error.message })
 
     // Schedule WhatsApp/SMS reminders asynchronously
-    scheduleReminders(data.id, data.starts_at, data.patient_id, clinicId).catch(() => {})
+    // Envío directo sin cola
+    sendImmediateReminder(data.id, data.starts_at, data.patient_id, token).catch(console.error)
 
     return reply.code(201).send({ data })
   })
@@ -199,7 +259,7 @@ export async function appointmentsRoutes(app: FastifyInstance) {
     return { data: stats }
   })
 
-    // ── GET /appointments/:id ──────────────────
+  // ── GET /appointments/:id ──────────────────
   app.get('/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
     const db = supabaseForUser(request.headers.authorization)
