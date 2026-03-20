@@ -433,38 +433,56 @@ function ToothSVG({ state, onClick, isSelected, number }: {
   isSelected: boolean
   number: number
 }) {
-  function fc(face: keyof ToothState): string {
-    const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
+  function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
+    const c = state[face]
     if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
-    return '#1f2937'
+    return 'transparent'
   }
 
-  const hasAny = ['V', 'M', 'O', 'D', 'L'].some(f => state[f as 'V'])
+  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f])
 
   return (
     <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
-      <svg width="32" height="32" viewBox="0 0 36 36"
+      <svg width="32" height="32" viewBox="0 0 40 40"
         className={`transition-all ${isSelected
           ? 'drop-shadow-[0_0_5px_rgba(250,204,21,0.9)]'
           : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
-        {/* Vestibular top */}
-        <polygon points="18,2 32,12 4,12" fill={fc('V')} stroke="#374151" strokeWidth="0.8" />
-        {/* Lingual bottom */}
-        <polygon points="18,34 32,24 4,24" fill={fc('L')} stroke="#374151" strokeWidth="0.8" />
-        {/* Mesial left */}
-        <polygon points="2,18 12,4 12,32" fill={fc('M')} stroke="#374151" strokeWidth="0.8" />
-        {/* Distal right */}
-        <polygon points="34,18 24,4 24,32" fill={fc('D')} stroke="#374151" strokeWidth="0.8" />
-        {/* Oclusal center */}
-        <rect x="12" y="12" width="12" height="12" fill={fc('O')} stroke="#374151" strokeWidth="0.8" />
-        {/* Border */}
-        <rect x="1" y="1" width="34" height="34" rx="3"
-          fill="none"
-          stroke={isSelected ? '#facc15' : hasAny ? '#6b7280' : '#374151'}
-          strokeWidth={isSelected ? "2.5" : "1"} />
+
+        {/* Círculo exterior */}
+        <circle cx="20" cy="20" r="18"
+          fill="transparent"
+          stroke={isSelected ? '#facc15' : '#4b5563'}
+          strokeWidth={isSelected ? "2" : "1.5"}
+        />
+
+        {/* Cara V — sector superior */}
+        <path d="M20,20 L4,20 A16,16 0 0,1 20,4 Z"
+          fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
+        {/* Cara L — sector inferior */}
+        <path d="M20,20 L36,20 A16,16 0 0,1 20,36 Z"
+          fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
+        {/* Cara M — sector izquierdo */}
+        <path d="M20,20 L20,36 A16,16 0 0,1 4,20 Z"
+          fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
+        {/* Cara D — sector derecho */}
+        <path d="M20,20 L20,4 A16,16 0 0,1 36,20 Z"
+          fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
+
+        {/* Centro O */}
+        <circle cx="20" cy="20" r="7"
+          fill={fc('O')}
+          stroke="#4b5563"
+          strokeWidth="0.8"
+        />
+
+        {/* Cruz */}
+        <line x1="20" y1="4" x2="20" y2="36" stroke="#4b5563" strokeWidth="0.8" />
+        <line x1="4" y1="20" x2="36" y2="20" stroke="#4b5563" strokeWidth="0.8" />
+
       </svg>
-      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' : 'text-gray-600'}`}>
+      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' : hasAny ? 'text-gray-400' : 'text-gray-600'
+        }`}>
         {number}
       </span>
     </div>
@@ -556,28 +574,55 @@ function OdontogramView({ odontogram, onSaveTooth }: {
       const c = state[face]
       if (c === 'red') return '#dc2626'
       if (c === 'blue') return '#2563eb'
-      return '#374151'
+      return 'transparent'
     }
 
     return (
-      <svg width="100" height="100" viewBox="0 0 36 36" className="flex-shrink-0">
-        <polygon points="18,2 32,12 4,12" fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'V')} />
-        <polygon points="18,34 32,24 4,24" fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'L')} />
-        <polygon points="2,18 12,4 12,32" fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'M')} />
-        <polygon points="34,18 24,4 24,32" fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'D')} />
-        <rect x="12" y="12" width="12" height="12" fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
-          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'O')} />
-        <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="#facc15" strokeWidth="2" />
+      <svg width="110" height="110" viewBox="0 0 40 40" className="flex-shrink-0">
+        {/* Círculo exterior */}
+        <circle cx="20" cy="20" r="18"
+          fill="transparent"
+          stroke="#facc15"
+          strokeWidth="1.5"
+        />
+
+        {/* Cara V — superior */}
+        <path d="M20,20 L4,20 A16,16 0 0,1 20,4 Z"
+          fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-70"
+          onClick={() => toggleFace(n, 'V')} />
+        {/* Cara L — inferior */}
+        <path d="M20,20 L36,20 A16,16 0 0,1 20,36 Z"
+          fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-70"
+          onClick={() => toggleFace(n, 'L')} />
+        {/* Cara M — izquierdo */}
+        <path d="M20,20 L20,36 A16,16 0 0,1 4,20 Z"
+          fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-70"
+          onClick={() => toggleFace(n, 'M')} />
+        {/* Cara D — derecho */}
+        <path d="M20,20 L20,4 A16,16 0 0,1 36,20 Z"
+          fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-70"
+          onClick={() => toggleFace(n, 'D')} />
+
+        {/* Centro O */}
+        <circle cx="20" cy="20" r="7"
+          fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-70"
+          onClick={() => toggleFace(n, 'O')} />
+
+        {/* Cruz */}
+        <line x1="20" y1="4" x2="20" y2="36" stroke="#6b7280" strokeWidth="0.8" />
+        <line x1="4" y1="20" x2="36" y2="20" stroke="#6b7280" strokeWidth="0.8" />
+
         {/* Labels */}
-        <text x="18" y="9" textAnchor="middle" fontSize="4" fill="#9ca3af">V</text>
-        <text x="18" y="31" textAnchor="middle" fontSize="4" fill="#9ca3af">L</text>
-        <text x="6" y="19" textAnchor="middle" fontSize="4" fill="#9ca3af">M</text>
-        <text x="30" y="19" textAnchor="middle" fontSize="4" fill="#9ca3af">D</text>
-        <text x="18" y="20" textAnchor="middle" fontSize="4" fill="#9ca3af">O</text>
+        <text x="11" y="13" textAnchor="middle" fontSize="3.5" fill="#9ca3af">V</text>
+        <text x="29" y="29" textAnchor="middle" fontSize="3.5" fill="#9ca3af">L</text>
+        <text x="9" y="24" textAnchor="middle" fontSize="3.5" fill="#9ca3af">M</text>
+        <text x="31" y="18" textAnchor="middle" fontSize="3.5" fill="#9ca3af">D</text>
+        <text x="20" y="21" textAnchor="middle" fontSize="3.5" fill="#9ca3af">O</text>
       </svg>
     )
   }
