@@ -18,6 +18,7 @@ export default function PatientDetailPage() {
   const [uploading, setUploading] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({})
   const router = useRouter()
   const params = useParams()
   const supabase = createClient()
@@ -83,6 +84,17 @@ export default function PatientDetailPage() {
   }
 
   async function handleSaveEdit() {
+    const errors: Record<string, string> = {}
+    if (!editForm.first_name?.trim()) errors.first_name = 'Requerido'
+    if (!editForm.last_name?.trim()) errors.last_name = 'Requerido'
+    if (!editForm.phone?.trim() || editForm.phone === 'Sin teléfono') errors.phone = 'Requerido'
+
+    if (Object.keys(errors).length > 0) {
+      setEditErrors(errors)
+      return
+    }
+    setEditErrors({})
+
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     await apiFetch(`/patients/${params.id}`, {
@@ -482,20 +494,34 @@ export default function PatientDetailPage() {
                   <div>
                     <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Nombre</label>
                     <input value={editForm.first_name} onChange={e => setEditForm((f: any) => ({ ...f, first_name: e.target.value }))}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                      className={`w-full bg-gray-800 border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none ${editErrors.first_name ? 'border-red-500' : 'border-gray-700 focus:border-blue-400'
+                        }`} />
+                    {editErrors.first_name && <p className="text-red-400 text-xs mt-1">{editErrors.first_name}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Apellido</label>
                     <input value={editForm.last_name} onChange={e => setEditForm((f: any) => ({ ...f, last_name: e.target.value }))}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                      className={`w-full bg-gray-800 border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none ${editErrors.last_name ? 'border-red-500' : 'border-gray-700 focus:border-blue-400'
+                        }`} />
+                    {editErrors.last_name && <p className="text-red-400 text-xs mt-1">{editErrors.last_name}</p>}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Teléfono</label>
-                  <input value={editForm.phone} onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))}
+                  <input
+                    value={editForm.phone}
+                    onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))}
+                    onFocus={() => {
+                      if (editForm.phone === 'Sin teléfono') {
+                        setEditForm((f: any) => ({ ...f, phone: '' }))
+                      }
+                    }}
                     type="tel"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                    className={`w-full bg-gray-800 border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none ${editErrors.phone ? 'border-red-500' : 'border-gray-700 focus:border-blue-400'
+                      }`}
+                  />
+                  {editErrors.phone && <p className="text-red-400 text-xs mt-1">Requerido</p>}
                 </div>
 
                 <div>
