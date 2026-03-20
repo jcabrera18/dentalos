@@ -7,11 +7,11 @@ import { useRouter } from 'next/navigation'
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<any[]>([])
-  const [search, setSearch]     = useState('')
-  const [loading, setLoading]   = useState(true)
-  const [token, setToken]       = useState('')
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const router   = useRouter()
+  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -49,6 +49,18 @@ export default function PatientsPage() {
 
       <main className="p-6 max-w-4xl mx-auto">
         {/* Search */}
+
+        {/* Acciones */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-semibold">Pacientes</h2>
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all"
+          >
+            + Nuevo paciente
+          </button>
+        </div>
+
         <div className="mb-6">
           <input
             type="text"
@@ -125,7 +137,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
     current_medications: ''
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError] = useState('')
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
