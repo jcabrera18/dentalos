@@ -16,6 +16,8 @@ export default function PatientDetailPage() {
   const [files, setFiles] = useState<any[]>([])
   const [toothDiagnostics, setToothDiagnostics] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editForm, setEditForm] = useState<any>({})
   const router = useRouter()
   const params = useParams()
   const supabase = createClient()
@@ -78,6 +80,19 @@ export default function PatientDetailPage() {
       token: session.access_token,
     })
     setToothDiagnostics(d => d.filter(x => x.id !== id))
+  }
+
+  async function handleSaveEdit() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await apiFetch(`/patients/${params.id}`, {
+      method: 'PATCH',
+      token: session.access_token,
+      body: JSON.stringify(editForm)
+    })
+    const data = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
+    setPatient(data.data)
+    setEditMode(false)
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -170,7 +185,7 @@ export default function PatientDetailPage() {
           {/* Columna izquierda — info del paciente */}
           <div className="space-y-4">
             {/* Avatar + nombre */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center relative">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-emerald-400 flex items-center justify-center text-2xl font-bold mx-auto mb-3">
                 {patient.first_name[0]}{patient.last_name[0]}
               </div>
@@ -179,6 +194,26 @@ export default function PatientDetailPage() {
               {patient.document_number && (
                 <div className="text-gray-500 text-sm">DNI {patient.document_number}</div>
               )}
+              <button
+                onClick={() => {
+                  setEditMode(true); setEditForm({
+                    first_name: patient.first_name,
+                    last_name: patient.last_name,
+                    phone: patient.phone,
+                    email: patient.email ?? '',
+                    document_number: patient.document_number ?? '',
+                    date_of_birth: patient.date_of_birth ?? '',
+                    insurance_name: patient.insurance_name ?? '',
+                    insurance_plan: patient.insurance_plan ?? '',
+                    insurance_number: patient.insurance_number ?? '',
+                    allergies: patient.allergies ?? '',
+                    current_medications: patient.current_medications ?? '',
+                  })
+                }}
+                className="mt-3 text-xs text-gray-500 hover:text-blue-400 transition-colors"
+              >
+                Editar datos
+              </button>
             </div>
 
             {/* Saldo */}
@@ -433,7 +468,104 @@ export default function PatientDetailPage() {
           </div>
         </div>
       </main>
+
+      {/* Modal edición paciente */}
+      {editMode && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="w-9 h-1 bg-gray-700 rounded-full mx-auto mb-5 sm:hidden" />
+              <h2 className="text-lg font-bold mb-5">Editar paciente</h2>
+
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Nombre</label>
+                    <input value={editForm.first_name} onChange={e => setEditForm((f: any) => ({ ...f, first_name: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Apellido</label>
+                    <input value={editForm.last_name} onChange={e => setEditForm((f: any) => ({ ...f, last_name: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Teléfono</label>
+                  <input value={editForm.phone} onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))}
+                    type="tel"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Email</label>
+                  <input value={editForm.email} onChange={e => setEditForm((f: any) => ({ ...f, email: e.target.value }))}
+                    type="email"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">DNI</label>
+                    <input value={editForm.document_number} onChange={e => setEditForm((f: any) => ({ ...f, document_number: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Fecha de nacimiento</label>
+                    <input value={editForm.date_of_birth} onChange={e => setEditForm((f: any) => ({ ...f, date_of_birth: e.target.value }))}
+                      type="date"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Obra social</label>
+                    <input value={editForm.insurance_name} onChange={e => setEditForm((f: any) => ({ ...f, insurance_name: e.target.value }))}
+                      placeholder="OSDE, PAMI..."
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Plan</label>
+                    <input value={editForm.insurance_plan} onChange={e => setEditForm((f: any) => ({ ...f, insurance_plan: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Alergias</label>
+                  <input value={editForm.allergies} onChange={e => setEditForm((f: any) => ({ ...f, allergies: e.target.value }))}
+                    placeholder="Penicilina, látex..."
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Medicación actual</label>
+                  <input value={editForm.current_medications} onChange={e => setEditForm((f: any) => ({ ...f, current_medications: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => setEditMode(false)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={handleSaveEdit}
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+
+
+
   )
 }
 
@@ -454,13 +586,13 @@ function ToothSVG({ state, onClick, isSelected, number }: {
 }) {
   function fc(face: keyof ToothState): string {
     if (state.missing) return '#111827'
-    const c = state[face as 'V'|'M'|'O'|'D'|'L']
-    if (c === 'red')  return '#dc2626'
+    const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
+    if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
     return 'transparent'
   }
 
-  const hasAny = (['V','M','O','D','L'] as const).some(f => state[f]) || state.missing
+  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing
 
   return (
     <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
@@ -478,32 +610,31 @@ function ToothSVG({ state, onClick, isSelected, number }: {
         {!state.missing && (
           <>
             <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
-              fill={fc('V')} stroke="#4b5563" strokeWidth="0.8"/>
+              fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
             <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
-              fill={fc('L')} stroke="#4b5563" strokeWidth="0.8"/>
+              fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
             <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
-              fill={fc('M')} stroke="#4b5563" strokeWidth="0.8"/>
+              fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
             <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
-              fill={fc('D')} stroke="#4b5563" strokeWidth="0.8"/>
-            <line x1="6" y1="6" x2="34" y2="34" stroke="#4b5563" strokeWidth="0.8"/>
-            <line x1="34" y1="6" x2="6" y2="34" stroke="#4b5563" strokeWidth="0.8"/>
+              fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
+            <line x1="6" y1="6" x2="34" y2="34" stroke="#4b5563" strokeWidth="0.8" />
+            <line x1="34" y1="6" x2="6" y2="34" stroke="#4b5563" strokeWidth="0.8" />
             <circle cx="20" cy="20" r="7"
-              fill={fc('O')} stroke="#4b5563" strokeWidth="0.8"/>
+              fill={fc('O')} stroke="#4b5563" strokeWidth="0.8" />
           </>
         )}
 
         {state.missing && (
           <>
-            <line x1="7" y1="7" x2="33" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"/>
-            <line x1="33" y1="7" x2="7" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="7" y1="7" x2="33" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+            <line x1="33" y1="7" x2="7" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
           </>
         )}
       </svg>
-      <span className={`text-[9px] font-mono font-bold ${
-        isSelected ? 'text-yellow-400' :
+      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' :
         state.missing ? 'text-gray-700' :
-        hasAny ? 'text-gray-400' : 'text-gray-600'
-      }`}>
+          hasAny ? 'text-gray-400' : 'text-gray-600'
+        }`}>
         {number}
       </span>
     </div>
@@ -784,6 +915,12 @@ function OdontogramView({ odontogram, onSaveTooth }: {
           Por realizar
         </span>
       </div>
+
+
+
     </div>
+
+
+
   )
 }

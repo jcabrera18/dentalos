@@ -166,8 +166,8 @@ export default function AgendaPage() {
                 <button key={status}
                   onClick={() => updateStatus(selectedAppt.id, status)}
                   className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors active:scale-95 ${selectedAppt.status === status
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
                     }`}>
                   {label}
                 </button>
@@ -379,6 +379,9 @@ export default function AgendaPage() {
             setShowNewAppt(false)
             await fetchAppointments(token)
           }}
+          onPatientCreated={(patient) => {
+            setPatients((prev: any[]) => [patient, ...prev])
+          }}
         />
       )}
 
@@ -387,16 +390,23 @@ export default function AgendaPage() {
   )
 }
 
-function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }: {
+function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, onPatientCreated }: {
   token: string
   date: string
   time: string
   patients: any[]
   onClose: () => void
   onCreated: () => void
+  onPatientCreated: (patient: any) => void
 }) {
   const [search, setSearch] = useState('')
   const [patientId, setPatientId] = useState('')
+  const [newPatientMode, setNewPatientMode] = useState(false)
+  const [newPatientName, setNewPatientName] = useState('')
+  const [newPatientLastName, setNewPatientLastName] = useState('')
+  const [newPatientPhone, setNewPatientPhone] = useState('')
+  const [creatingPatient, setCreatingPatient] = useState(false)
+
   const [form, setForm] = useState({
     date, time, duration_minutes: '45', appointment_type: '', chief_complaint: ''
   })
@@ -449,6 +459,31 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }
     }
   }
 
+  async function handleCreatePatient() {
+    if (!newPatientName) return
+    setCreatingPatient(true)
+    try {
+      const data = await apiFetch('/patients', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          first_name: newPatientName,
+          last_name: newPatientLastName || '.',
+          phone: 'Sin teléfono',
+        })
+      })
+      onPatientCreated(data.data)
+      setPatientId(data.data.id)
+      setNewPatientMode(false)
+      setNewPatientName('')
+      setNewPatientLastName('')
+    } catch (err: any) {
+      console.error(err)
+    } finally {
+      setCreatingPatient(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
       onClick={onClose}>
@@ -465,8 +500,42 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }
               {selectedPatient ? (
                 <div className="flex items-center justify-between bg-gray-800 rounded-xl px-4 py-3">
                   <div className="font-medium">{selectedPatient.first_name} {selectedPatient.last_name}</div>
-                  <button type="button" onClick={() => setPatientId('')}
+                  <button type="button" onClick={() => { setPatientId(''); setNewPatientMode(false) }}
                     className="text-gray-500 hover:text-white text-sm">✕</button>
+                </div>
+              ) : newPatientMode ? (
+                <div className="bg-gray-800 rounded-xl p-3 border border-blue-800/50">
+                  <div className="text-xs text-blue-400 font-semibold mb-2">Nuevo paciente rápido</div>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={newPatientName}
+                      onChange={e => setNewPatientName(e.target.value)}
+                      placeholder="Nombre"
+                      className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-400"
+                    />
+                    <input
+                      type="text"
+                      value={newPatientLastName}
+                      onChange={e => setNewPatientLastName(e.target.value)}
+                      placeholder="Apellido"
+                      className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-400"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button"
+                      onClick={() => setNewPatientMode(false)}
+                      className="flex-1 bg-gray-700 text-gray-400 text-xs font-semibold py-2 rounded-lg transition-colors">
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreatePatient}
+                      disabled={!newPatientName || creatingPatient}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
+                      {creatingPatient ? 'Creando...' : 'Crear y usar'}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -475,7 +544,7 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-400 mb-2"
                     autoFocus />
                   {search && (
-                    <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+                    <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden mb-2">
                       {filtered.map(p => (
                         <div key={p.id}
                           onClick={() => { setPatientId(p.id); setSearch('') }}
@@ -489,6 +558,11 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }
                       )}
                     </div>
                   )}
+                  <button type="button"
+                    onClick={() => setNewPatientMode(true)}
+                    className="w-full bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 text-gray-400 hover:text-white text-xs font-semibold py-2.5 rounded-xl transition-colors">
+                    + Crear nuevo paciente
+                  </button>
                 </div>
               )}
             </div>
@@ -514,8 +588,8 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }
                 {DURACIONES.map(d => (
                   <button key={d.value} type="button" onClick={() => set('duration_minutes', d.value)}
                     className={`py-2 rounded-xl text-sm font-semibold transition-colors ${form.duration_minutes === d.value
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-800 border border-gray-700 text-gray-400'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-800 border border-gray-700 text-gray-400'
                       }`}>
                     {d.label}
                   </button>
@@ -530,8 +604,8 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated }
                 {TIPOS.map(t => (
                   <button key={t} type="button" onClick={() => set('appointment_type', t)}
                     className={`py-2 px-2 rounded-xl text-xs font-medium transition-colors ${form.appointment_type === t
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-800 border border-gray-700 text-gray-400'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-800 border border-gray-700 text-gray-400'
                       }`}>
                     {t}
                   </button>
