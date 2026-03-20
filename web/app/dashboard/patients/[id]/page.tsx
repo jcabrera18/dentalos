@@ -131,17 +131,29 @@ export default function PatientDetailPage() {
     ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / 31557600000)
     : null
 
-  async function updateTooth(toothNumber: number, condition: string, surfaces: string[]) {
+  async function updateTooth(toothNumber: number, surfaces: Record<string, string>, note: string) {
     setSavingTooth(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
+      // Convertir "V:red,M:blue" a array ["V:red", "M:blue"]
+      const surfacesArray = surfaces.surfaces
+        ? surfaces.surfaces.split(',').filter(Boolean)
+        : []
       await apiFetch(`/treatments/odontogram/${params.id}`, {
         method: 'PUT',
         token: session.access_token,
-        body: JSON.stringify({ tooth_number: toothNumber, condition, surfaces })
+        body: JSON.stringify({
+          tooth_number: toothNumber,
+          condition: surfacesArray.length > 0 ? 'other' : 'healthy',
+          surfaces: surfacesArray,
+          notes: note || undefined,
+        })
       })
-      const data = await apiFetch(`/treatments/odontogram/${params.id}`, { token: session.access_token })
+      const data = await apiFetch(
+        `/treatments/odontogram/${params.id}`,
+        { token: session.access_token }
+      )
       setOdontogram(data.data ?? [])
       setSelectedTooth(null)
     } finally {
@@ -234,13 +246,7 @@ export default function PatientDetailPage() {
               <div className="p-4">
                 <OdontogramView
                   odontogram={odontogram}
-                  diagnostics={toothDiagnostics}
-                  selectedTooth={selectedTooth}
-                  onSelectTooth={setSelectedTooth}
-                  onUpdateTooth={updateTooth}
-                  onAddDiagnostic={addDiagnostic}
-                  onDeleteDiagnostic={deleteDiagnostic}
-                  saving={savingTooth}
+                  onSaveTooth={updateTooth}
                 />
               </div>
             </div>
@@ -249,19 +255,31 @@ export default function PatientDetailPage() {
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
                 <h3 className="font-semibold">Archivos y radiografías</h3>
-                <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${uploading
-                  ? 'bg-gray-700 text-gray-500'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-                  }`}>
-                  {uploading ? 'Subiendo...' : '+ Subir archivo'}
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*,.pdf,.dcm"
-                    onChange={handleFileUpload}
-                    disabled={uploading}
-                  />
-                </label>
+                <div className="flex gap-2">
+                  <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${uploading ? 'bg-gray-700 text-gray-500' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    }`}>
+                    📷 Foto odontograma
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                  <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${uploading ? 'bg-gray-700 text-gray-500' : 'bg-blue-500 hover:bg-blue-600 text-white'
+                    }`}>
+                    {uploading ? 'Subiendo...' : '+ Archivo'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*,.pdf,.dcm"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                </div>
               </div>
 
               {files.length === 0 ? (
@@ -400,524 +418,262 @@ export default function PatientDetailPage() {
   )
 }
 
-const TOOTH_CONDITIONS = [
-  // Estado actual (ROJO) — lo que ya está hecho
-  { value: 'healthy', label: 'Sana', group: 'done' },
-  { value: 'filled', label: 'Obturada', group: 'done' },
-  { value: 'root_canal', label: 'Endodoncia', group: 'done' },
-  { value: 'crown', label: 'Corona', group: 'done' },
-  { value: 'missing', label: 'Ausente', group: 'done' },
-  { value: 'implant', label: 'Implante', group: 'done' },
-  // Plan de tratamiento (AZUL) — lo que hay que hacer
-  { value: 'cavity', label: 'Caries', group: 'plan' },
-  { value: 'extraction_needed', label: 'Extraer', group: 'plan' },
-  { value: 'fracture', label: 'Fractura', group: 'plan' },
-  { value: 'other', label: 'Otro', group: 'plan' },
-]
-
-// Colores para el SVG del diente
-const CONDITION_SVG_COLOR: Record<string, string> = {
-  // Estado actual → ROJO
-  filled: '#7f1d1d',
-  root_canal: '#7f1d1d',
-  crown: '#7f1d1d',
-  missing: '#111827',
-  implant: '#7f1d1d',
-  // Plan → AZUL
-  cavity: '#1e3a5f',
-  extraction_needed: '#1e3a5f',
-  fracture: '#1e3a5f',
-  other: '#1e3a5f',
-  // Sana → gris
-  healthy: '#1f2937',
-}
-
-// Colores para texto/badges
-const CONDITION_TEXT: Record<string, string> = {
-  filled: 'text-red-400',
-  root_canal: 'text-red-400',
-  crown: 'text-red-400',
-  missing: 'text-gray-600',
-  implant: 'text-red-400',
-  cavity: 'text-blue-400',
-  extraction_needed: 'text-blue-400',
-  fracture: 'text-blue-400',
-  other: 'text-blue-400',
-  healthy: 'text-gray-500',
-}
-
 // Cuadrantes FDI
-const Q1 = [18, 17, 16, 15, 14, 13, 12, 11] // Superior derecho
-const Q2 = [21, 22, 23, 24, 25, 26, 27, 28] // Superior izquierdo
-const Q3 = [31, 32, 33, 34, 35, 36, 37, 38] // Inferior izquierdo
-const Q4 = [48, 47, 46, 45, 44, 43, 42, 41] // Inferior derecho
+const Q1 = [18, 17, 16, 15, 14, 13, 12, 11]
+const Q2 = [21, 22, 23, 24, 25, 26, 27, 28]
+const Q3 = [31, 32, 33, 34, 35, 36, 37, 38]
+const Q4 = [48, 47, 46, 45, 44, 43, 42, 41]
 
-// Caras del diente
-const FACES = [
-  { key: 'V', label: 'V', title: 'Vestibular', pos: 'top' },
-  { key: 'M', label: 'M', title: 'Mesial', pos: 'left' },
-  { key: 'O', label: 'O', title: 'Oclusal', pos: 'center' },
-  { key: 'D', label: 'D', title: 'Distal', pos: 'right' },
-  { key: 'L', label: 'L', title: 'Lingual', pos: 'bottom' },
-]
+type FaceColor = 'red' | 'blue' | null
+type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string }
 
-function ToothSVG({ condition, surfaces, onClick, isSelected, number }: {
-  condition: string
-  surfaces: string[]
+function ToothSVG({ state, onClick, isSelected, number }: {
+  state: ToothState
   onClick: () => void
   isSelected: boolean
   number: number
 }) {
-  const condColor = CONDITION_SVG_COLOR[condition] ?? '#1f2937'
-
-  function faceColor(face: string) {
-    return surfaces.includes(face) ? condColor : '#1f2937'
+  function fc(face: keyof ToothState): string {
+    const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
+    if (c === 'red') return '#dc2626'
+    if (c === 'blue') return '#2563eb'
+    return '#1f2937'
   }
 
+  const hasAny = ['V', 'M', 'O', 'D', 'L'].some(f => state[f as 'V'])
+
   return (
-    <div
-      className={`flex flex-col items-center gap-0.5 cursor-pointer group`}
-      onClick={onClick}
-    >
-      <svg
-        width="36" height="36" viewBox="0 0 36 36"
-        className={`transition-all ${isSelected ? 'drop-shadow-[0_0_4px_rgba(96,165,250,0.8)]' : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.5)]'}`}
-      >
-        {/* Vestibular (top) */}
-        <polygon points="18,2 32,12 4,12" fill={faceColor('V')} stroke="#374151" strokeWidth="0.5" />
-        {/* Lingual (bottom) */}
-        <polygon points="18,34 32,24 4,24" fill={faceColor('L')} stroke="#374151" strokeWidth="0.5" />
-        {/* Mesial (left) */}
-        <polygon points="2,18 12,4 12,32" fill={faceColor('M')} stroke="#374151" strokeWidth="0.5" />
-        {/* Distal (right) */}
-        <polygon points="34,18 24,4 24,32" fill={faceColor('D')} stroke="#374151" strokeWidth="0.5" />
-        {/* Oclusal (center) */}
-        <polygon points="12,12 24,12 24,24 12,24" fill={faceColor('O')} stroke="#374151" strokeWidth="0.5" />
+    <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
+      <svg width="32" height="32" viewBox="0 0 36 36"
+        className={`transition-all ${isSelected
+          ? 'drop-shadow-[0_0_5px_rgba(250,204,21,0.9)]'
+          : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
+        {/* Vestibular top */}
+        <polygon points="18,2 32,12 4,12" fill={fc('V')} stroke="#374151" strokeWidth="0.8" />
+        {/* Lingual bottom */}
+        <polygon points="18,34 32,24 4,24" fill={fc('L')} stroke="#374151" strokeWidth="0.8" />
+        {/* Mesial left */}
+        <polygon points="2,18 12,4 12,32" fill={fc('M')} stroke="#374151" strokeWidth="0.8" />
+        {/* Distal right */}
+        <polygon points="34,18 24,4 24,32" fill={fc('D')} stroke="#374151" strokeWidth="0.8" />
+        {/* Oclusal center */}
+        <rect x="12" y="12" width="12" height="12" fill={fc('O')} stroke="#374151" strokeWidth="0.8" />
         {/* Border */}
-        <rect x="1" y="1" width="34" height="34" rx="4"
+        <rect x="1" y="1" width="34" height="34" rx="3"
           fill="none"
-          stroke={isSelected ? '#60a5fa' : '#4b5563'}
-          strokeWidth={isSelected ? "2" : "1"}
-        />
+          stroke={isSelected ? '#facc15' : hasAny ? '#6b7280' : '#374151'}
+          strokeWidth={isSelected ? "2.5" : "1"} />
       </svg>
-      <span className={`text-[9px] font-mono font-bold transition-colors ${isSelected ? 'text-blue-400' : CONDITION_TEXT[condition] ?? 'text-gray-500'
-        }`}>
+      <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' : 'text-gray-600'}`}>
         {number}
       </span>
     </div>
   )
 }
 
-const DIAGNOSTICOS_COMUNES = [
-  { code: 'K02.0', label: 'Caries limitada al esmalte' },
-  { code: 'K02.1', label: 'Caries de la dentina' },
-  { code: 'K02.3', label: 'Caries del cemento' },
-  { code: 'K04.0', label: 'Pulpitis' },
-  { code: 'K04.1', label: 'Necrosis de la pulpa' },
-  { code: 'K04.5', label: 'Periodontitis apical crónica' },
-  { code: 'K05.1', label: 'Periodontitis crónica' },
-  { code: 'K08.1', label: 'Pérdida de dientes por accidente' },
-  { code: 'K08.2', label: 'Atrofia del reborde alveolar' },
-  { code: 'S02.5', label: 'Fractura dental' },
-]
-
-const PROCEDIMIENTOS_COMUNES = [
-  'Obturación composite',
-  'Obturación amalgama',
-  'Endodoncia',
-  'Extracción simple',
-  'Extracción quirúrgica',
-  'Corona metal-porcelana',
-  'Corona zirconia',
-  'Implante oseointegrado',
-  'Tartrectomía',
-  'Blanqueamiento',
-  'Restauración de caries',
-  'Sellante de fosas',
-]
-
-const FACES_MAP = [
-  { key: 'V', title: 'Vestibular' },
-  { key: 'M', title: 'Mesial' },
-  { key: 'O', title: 'Oclusal' },
-  { key: 'D', title: 'Distal' },
-  { key: 'L', title: 'Lingual' },
-]
-
-function OdontogramView({ odontogram, diagnostics, selectedTooth, onSelectTooth, onUpdateTooth, onAddDiagnostic, onDeleteDiagnostic, saving }: {
+function OdontogramView({ odontogram, onSaveTooth }: {
   odontogram: any[]
-  diagnostics: any[]
-  selectedTooth: number | null
-  onSelectTooth: (n: number | null) => void
-  onUpdateTooth: (n: number, condition: string, surfaces: string[]) => void
-  onAddDiagnostic: (d: any) => Promise<void>
-  onDeleteDiagnostic: (id: string) => Promise<void>
-  saving: boolean
+  onSaveTooth: (toothNumber: number, surfaces: Record<string, string>, note: string) => Promise<void>
 }) {
-  const [tab, setTab] = useState<'condition' | 'diagnostic'>('condition')
-  const [selectedCondition, setSelectedCondition] = useState('cavity')
-  const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([])
-  const [diagFace, setDiagFace] = useState('')
-  const [diagCode, setDiagCode] = useState('')
-  const [diagLabel, setDiagLabel] = useState('')
-  const [diagProc, setDiagProc] = useState('')
-  const [addingDiag, setAddingDiag] = useState(false)
+  const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
+  const [paintColor, setPaintColor] = useState<'red' | 'blue'>('red')
+  const [saving, setSaving] = useState(false)
 
-  function getToothData(n: number) {
-    const t = odontogram.find(t => t.tooth_number === n)
-    return { condition: t?.condition ?? 'healthy', surfaces: t?.surfaces ?? [] }
-  }
-
-  function toggleSurface(face: string) {
-    setSelectedSurfaces(s =>
-      s.includes(face) ? s.filter(x => x !== face) : [...s, face]
-    )
-  }
-
-  function handleApplyCondition() {
-    if (!selectedTooth) return
-    onUpdateTooth(selectedTooth, selectedCondition, selectedSurfaces)
-    setSelectedSurfaces([])
-  }
-
-  async function handleAddDiagnostic() {
-    if (!selectedTooth || !diagLabel) return
-    setAddingDiag(true)
-    await onAddDiagnostic({
-      tooth_number: selectedTooth,
-      face: diagFace || undefined,
-      diagnosis_code: diagCode || undefined,
-      diagnosis_label: diagLabel,
-      procedure: diagProc || undefined,
+  // Estado local de cada diente
+  const [teeth, setTeeth] = useState<Record<number, ToothState>>(() => {
+    const init: Record<number, ToothState> = {}
+    odontogram.forEach(t => {
+      const surfaces: Record<string, FaceColor> = {}
+      if (t.surfaces) {
+        t.surfaces.forEach((s: string) => {
+          const [face, color] = s.split(':')
+          surfaces[face] = color as FaceColor
+        })
+      }
+      init[t.tooth_number] = { ...surfaces, note: t.notes ?? '' }
     })
-    setDiagFace('')
-    setDiagCode('')
-    setDiagLabel('')
-    setDiagProc('')
-    setAddingDiag(false)
+    return init
+  })
+
+  function getState(n: number): ToothState {
+    return teeth[n] ?? {}
   }
 
-  function selectDiagnostico(d: { code: string; label: string }) {
-    setDiagCode(d.code)
-    setDiagLabel(d.label)
+  function toggleFace(n: number, face: 'V' | 'M' | 'O' | 'D' | 'L') {
+    setTeeth(prev => {
+      const current = prev[n] ?? {}
+      const currentColor = current[face]
+      let newColor: FaceColor
+      if (currentColor === null || currentColor === undefined) {
+        newColor = paintColor
+      } else if (currentColor === paintColor) {
+        newColor = null
+      } else {
+        newColor = paintColor
+      }
+      return { ...prev, [n]: { ...current, [face]: newColor } }
+    })
   }
 
-  function Quadrant({ teeth, label }: { teeth: number[]; label: string }) {
+  function setNote(n: number, note: string) {
+    setTeeth(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), note } }))
+  }
+
+  async function handleSave(n: number) {
+    setSaving(true)
+    const state = teeth[n] ?? {}
+    const surfaces = (['V', 'M', 'O', 'D', 'L'] as const)
+      .filter(f => state[f])
+      .map(f => `${f}:${state[f]}`)
+    await onSaveTooth(n, { surfaces: surfaces.join(',') }, state.note ?? '')
+    setSaving(false)
+    setSelectedTooth(null)
+  }
+
+  function Quadrant({ teeth: qs, label }: { teeth: number[]; label: string }) {
     return (
       <div>
-        <div className="text-xs text-gray-600 font-mono text-center mb-1">{label}</div>
-        <div className="flex gap-1">
-          {teeth.map(n => {
-            const { condition, surfaces } = getToothData(n)
-            const hasDiag = diagnostics.some(d => d.tooth_number === n)
-            return (
-              <div key={n} className="flex flex-col items-center">
-                <ToothSVG
-                  number={n}
-                  condition={condition}
-                  surfaces={surfaces}
-                  isSelected={selectedTooth === n}
-                  onClick={() => {
-                    if (selectedTooth === n) {
-                      onSelectTooth(null)
-                      setSelectedSurfaces([])
-                    } else {
-                      onSelectTooth(n)
-                      const d = getToothData(n)
-                      setSelectedSurfaces(d.surfaces)
-                      setSelectedCondition(d.condition === 'healthy' ? 'cavity' : d.condition)
-                    }
-                  }}
-                />
-                {hasDiag && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-0.5" />
-                )}
-              </div>
-            )
-          })}
+        <div className="text-[10px] text-gray-600 font-mono text-center mb-1">{label}</div>
+        <div className="flex gap-0.5">
+          {qs.map(n => (
+            <ToothSVG
+              key={n}
+              number={n}
+              state={getState(n)}
+              isSelected={selectedTooth === n}
+              onClick={() => setSelectedTooth(selectedTooth === n ? null : n)}
+            />
+          ))}
         </div>
       </div>
     )
   }
 
-  // Diagnósticos del diente seleccionado
-  const toothDiags = selectedTooth
-    ? diagnostics.filter(d => d.tooth_number === selectedTooth)
-    : []
+  // Panel de caras — click directo sobre el SVG grande
+  function BigToothEditor({ n }: { n: number }) {
+    const state = getState(n)
+    function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
+      const c = state[face]
+      if (c === 'red') return '#dc2626'
+      if (c === 'blue') return '#2563eb'
+      return '#374151'
+    }
+
+    return (
+      <svg width="100" height="100" viewBox="0 0 36 36" className="flex-shrink-0">
+        <polygon points="18,2 32,12 4,12" fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'V')} />
+        <polygon points="18,34 32,24 4,24" fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'L')} />
+        <polygon points="2,18 12,4 12,32" fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'M')} />
+        <polygon points="34,18 24,4 24,32" fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'D')} />
+        <rect x="12" y="12" width="12" height="12" fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
+          className="cursor-pointer hover:opacity-80" onClick={() => toggleFace(n, 'O')} />
+        <rect x="1" y="1" width="34" height="34" rx="3" fill="none" stroke="#facc15" strokeWidth="2" />
+        {/* Labels */}
+        <text x="18" y="9" textAnchor="middle" fontSize="4" fill="#9ca3af">V</text>
+        <text x="18" y="31" textAnchor="middle" fontSize="4" fill="#9ca3af">L</text>
+        <text x="6" y="19" textAnchor="middle" fontSize="4" fill="#9ca3af">M</text>
+        <text x="30" y="19" textAnchor="middle" fontSize="4" fill="#9ca3af">D</text>
+        <text x="18" y="20" textAnchor="middle" fontSize="4" fill="#9ca3af">O</text>
+      </svg>
+    )
+  }
 
   return (
     <div>
+      {/* Color selector — minimalista */}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => setPaintColor('red')}
+          className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'red'
+            ? 'bg-red-600 ring-red-500'
+            : 'bg-red-900/40 ring-transparent hover:ring-red-800'
+            }`}
+          title="Realizado"
+        />
+        <button
+          onClick={() => setPaintColor('blue')}
+          className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'blue'
+            ? 'bg-blue-600 ring-blue-500'
+            : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'
+            }`}
+          title="Por realizar"
+        />
+        <span className="text-xs text-gray-600">
+          Tocá una cara para pintar · Tocá de nuevo para borrar
+        </span>
+      </div>
+
       {/* Grid cuadrantes */}
       <div className="overflow-x-auto pb-2">
-        <div className="inline-block min-w-full">
-          <div className="flex gap-2 justify-center mb-1">
-            <Quadrant teeth={Q1} label="Q1 — Sup. Der." />
-            <div className="w-px bg-gray-700 mx-1" />
-            <Quadrant teeth={Q2} label="Q2 — Sup. Izq." />
+        <div className="inline-flex flex-col gap-1 min-w-full">
+          <div className="flex gap-3 justify-center">
+            <Quadrant teeth={Q1} label="Q1" />
+            <div className="w-px bg-gray-700" />
+            <Quadrant teeth={Q2} label="Q2" />
           </div>
-          <div className="border-t border-dashed border-gray-700 my-2" />
-          <div className="flex gap-2 justify-center mt-1">
-            <Quadrant teeth={Q4} label="Q4 — Inf. Der." />
-            <div className="w-px bg-gray-700 mx-1" />
-            <Quadrant teeth={Q3} label="Q3 — Inf. Izq." />
+          <div className="border-t border-dashed border-gray-700 my-1" />
+          <div className="flex gap-3 justify-center">
+            <Quadrant teeth={Q4} label="Q4" />
+            <div className="w-px bg-gray-700" />
+            <Quadrant teeth={Q3} label="Q3" />
           </div>
         </div>
       </div>
 
-      {/* Panel pieza seleccionada */}
+      {/* Editor de pieza seleccionada */}
       {selectedTooth && (
-        <div className="mt-4 bg-gray-800 rounded-xl border border-blue-800/50 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-            <div className="font-bold text-blue-400">Pieza {selectedTooth}</div>
-            <div className="flex gap-1">
-              <button onClick={() => setTab('condition')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${tab === 'condition' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'
-                  }`}>
-                Condición
-              </button>
-              <button onClick={() => setTab('diagnostic')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${tab === 'diagnostic' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'
-                  }`}>
-                Diagnóstico {toothDiags.length > 0 && `(${toothDiags.length})`}
-              </button>
+        <div className="mt-4 bg-gray-800 rounded-xl border border-yellow-700/50 p-4">
+          <div className="flex items-start gap-4">
+            {/* SVG grande editable */}
+            <div className="flex flex-col items-center gap-1 flex-shrink-0">
+              <BigToothEditor n={selectedTooth} />
+              <span className="text-xs text-yellow-400 font-mono font-bold">Pieza {selectedTooth}</span>
             </div>
-            <button onClick={() => { onSelectTooth(null); setSelectedSurfaces([]) }}
-              className="text-gray-500 hover:text-white text-xs">✕</button>
-          </div>
 
-          {/* Tab: Condición */}
-          {tab === 'condition' && (
-            <div className="p-4">
-              <div className="mb-4">
-                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Caras afectadas</div>
-                <div className="flex gap-2 flex-wrap">
-                  {FACES_MAP.map(f => (
-                    <button key={f.key}
-                      onClick={() => toggleSurface(f.key)}
-                      title={f.title}
-                      className={`w-10 h-10 rounded-lg text-xs font-bold transition-all active:scale-90 ${selectedSurfaces.includes(f.key)
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                        }`}>
-                      {f.key}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  V=Vestibular · M=Mesial · O=Oclusal · D=Distal · L=Lingual
-                </div>
-              </div>
-              <div className="mb-4">
-                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Condición</div>
-                <div className="mb-3">
-                  <div className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-1">
-                    Rojo — Estado actual
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    {TOOTH_CONDITIONS.filter(c => c.group === 'done').map(c => (
-                      <button key={c.value}
-                        onClick={() => setSelectedCondition(c.value)}
-                        className={`py-2 px-2 rounded-lg text-xs font-semibold transition-all active:scale-95 border ${selectedCondition === c.value
-                          ? 'border-red-400 bg-red-900/40 text-red-300'
-                          : 'border-gray-700 bg-gray-700/50 text-gray-400 hover:border-gray-500'
-                          }`}>
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">
-                    Azul — Plan de tratamiento
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {TOOTH_CONDITIONS.filter(c => c.group === 'plan').map(c => (
-                      <button key={c.value}
-                        onClick={() => setSelectedCondition(c.value)}
-                        className={`py-2 px-2 rounded-lg text-xs font-semibold transition-all active:scale-95 border ${selectedCondition === c.value
-                          ? 'border-blue-400 bg-blue-900/40 text-blue-300'
-                          : 'border-gray-700 bg-gray-700/50 text-gray-400 hover:border-gray-500'
-                          }`}>
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <button onClick={handleApplyCondition} disabled={saving}
-                className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 active:scale-95 text-white font-semibold py-2.5 rounded-xl transition-all text-sm">
-                {saving ? 'Guardando...' : 'Aplicar condición'}
-              </button>
-            </div>
-          )}
-
-          {/* Tab: Diagnóstico */}
-          {tab === 'diagnostic' && (
-            <div className="p-4">
-              {/* Diagnósticos existentes */}
-              {toothDiags.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">Registrados</div>
-                  <div className="space-y-2">
-                    {toothDiags.map(d => (
-                      <div key={d.id} className="bg-gray-700/50 rounded-lg p-3 flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-white">
-                            {d.diagnosis_code && <span className="text-blue-400 mr-1">{d.diagnosis_code}</span>}
-                            {d.diagnosis_label}
-                          </div>
-                          {d.face && <div className="text-xs text-gray-400">Cara: {d.face}</div>}
-                          {d.procedure && <div className="text-xs text-gray-400">Proc: {d.procedure}</div>}
-                        </div>
-                        <button onClick={() => onDeleteDiagnostic(d.id)}
-                          className="text-red-400 hover:text-red-300 text-xs flex-shrink-0 active:scale-90">
-                          🗑
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Nuevo diagnóstico */}
+            {/* Notas */}
+            <div className="flex-1 flex flex-col gap-3">
               <div>
-                <div className="text-xs text-gray-400 uppercase tracking-wider mb-3">Agregar diagnóstico</div>
-
-                {/* Cara */}
-                <div className="mb-3">
-                  <div className="text-xs text-gray-500 mb-1">Cara</div>
-                  <div className="flex gap-2 flex-wrap">
-                    {['', ...FACES_MAP.map(f => f.key)].map(f => (
-                      <button key={f || 'all'}
-                        onClick={() => setDiagFace(f)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors active:scale-95 ${diagFace === f
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
-                          }`}>
-                        {f || 'General'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Diagnósticos comunes */}
-                <div className="mb-3">
-                  <div className="text-xs text-gray-500 mb-1">Diagnóstico CIE-10</div>
-                  <div className="grid grid-cols-1 gap-1 max-h-32 overflow-y-auto mb-2">
-                    {DIAGNOSTICOS_COMUNES.map(d => (
-                      <button key={d.code}
-                        onClick={() => selectDiagnostico(d)}
-                        className={`text-left px-3 py-1.5 rounded-lg text-xs transition-colors active:scale-95 ${diagCode === d.code
-                          ? 'bg-blue-900/60 border border-blue-500 text-blue-300'
-                          : 'bg-gray-700/50 hover:bg-gray-700 text-gray-300'
-                          }`}>
-                        <span className="text-blue-400 font-mono mr-1">{d.code}</span>
-                        {d.label}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="text"
-                    value={diagLabel}
-                    onChange={e => setDiagLabel(e.target.value)}
-                    placeholder="O escribí un diagnóstico libre..."
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-400"
-                  />
-                </div>
-
-                {/* Procedimiento */}
-                <div className="mb-4">
-                  <div className="text-xs text-gray-500 mb-1">Procedimiento (opcional)</div>
-                  <div className="grid grid-cols-2 gap-1 max-h-28 overflow-y-auto mb-2">
-                    {PROCEDIMIENTOS_COMUNES.map(p => (
-                      <button key={p}
-                        onClick={() => setDiagProc(p)}
-                        className={`text-left px-2 py-1.5 rounded-lg text-xs transition-colors active:scale-95 ${diagProc === p
-                          ? 'bg-blue-900/60 border border-blue-500 text-blue-300'
-                          : 'bg-gray-700/50 hover:bg-gray-700 text-gray-300'
-                          }`}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="text"
-                    value={diagProc}
-                    onChange={e => setDiagProc(e.target.value)}
-                    placeholder="O escribí un procedimiento libre..."
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-400"
-                  />
-                </div>
-
+                <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">Notas</div>
+                <textarea
+                  value={getState(selectedTooth).note ?? ''}
+                  onChange={e => setNote(selectedTooth, e.target.value)}
+                  rows={4}
+                  placeholder="Observaciones, diagnóstico, procedimiento indicado..."
+                  className="w-full bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-500 resize-none"
+                />
+              </div>
+              <div className="flex gap-2">
                 <button
-                  onClick={handleAddDiagnostic}
-                  disabled={!diagLabel || addingDiag}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 active:scale-95 text-white font-semibold py-2.5 rounded-xl transition-all text-sm"
-                >
-                  {addingDiag ? 'Guardando...' : '+ Agregar diagnóstico'}
+                  onClick={() => setSelectedTooth(null)}
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-semibold py-2 rounded-xl transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleSave(selectedTooth)}
+                  disabled={saving}
+                  className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-gray-900 text-sm font-bold py-2 rounded-xl transition-all active:scale-95">
+                  {saving ? 'Guardando...' : 'Guardar pieza'}
                 </button>
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Tabla de todos los diagnósticos */}
-      {diagnostics.length > 0 && (
-        <div className="mt-6">
-          <div className="text-xs text-gray-400 uppercase tracking-wider mb-3">
-            Todos los diagnósticos ({diagnostics.length})
-          </div>
-          <div className="bg-gray-800 rounded-xl overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="text-left px-3 py-2 text-gray-500 font-semibold">Diagnóstico</th>
-                  <th className="text-left px-3 py-2 text-gray-500 font-semibold">Procedimiento</th>
-                  <th className="text-left px-3 py-2 text-gray-500 font-semibold">Pieza</th>
-                  <th className="text-left px-3 py-2 text-gray-500 font-semibold">Cara</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700">
-                {diagnostics.map(d => (
-                  <tr key={d.id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-3 py-2">
-                      {d.diagnosis_code && (
-                        <span className="text-blue-400 font-mono mr-1">{d.diagnosis_code}</span>
-                      )}
-                      <span className="text-gray-300">{d.diagnosis_label}</span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-400">{d.procedure ?? '—'}</td>
-                    <td className="px-3 py-2 text-gray-400 font-mono">{d.tooth_number}</td>
-                    <td className="px-3 py-2 text-gray-400">{d.face ?? '—'}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button onClick={() => onDeleteDiagnostic(d.id)}
-                        className="text-red-400 hover:text-red-300 active:scale-90 transition-all">
-                        🗑
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
 
       {/* Leyenda */}
-      <div className="flex flex-wrap gap-3 mt-4">
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-red-800 inline-block" />
-          <span className="text-xs text-gray-400">Estado actual (obturada, corona, implante...)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-blue-900 inline-block" />
-          <span className="text-xs text-gray-400">Plan de tratamiento (caries, extraer, fractura...)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-gray-700 inline-block" />
-          <span className="text-xs text-gray-400">Sana</span>
-        </div>
+      <div className="flex gap-4 mt-4 text-xs text-gray-500">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
+          Ya realizado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
+          Por realizar
+        </span>
       </div>
     </div>
   )
