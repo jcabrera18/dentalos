@@ -280,6 +280,14 @@ export default function PatientDetailPage() {
             >
               📅 Nuevo turno
             </button>
+
+            <button
+              onClick={() => router.push(`/dashboard/payments?patient_id=${params.id}&patient_name=${patient.first_name} ${patient.last_name}`)}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
+            >
+              💰 Registrar cobro
+            </button>
+
           </div>
 
           {/* Columna derecha — historial + tratamientos */}

@@ -6,22 +6,23 @@ import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
 const METODOS = [
-  { value: 'cash',          label: '💵 Efectivo' },
+  { value: 'cash', label: '💵 Efectivo' },
   { value: 'bank_transfer', label: '📲 Transferencia' },
-  { value: 'debit_card',    label: '💳 Débito' },
-  { value: 'credit_card',   label: '💳 Crédito' },
-  { value: 'insurance',     label: '🏥 Obra social' },
-  { value: 'other',         label: '📝 Otro' },
+  { value: 'debit_card', label: '💳 Débito' },
+  { value: 'credit_card', label: '💳 Crédito' },
+  { value: 'insurance', label: '🏥 Obra social' },
+  { value: 'other', label: '📝 Otro' },
 ]
 
 export default function PaymentsPage() {
-  const [payments, setPayments]     = useState<any[]>([])
-  const [summary, setSummary]       = useState<any>(null)
-  const [loading, setLoading]       = useState(true)
-  const [token, setToken]           = useState('')
-  const [showModal, setShowModal]   = useState(false)
-  const [patients, setPatients]     = useState<any[]>([])
-  const router   = useRouter()
+  const [payments, setPayments] = useState<any[]>([])
+  const [summary, setSummary] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [patients, setPatients] = useState<any[]>([])
+  const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
+  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -34,6 +35,15 @@ export default function PaymentsPage() {
         fetchSummary(session.access_token),
         fetchPatients(session.access_token),
       ])
+
+      // Pre-seleccionar paciente si viene por URL
+      const searchParams = new URLSearchParams(window.location.search)
+      const prePatientId = searchParams.get('patient_id')
+      if (prePatientId) {
+        setPreselectedPatientId(prePatientId)
+        setShowModal(true)
+      }
+
       setLoading(false)
     }
     load()
@@ -69,6 +79,16 @@ export default function PaymentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+
+      <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Cobros</h2>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all"
+        >
+          + Registrar cobro
+        </button>
+      </div>
 
       <main className="p-6 max-w-4xl mx-auto">
         {/* Resumen del día */}
@@ -139,9 +159,11 @@ export default function PaymentsPage() {
         <NewPaymentModal
           token={token}
           patients={patients}
-          onClose={() => setShowModal(false)}
+          preselectedPatientId={preselectedPatientId}
+          onClose={() => { setShowModal(false); setPreselectedPatientId(null) }}
           onCreated={async () => {
             setShowModal(false)
+            setPreselectedPatientId(null)
             await Promise.all([fetchPayments(token), fetchSummary(token)])
           }}
         />
@@ -150,22 +172,23 @@ export default function PaymentsPage() {
   )
 }
 
-function NewPaymentModal({ token, patients, onClose, onCreated }: {
+function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCreated }: {
   token: string
   patients: any[]
+  preselectedPatientId?: string | null
   onClose: () => void
   onCreated: () => void
 }) {
   const [form, setForm] = useState({
-    patient_id:   '',
-    amount:       '',
-    method:       'cash',
+    patient_id: preselectedPatientId ?? '',
+    amount: '',
+    method: 'cash',
     installments: '1',
-    notes:        '',
+    notes: '',
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [search, setSearch]   = useState('')
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -188,11 +211,11 @@ function NewPaymentModal({ token, patients, onClose, onCreated }: {
         method: 'POST',
         token,
         body: JSON.stringify({
-          patient_id:   form.patient_id,
-          amount:       Number(form.amount),
-          method:       form.method,
+          patient_id: form.patient_id,
+          amount: Number(form.amount),
+          method: form.method,
           installments: Number(form.installments),
-          notes:        form.notes || undefined,
+          notes: form.notes || undefined,
         })
       })
       onCreated()
@@ -278,11 +301,10 @@ function NewPaymentModal({ token, patients, onClose, onCreated }: {
                 {METODOS.map(m => (
                   <button key={m.value} type="button"
                     onClick={() => set('method', m.value)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${
-                      form.method === m.value
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-800 border border-gray-700 text-gray-400 hover:border-gray-500'
-                    }`}>
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-800 border border-gray-700 text-gray-400 hover:border-gray-500'
+                      }`}>
                     {m.label}
                   </button>
                 ))}
@@ -296,14 +318,13 @@ function NewPaymentModal({ token, patients, onClose, onCreated }: {
                   Cuotas
                 </label>
                 <div className="grid grid-cols-4 gap-2">
-                  {['1','3','6','12'].map(c => (
+                  {['1', '3', '6', '12'].map(c => (
                     <button key={c} type="button"
                       onClick={() => set('installments', c)}
-                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                        form.installments === c
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-800 border border-gray-700 text-gray-400'
-                      }`}>
+                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-800 border border-gray-700 text-gray-400'
+                        }`}>
                       {c}x
                     </button>
                   ))}

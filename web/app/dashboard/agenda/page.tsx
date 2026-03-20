@@ -5,15 +5,15 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
-const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
-const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const HOURS = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
+const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 function getWeekDates(offset = 0) {
   const now = new Date()
   const day = now.getDay() === 0 ? 6 : now.getDay() - 1
   const monday = new Date(now)
   monday.setDate(now.getDate() - day + offset * 7)
-  return Array.from({ length: 6 }, (_, i) => {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
     return d
@@ -30,9 +30,13 @@ function todayArg() {
 
 function getSlotTop(startsAt: string): number {
   const d = new Date(startsAt)
-  const h = d.toLocaleString('en-CA', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-  const m = d.toLocaleString('en-CA', { minute: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
-  return Math.max(0, (Number(h) - 8) * 64 + (Number(m) / 60) * 64)
+  const argTime = d.toLocaleTimeString('es-AR', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: 'America/Argentina/Buenos_Aires'
+  })
+  const [h, m] = argTime.split(':').map(Number)
+  const startHour = 7 // primer hora del HOURS array
+  return Math.max(0, (h - startHour) * 64 + (m / 60) * 64)
 }
 
 function getSlotHeight(startsAt: string, endsAt: string): number {
@@ -59,6 +63,8 @@ export default function AgendaPage() {
   const [showNewAppt, setShowNewAppt] = useState(false)
   const [newApptSlot, setNewApptSlot] = useState<{ date: string; time: string } | null>(null)
   const [patients, setPatients] = useState<any[]>([])
+  const [editingAppt, setEditingAppt] = useState<any>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -98,6 +104,17 @@ export default function AgendaPage() {
     setSelectedAppt(null)
   }
 
+  async function deleteAppt(id: string) {
+    await apiFetch(`/appointments/${id}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ status: 'cancelled' })
+    })
+    await fetchAppointments(token)
+    setSelectedAppt(null)
+    setConfirmDelete(null)
+  }
+
   const today = todayArg()
 
   // Turnos del día seleccionado (mobile)
@@ -105,7 +122,7 @@ export default function AgendaPage() {
     const d = new Date(a.starts_at).toLocaleDateString('en-CA', {
       timeZone: 'America/Argentina/Buenos_Aires'
     })
-    return d === selectedDay
+    return d === selectedDay && a.status !== 'cancelled'
   })
 
   // Turnos por día (desktop)
@@ -114,7 +131,7 @@ export default function AgendaPage() {
       const d = new Date(a.starts_at).toLocaleDateString('en-CA', {
         timeZone: 'America/Argentina/Buenos_Aires'
       })
-      return d === dateStr
+      return d === dateStr && a.status !== 'cancelled'
     })
   }
 
@@ -191,12 +208,27 @@ export default function AgendaPage() {
           </button>
 
           {selectedAppt.status !== 'cancelled' && selectedAppt.status !== 'completed' && (
-            <button
-              onClick={() => updateStatus(selectedAppt.id, 'cancelled')}
-              className="w-full bg-red-900/20 hover:bg-red-900/40 active:scale-95 text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
-              Cancelar turno
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setEditingAppt(selectedAppt)
+                  setSelectedAppt(null)
+                }}
+                className="w-full bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 py-2.5 rounded-xl text-sm font-medium transition-all">
+                ✏️ Editar turno
+              </button>
+              <button
+                onClick={() => updateStatus(selectedAppt.id, 'cancelled')}
+                className="w-full bg-red-900/20 hover:bg-red-900/40 active:scale-95 text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
+                Cancelar turno
+              </button>
+            </>
           )}
+          <button
+            onClick={() => { setConfirmDelete(selectedAppt.id); setSelectedAppt(null) }}
+            className="w-full bg-red-900/40 hover:bg-red-900/60 active:scale-95 text-red-300 py-2.5 rounded-xl text-sm font-medium transition-all">
+            🗑 Eliminar turno
+          </button>
         </div>
       </div>
     </div>
@@ -223,7 +255,7 @@ export default function AgendaPage() {
             </span>
             <WeekNav />
           </div>
-          <div className="grid grid-cols-6 gap-1">
+          <div className="grid grid-cols-7 gap-0">
             {weekDates.map((d, i) => {
               const dateStr = formatDate(d)
               const isToday = dateStr === today
@@ -232,16 +264,16 @@ export default function AgendaPage() {
               return (
                 <button key={i}
                   onClick={() => setSelectedDay(dateStr)}
-                  className="flex flex-col items-center gap-1 py-2 rounded-xl transition-colors"
+                  className="flex flex-col items-center gap-0.5 py-2 rounded-xl transition-colors"
                 >
-                  <span className="text-xs text-gray-500">{DAYS[i]}</span>
-                  <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold transition-colors ${isSelected ? 'bg-blue-500 text-white' :
-                    isToday ? 'border border-blue-400 text-blue-400' : 'text-white'
+                  <span className="text-[10px] text-gray-500">{DAYS[i]}</span>
+                  <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold transition-colors ${isSelected ? 'bg-blue-500 text-white' :
+                      isToday ? 'border border-blue-400 text-blue-400' : 'text-white'
                     }`}>
                     {d.getDate()}
                   </span>
                   {hasAppts && (
-                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}`} />
+                    <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}`} />
                   )}
                 </button>
               )
@@ -295,75 +327,93 @@ export default function AgendaPage() {
       </div>
 
       {/* ── DESKTOP VIEW (semanal) ── */}
-      <div className="hidden md:flex flex-col h-full overflow-hidden">
+      <div className="hidden md:flex flex-col flex-1">
         <div className="px-6 py-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
           <span className="text-sm text-gray-400">
             {weekDates[0].toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
-            {weekDates[5].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {weekDates[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
           <WeekNav />
         </div>
 
-        <div className="grid flex-shrink-0 border-b border-gray-800"
-          style={{ gridTemplateColumns: '48px repeat(6, 1fr)' }}>
-          <div />
-          {weekDates.map((d, i) => {
-            const isToday = formatDate(d) === today
-            return (
-              <div key={i} className="py-3 text-center border-l border-gray-800">
-                <div className="text-xs text-gray-500 uppercase tracking-wider">{DAYS[i]}</div>
-                <div className={`text-lg font-bold mx-auto mt-0.5 w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-500 text-white' : ''
-                  }`}>
-                  {d.getDate()}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid" style={{ gridTemplateColumns: '48px repeat(6, 1fr)' }}>
-            <div>
-              {HOURS.map(h => (
-                <div key={h} className="h-16 text-right pr-2 pt-1">
-                  <span className="text-xs text-gray-600 font-mono">{h}</span>
-                </div>
-              ))}
-            </div>
-            {weekDates.map((d, dayIdx) => {
-              const dateStr = formatDate(d)
-              const isToday = dateStr === today
-              const dayApts = apptsByDay(dateStr)
-              return (
-                <div key={dayIdx}
-                  className={`relative border-l border-gray-800 ${isToday ? 'bg-blue-950/5' : ''}`}
-                  style={{ height: `${HOURS.length * 64}px` }}>
-                  {HOURS.map((_, i) => (
-                    <div key={i} className="absolute w-full border-t border-gray-800/50"
-                      style={{ top: i * 64 }} />
-                  ))}
-                  {dayApts.map(appt => (
-                    <div key={appt.id}
-                      onClick={() => setSelectedAppt(appt)}
-                      className={`absolute left-1 right-1 rounded-md border-l-2 px-1.5 py-1 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}
-                      style={{
-                        top: getSlotTop(appt.starts_at),
-                        height: getSlotHeight(appt.starts_at, appt.ends_at),
-                      }}>
-                      <div className="text-xs font-bold text-white truncate">{appt.patient_name}</div>
-                      <div className="text-xs opacity-70 truncate">{appt.appointment_type}</div>
+        {/* Wrapper con scroll que incluye header y body */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div>
+            {/* Header días — sticky */}
+            <div className="grid sticky top-0 z-20 bg-gray-950 border-b border-gray-800"
+              style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+              <div />
+              {weekDates.map((d, i) => {
+                const isToday = formatDate(d) === today
+                return (
+                  <div key={i} className="py-3 text-center border-l border-gray-800">
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">{DAYS[i]}</div>
+                    <div className={`text-lg font-bold mx-auto mt-0.5 w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-500 text-white' : ''
+                      }`}>
+                      {d.getDate()}
                     </div>
-                  ))}
-                </div>
-              )
-            })}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Grid cuerpo */}
+            <div className="grid" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+              {/* Columna horas */}
+              <div>
+                {HOURS.map(h => (
+                  <div key={h} className="h-16 relative border-t border-gray-800/50">
+                    <span className="absolute top-1 right-2 text-xs text-gray-600 font-mono">{h}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Columnas días */}
+              {weekDates.map((d, dayIdx) => {
+                const dateStr = formatDate(d)
+                const isToday = dateStr === today
+                const dayApts = apptsByDay(dateStr)
+                return (
+                  <div key={dayIdx}
+                    className={`relative border-l border-gray-800 ${isToday ? 'bg-blue-950/5' : ''}`}
+                    style={{ minHeight: `${HOURS.length * 64}px` }}
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const y = e.clientY - rect.top
+                        const hourIndex = Math.floor(y / 64)
+                        const hour = 7 + hourIndex
+                        setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:00` })
+                        setShowNewAppt(true)
+                      }
+                    }}>
+                    {HOURS.map((_, i) => (
+                      <div key={i} className="absolute w-full border-t border-gray-800/50"
+                        style={{ top: i * 64 }} />
+                    ))}
+                    {dayApts.map(appt => (
+                      <div key={appt.id}
+                        onClick={() => setSelectedAppt(appt)}
+                        className={`absolute left-1 right-1 rounded-md border-l-2 px-1.5 py-1 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}
+                        style={{
+                          top: getSlotTop(appt.starts_at),
+                          height: getSlotHeight(appt.starts_at, appt.ends_at),
+                        }}>
+                        <div className="text-xs font-bold text-white truncate">{appt.patient_name}</div>
+                        <div className="text-xs opacity-70 truncate">{appt.appointment_type}</div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>
 
       <button
         onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setShowNewAppt(true) }}
-        className="fixed bottom-24 right-4 w-14 h-14 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
+        className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
       >
         +
       </button>
@@ -383,6 +433,102 @@ export default function AgendaPage() {
             setPatients((prev: any[]) => [patient, ...prev])
           }}
         />
+      )}
+
+      {/* Modal edición turno */}
+      {editingAppt && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setEditingAppt(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm p-6"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-9 h-1 bg-gray-700 rounded-full mx-auto mb-5 sm:hidden" />
+            <h3 className="font-bold text-lg mb-4">Editar turno</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Fecha</label>
+                <input
+                  type="date"
+                  defaultValue={new Date(editingAppt.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
+                  id="edit-date"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Hora</label>
+                <input
+                  type="time"
+                  defaultValue={new Date(editingAppt.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
+                  id="edit-time"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Tipo de consulta</label>
+                <input
+                  type="text"
+                  defaultValue={editingAppt.appointment_type ?? ''}
+                  id="edit-type"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditingAppt(null)}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  const date = (document.getElementById('edit-date') as HTMLInputElement).value
+                  const time = (document.getElementById('edit-time') as HTMLInputElement).value
+                  const type = (document.getElementById('edit-type') as HTMLInputElement).value
+                  const startsAt = `${date}T${time}:00-03:00`
+                  const endsAt = new Date(new Date(startsAt).getTime() + editingAppt.duration_minutes * 60000).toISOString()
+                  await apiFetch(`/appointments/${editingAppt.id}`, {
+                    method: 'PATCH',
+                    token,
+                    body: JSON.stringify({
+                      starts_at: startsAt,
+                      ends_at: endsAt,
+                      appointment_type: type || undefined,
+                    })
+                  })
+                  await fetchAppointments(token)
+                  setEditingAppt(null)
+                }}
+                className="flex-1 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmación eliminar */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-900/40 flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">🗑</span>
+            </div>
+            <h3 className="font-bold text-lg mb-2">Eliminar turno</h3>
+            <p className="text-gray-400 text-sm mb-6">
+              Esta acción no se puede deshacer. El turno será eliminado permanentemente.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteAppt(confirmDelete)}
+                className="flex-1 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ApptModal />
@@ -639,5 +785,7 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, 
         </div>
       </div>
     </div>
+
+
   )
 }
