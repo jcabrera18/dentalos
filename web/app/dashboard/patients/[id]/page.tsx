@@ -370,41 +370,60 @@ export default function PatientDetailPage() {
               </div>
             )}
 
-            {/* Historial de turnos */}
+            {/* Historial clínico */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-800">
-                <h3 className="font-semibold">📖 Historial de turnos</h3>
+                <h3 className="font-semibold">Historial clínico</h3>
               </div>
               {!patient.appointments?.length ? (
                 <div className="px-6 py-8 text-center text-gray-500 text-sm">
-                  Sin historial de turnos
+                  Sin historial de consultas
                 </div>
               ) : (
                 <div className="divide-y divide-gray-800">
                   {[...patient.appointments]
-                    .sort((a: any, b: any) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime())
+                    .sort((a: any, b: any) =>
+                      new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()
+                    )
                     .map((appt: any) => (
-                      <div key={appt.id} className="px-6 py-4 flex items-center gap-4">
-                        <div className="text-sm font-mono text-gray-400 flex-shrink-0 w-28">
-                          {new Date(appt.starts_at).toLocaleDateString('es-AR', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                            timeZone: 'America/Argentina/Buenos_Aires'
-                          })}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">
-                            {appt.appointment_type ?? 'Consulta'}
+                      <div key={appt.id} className="px-6 py-4">
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="text-sm font-mono text-gray-400 flex-shrink-0">
+                              {new Date(appt.starts_at).toLocaleDateString('es-AR', {
+                                day: 'numeric', month: 'short', year: 'numeric',
+                                timeZone: 'America/Argentina/Buenos_Aires'
+                              })}
+                            </div>
+                            <div className="text-sm font-semibold truncate">
+                              {appt.appointment_type ?? 'Consulta'}
+                            </div>
                           </div>
+                          <span className={`text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
+                              appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
+                                appt.status === 'cancelled' ? 'bg-gray-800 text-gray-500' :
+                                  'bg-amber-900/40 text-amber-400'
+                            }`}>
+                            {appt.status === 'completed' ? 'Atendido' :
+                              appt.status === 'absent' ? 'Ausente' :
+                                appt.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
+                          </span>
                         </div>
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                          appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                            appt.status === 'cancelled' ? 'bg-gray-800 text-gray-500' :
-                              'bg-amber-900/40 text-amber-400'
-                          }`}>
-                          {appt.status === 'completed' ? 'Atendido' :
-                            appt.status === 'absent' ? 'Ausente' :
-                              appt.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
-                        </span>
+                        {/* Notas clínicas */}
+                        {appt.clinical_notes ? (
+                          <div className="ml-0 mt-2 bg-gray-800/60 rounded-lg px-4 py-3 border-l-2 border-blue-700">
+                            <div className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">
+                              Notas de la consulta
+                            </div>
+                            <div className="text-sm text-gray-300 whitespace-pre-wrap">
+                              {appt.clinical_notes}
+                            </div>
+                          </div>
+                        ) : appt.status === 'completed' ? (
+                          <div className="mt-1 text-xs text-gray-600 italic">
+                            Sin notas registradas
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                 </div>
