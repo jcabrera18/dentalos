@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [showNotesModal, setShowNotesModal] = useState(false)
   const [pendingAppt, setPendingAppt] = useState<any>(null)
   const [clinicalNotes, setClinicalNotes] = useState('')
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -185,7 +186,7 @@ export default function DashboardPage() {
         )}
 
         {/* Agenda del día */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-visible">
           <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
             <h3 className="font-semibold">Agenda de hoy</h3>
             <span className="text-sm text-gray-500">{agenda.length} turnos</span>
@@ -214,31 +215,62 @@ export default function DashboardPage() {
                     <div className="text-sm text-gray-400 truncate">{appt.appointment_type}</div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {appt.status === 'pending' || appt.status === 'confirmed' ? (
-                      <>
-                        <button
-                          onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
-                          className="bg-emerald-900/40 hover:bg-emerald-700/50 active:scale-95 active:opacity-70 text-emerald-400 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
-                        >
-                          ✓ Atendido
-                        </button>
-                        <button
-                          onClick={() => markStatus(appt.id, 'absent')}
-                          className="bg-red-900/40 hover:bg-red-700/50 active:scale-95 active:opacity-70 text-red-400 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
-                        >
-                          ✕
-                        </button>
-                      </>
-                    ) : (
+                    {appt.status === 'completed' || appt.status === 'absent' || appt.status === 'cancelled' ? (
                       <span className={`text-xs font-semibold px-3 py-1 rounded-full ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                        appt.status === 'confirmed' ? 'bg-blue-900/40 text-blue-400' :
-                          appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                            'bg-amber-900/40 text-amber-400'
+                        appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
+                          'bg-gray-800 text-gray-500'
                         }`}>
                         {appt.status === 'completed' ? 'Atendido' :
-                          appt.status === 'confirmed' ? 'Confirmado' :
-                            appt.status === 'absent' ? 'Ausente' : 'Pendiente'}
+                          appt.status === 'absent' ? 'Ausente' : 'Cancelado'}
                       </span>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenDropdown(openDropdown === appt.id ? null : appt.id)}
+                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${appt.status === 'confirmed' ? 'bg-blue-900/40 border-blue-700 text-blue-300' :
+                                appt.status === 'in_progress' ? 'bg-purple-900/40 border-purple-700 text-purple-300' :
+                                  'bg-amber-900/40 border-amber-700 text-amber-300'
+                              }`}>
+                            {appt.status === 'confirmed' ? 'Confirmado' :
+                              appt.status === 'in_progress' ? 'En curso' : 'Pendiente'}
+                            <span className="opacity-60">▾</span>
+                          </button>
+
+                          {openDropdown === appt.id && (
+                            <>
+                              {/* Overlay para cerrar al hacer click afuera */}
+                              <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                              <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
+                                {[
+                                  { value: 'confirmed', label: 'Confirmado', color: 'text-blue-400' },
+                                  { value: 'in_progress', label: 'En curso', color: 'text-purple-400' },
+                                  { value: 'completed', label: 'Atendido', color: 'text-emerald-400' },
+                                  { value: 'absent', label: 'Ausente', color: 'text-red-400' },
+                                  { value: 'cancelled', label: 'Cancelado', color: 'text-gray-500' },
+                                ].map(({ value, label, color }) => (
+                                  <button
+                                    key={value}
+                                    onClick={async () => {
+                                      setOpenDropdown(null)
+                                      if (value === 'completed') {
+                                        setPendingAppt(appt)
+                                        setShowNotesModal(true)
+                                      } else {
+                                        await markStatus(appt.id, value)
+                                      }
+                                    }}
+                                    className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-gray-800 transition-colors ${color} ${appt.status === value ? 'bg-gray-800' : ''
+                                      }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
