@@ -1,26 +1,44 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark *));
+@custom-variant light (&:where(.light *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg:       #f0f2f7;
+  --surface:  #ffffff;
+  --surface2: #f4f5f9;
+  --surface3: #e8eaf0;
+  --border:   #dde0ea;
+  --border2:  #c8ccd8;
+  --text:     #1a1e2a;
+  --text2:    #545c73;
+  --text3:    #8b92a8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --bg:       #0c0e14;
+  --surface:  #13161f;
+  --surface2: #1a1e2a;
+  --surface3: #212636;
+  --border:   #2a2f3d;
+  --border2:  #333a4d;
+  --text:     #e8eaf0;
+  --text2:    #8b92a8;
+  --text3:    #545c73;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background-color: var(--bg);
+  color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.bg-app      { background-color: var(--bg) !important; }
+.bg-surface  { background-color: var(--surface) !important; }
+.bg-surface2 { background-color: var(--surface2) !important; }
+.bg-surface3 { background-color: var(--surface3) !important; }
+.border-app  { border-color: var(--border) !important; }
+.border-app2 { border-color: var(--border2) !important; }
+.text-app    { color: var(--text) !important; }
+.text-app2   { color: var(--text2) !important; }
+.text-app3   { color: var(--text3) !important; }

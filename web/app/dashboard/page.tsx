@@ -54,8 +54,8 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400">Cargando...</div>
+      <div className="min-h-screen bg-app flex items-center justify-center">
+        <div className="text-app2">Cargando...</div>
       </div>
     )
   }
@@ -104,7 +104,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-app text-app">
 
       <main className="p-6 max-w-6xl mx-auto">
         {/* Greeting */}
@@ -112,25 +112,25 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold">
             Buenos días, Od. {user?.first_name} 👋
           </h2>
-          <p className="text-gray-400 mt-1 capitalize">{today}</p>
+          <p className="text-app2 mt-1 capitalize">{today}</p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Turnos hoy</div>
+          <div className="bg-surface border border-app rounded-xl p-4">
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos hoy</div>
             <div className="text-3xl font-bold text-blue-400">{stats.total ?? 0}</div>
           </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Atendidos</div>
+          <div className="bg-surface border border-app rounded-xl p-4">
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Atendidos</div>
             <div className="text-3xl font-bold text-emerald-400">{stats.completed ?? 0}</div>
           </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Pendientes</div>
+          <div className="bg-surface border border-app rounded-xl p-4">
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Pendientes</div>
             <div className="text-3xl font-bold text-amber-400">{stats.pending ?? 0}</div>
           </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Ausentes</div>
+          <div className="bg-surface border border-app rounded-xl p-4">
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ausentes</div>
             <div className="text-3xl font-bold text-red-400">{stats.absent ?? 0}</div>
           </div>
         </div>
@@ -158,7 +158,7 @@ export default function DashboardPage() {
                     <div className="font-medium text-sm truncate">
                       {p.first_name} {p.last_name}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-app3">
                       {p.last_appointment_at
                         ? new Date(p.last_appointment_at).toLocaleDateString('es-AR', {
                           day: 'numeric', month: 'short', year: 'numeric'
@@ -177,7 +177,7 @@ export default function DashboardPage() {
                 </div>
               ))}
               {inactive.length > 5 && (
-                <div className="px-6 py-3 text-center text-sm text-gray-500">
+                <div className="px-6 py-3 text-center text-sm text-app3">
                   +{inactive.length - 5} pacientes más
                 </div>
               )}
@@ -186,21 +186,21 @@ export default function DashboardPage() {
         )}
 
         {/* Agenda del día */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-visible">
-          <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <div className="bg-surface border border-app rounded-xl overflow-visible">
+          <div className="px-6 py-4 border-b border-app flex items-center justify-between">
             <h3 className="font-semibold">Agenda de hoy</h3>
-            <span className="text-sm text-gray-500">{agenda.length} turnos</span>
+            <span className="text-sm text-app3">{agenda.length} turnos</span>
           </div>
 
           {agenda.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-500">
+            <div className="px-6 py-12 text-center text-app3">
               No hay turnos para hoy
             </div>
           ) : (
             <div className="divide-y divide-gray-800">
               {agenda.map((appt: any) => (
-                <div key={appt.id} className="px-6 py-4 flex items-center gap-4 hover:bg-gray-800/50 transition-colors">
-                  <div className="font-mono text-sm text-gray-400 w-16 flex-shrink-0">
+                <div key={appt.id} className="px-6 py-4 flex items-center gap-4 hover:bg-surface2/50 transition-colors">
+                  <div className="font-mono text-sm text-app2 w-16 flex-shrink-0">
                     {new Date(appt.starts_at).toLocaleTimeString('es-AR', {
                       hour: '2-digit', minute: '2-digit',
                       timeZone: 'America/Argentina/Buenos_Aires'
@@ -212,13 +212,13 @@ export default function DashboardPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{appt.patient_name}</div>
-                    <div className="text-sm text-gray-400 truncate">{appt.appointment_type}</div>
+                    <div className="text-sm text-app2 truncate">{appt.appointment_type}</div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {appt.status === 'completed' || appt.status === 'absent' || appt.status === 'cancelled' ? (
                       <span className={`text-xs font-semibold px-3 py-1 rounded-full ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
                         appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                          'bg-gray-800 text-gray-500'
+                          'bg-surface2 text-app3'
                         }`}>
                         {appt.status === 'completed' ? 'Atendido' :
                           appt.status === 'absent' ? 'Ausente' : 'Cancelado'}
@@ -228,9 +228,10 @@ export default function DashboardPage() {
                         <div className="relative">
                           <button
                             onClick={() => setOpenDropdown(openDropdown === appt.id ? null : appt.id)}
-                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${appt.status === 'confirmed' ? 'bg-blue-900/40 border-blue-700 text-blue-300' :
-                                appt.status === 'in_progress' ? 'bg-purple-900/40 border-purple-700 text-purple-300' :
-                                  'bg-amber-900/40 border-amber-700 text-amber-300'
+                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all 
+    ${appt.status === 'confirmed' ? 'bg-blue-500/15 border-blue-400/30 text-blue-600 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-900/40' :
+                                appt.status === 'in_progress' ? 'bg-purple-500/15 border-purple-400/30 text-purple-600 dark:text-purple-400 dark:border-purple-700 dark:bg-purple-900/40' :
+                                  'bg-amber-500/15 border-amber-400/30 text-amber-600 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-900/40'
                               }`}>
                             {appt.status === 'confirmed' ? 'Confirmado' :
                               appt.status === 'in_progress' ? 'En curso' : 'Pendiente'}
@@ -241,12 +242,12 @@ export default function DashboardPage() {
                             <>
                               {/* Overlay para cerrar al hacer click afuera */}
                               <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                              <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
+                              <div className="absolute right-0 top-full mt-1 bg-surface border border-app rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
                                 {[
-                                  { value: 'confirmed', label: 'Confirmado', color: 'text-blue-400' },
-                                  { value: 'in_progress', label: 'En curso', color: 'text-purple-400' },
-                                  { value: 'completed', label: 'Atendido', color: 'text-emerald-400' },
-                                  { value: 'absent', label: 'Ausente', color: 'text-red-400' },
+                                  { value: 'confirmed', label: 'Confirmado', color: 'text-blue-600 dark:text-blue-400' },
+                                  { value: 'in_progress', label: 'En curso', color: 'text-purple-600 dark:text-purple-400' },
+                                  { value: 'completed', label: 'Atendido', color: 'text-emerald-600 dark:text-emerald-400' },
+                                  { value: 'absent', label: 'Ausente', color: 'text-red-600 dark:text-red-400' },
                                   { value: 'cancelled', label: 'Cancelado', color: 'text-gray-500' },
                                 ].map(({ value, label, color }) => (
                                   <button
@@ -260,7 +261,7 @@ export default function DashboardPage() {
                                         await markStatus(appt.id, value)
                                       }
                                     }}
-                                    className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-gray-800 transition-colors ${color} ${appt.status === value ? 'bg-gray-800' : ''
+                                    className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-surface2 transition-colors ${color} ${appt.status === value ? 'bg-surface2' : ''
                                       }`}
                                   >
                                     {label}
@@ -283,15 +284,15 @@ export default function DashboardPage() {
         {showNotesModal && pendingAppt && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
             onClick={() => setShowNotesModal(false)}>
-            <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md p-6"
+            <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-6"
               onClick={e => e.stopPropagation()}>
-              <div className="w-9 h-1 bg-gray-700 rounded-full mx-auto mb-5 sm:hidden" />
+              <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
               <div className="mb-4">
                 <div className="font-bold text-lg">{pendingAppt.patient_name}</div>
-                <div className="text-gray-400 text-sm">{pendingAppt.appointment_type}</div>
+                <div className="text-app2 text-sm">{pendingAppt.appointment_type}</div>
               </div>
               <div className="mb-4">
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                   Notas de la consulta (opcional)
                 </label>
                 <textarea
@@ -299,20 +300,20 @@ export default function DashboardPage() {
                   onChange={e => setClinicalNotes(e.target.value)}
                   rows={4}
                   placeholder="Procedimiento realizado, observaciones, indicaciones..."
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-400 resize-none"
+                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 resize-none"
                   autoFocus
                 />
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowNotesModal(false)}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-colors"
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={confirmAttended}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all"
                 >
                   Confirmar
                 </button>

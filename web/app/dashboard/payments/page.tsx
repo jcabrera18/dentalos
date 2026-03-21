@@ -69,8 +69,8 @@ export default function PaymentsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400">Cargando...</div>
+      <div className="min-h-screen bg-app flex items-center justify-center">
+        <div className="text-app2">Cargando...</div>
       </div>
     )
   }
@@ -78,13 +78,13 @@ export default function PaymentsPage() {
   const totalHoy = summary?.total ?? 0
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-app text-app">
 
-      <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-app flex items-center justify-between">
         <h2 className="text-lg font-semibold">Cobros</h2>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all"
+          className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-app font-semibold px-4 py-2 rounded-lg text-sm transition-all"
         >
           + Registrar cobro
         </button>
@@ -93,32 +93,32 @@ export default function PaymentsPage() {
       <main className="p-6 max-w-4xl mx-auto">
         {/* Resumen del día */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 col-span-2">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total cobrado hoy</div>
+          <div className="bg-surface border border-app rounded-xl p-4 col-span-2">
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Total cobrado hoy</div>
             <div className="text-3xl font-bold text-emerald-400">
               ${Number(totalHoy).toLocaleString('es-AR')}
             </div>
           </div>
           {(summary?.by_method ?? []).slice(0, 2).map((m: any) => (
-            <div key={m.method} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+            <div key={m.method} className="bg-surface border border-app rounded-xl p-4">
+              <div className="text-xs text-app3 uppercase tracking-wider mb-1">
                 {METODOS.find(x => x.value === m.method)?.label ?? m.method}
               </div>
-              <div className="text-xl font-bold text-white">
+              <div className="text-xl font-bold text-app">
                 ${Number(m.total).toLocaleString('es-AR')}
               </div>
-              <div className="text-xs text-gray-500 mt-1">{m.transactions} cobros</div>
+              <div className="text-xs text-app3 mt-1">{m.transactions} cobros</div>
             </div>
           ))}
         </div>
 
         {/* Historial */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-800">
+        <div className="bg-surface border border-app rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-app">
             <h3 className="font-semibold">Historial de cobros</h3>
           </div>
           {payments.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-500">
+            <div className="px-6 py-12 text-center text-app3">
               No hay cobros registrados todavía
             </div>
           ) : (
@@ -132,7 +132,7 @@ export default function PaymentsPage() {
                     <div className="font-semibold truncate">
                       {p.patients?.first_name} {p.patients?.last_name}
                     </div>
-                    <div className="text-sm text-gray-400">
+                    <div className="text-sm text-app2">
                       {METODOS.find(m => m.value === p.method)?.label ?? p.method}
                       {p.installments > 1 && ` · ${p.installments} cuotas`}
                     </div>
@@ -141,7 +141,7 @@ export default function PaymentsPage() {
                     <div className="font-bold text-emerald-400">
                       ${Number(p.amount).toLocaleString('es-AR')}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-app3">
                       {new Date(p.paid_at).toLocaleDateString('es-AR', {
                         day: 'numeric', month: 'short',
                         timeZone: 'America/Argentina/Buenos_Aires'
@@ -229,22 +229,22 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface border border-app rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <div className="w-9 h-1 bg-gray-700 rounded-full mx-auto mb-6 sm:hidden" />
+          <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-6 sm:hidden" />
           <h2 className="text-lg font-bold mb-5">Registrar cobro</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Paciente */}
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                 Paciente
               </label>
               {selectedPatient ? (
-                <div className="flex items-center justify-between bg-gray-800 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
                   <div className="font-medium">{selectedPatient.first_name} {selectedPatient.last_name}</div>
                   <button type="button" onClick={() => set('patient_id', '')}
-                    className="text-gray-500 hover:text-white text-sm">✕</button>
+                    className="text-app3 hover:text-app text-sm">✕</button>
                 </div>
               ) : (
                 <div>
@@ -253,19 +253,19 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder="Buscar paciente..."
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-400 mb-2"
+                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 mb-2"
                   />
                   {search && (
-                    <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
+                    <div className="bg-surface2 border border-app rounded-xl overflow-hidden max-h-40 overflow-y-auto">
                       {filteredPatients.slice(0, 5).map(p => (
                         <div key={p.id}
                           onClick={() => { set('patient_id', p.id); setSearch('') }}
-                          className="px-4 py-2.5 hover:bg-gray-700 cursor-pointer text-sm">
-                          {p.first_name} {p.last_name} · <span className="text-gray-400">{p.phone}</span>
+                          className="px-4 py-2.5 hover:bg-surface3 cursor-pointer text-sm">
+                          {p.first_name} {p.last_name} · <span className="text-app2">{p.phone}</span>
                         </div>
                       ))}
                       {filteredPatients.length === 0 && (
-                        <div className="px-4 py-3 text-gray-500 text-sm">Sin resultados</div>
+                        <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>
                       )}
                     </div>
                   )}
@@ -275,17 +275,17 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
 
             {/* Monto */}
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                 Monto
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-app2 font-bold">$</span>
                 <input
                   type="number"
                   value={form.amount}
                   onChange={e => set('amount', e.target.value)}
                   placeholder="0"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-8 pr-4 py-3 text-white text-xl font-bold focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-blue-400"
                   min="1"
                   required
                 />
@@ -294,7 +294,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
 
             {/* Forma de pago */}
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                 Forma de pago
               </label>
               <div className="grid grid-cols-3 gap-2">
@@ -302,8 +302,8 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
                   <button key={m.value} type="button"
                     onClick={() => set('method', m.value)}
                     className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-800 border border-gray-700 text-gray-400 hover:border-gray-500'
+                      ? 'bg-blue-500 text-app'
+                      : 'bg-surface2 border border-app text-app2 hover:border-gray-500'
                       }`}>
                     {m.label}
                   </button>
@@ -314,7 +314,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
             {/* Cuotas (solo crédito) */}
             {form.method === 'credit_card' && (
               <div>
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                   Cuotas
                 </label>
                 <div className="grid grid-cols-4 gap-2">
@@ -322,8 +322,8 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
                     <button key={c} type="button"
                       onClick={() => set('installments', c)}
                       className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-800 border border-gray-700 text-gray-400'
+                        ? 'bg-blue-500 text-app'
+                        : 'bg-surface2 border border-app text-app2'
                         }`}>
                       {c}x
                     </button>
@@ -334,7 +334,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
 
             {/* Notas */}
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                 Notas (opcional)
               </label>
               <input
@@ -342,7 +342,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
                 value={form.notes}
                 onChange={e => set('notes', e.target.value)}
                 placeholder="Referencia, observación..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400"
               />
             </div>
 
@@ -354,11 +354,11 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
 
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={onClose}
-                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-colors">
+                className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors">
                 Cancelar
               </button>
               <button type="submit" disabled={loading}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-app font-semibold py-3 rounded-xl transition-colors">
                 {loading ? 'Guardando...' : 'Registrar cobro'}
               </button>
             </div>

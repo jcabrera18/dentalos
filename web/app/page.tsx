@@ -29,39 +29,39 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-app flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-app">
             Dental<span className="text-blue-400">OS</span>
           </h1>
-          <p className="text-gray-400 mt-2">Ingresá a tu consultorio</p>
+          <p className="text-app2 mt-2">Ingresá a tu consultorio</p>
         </div>
 
-        <form onSubmit={handleLogin} className="bg-gray-900 rounded-2xl p-8 border border-gray-800">
+        <form onSubmit={handleLogin} className="bg-surface rounded-2xl p-8 border border-app">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label className="block text-sm font-medium text-app2 mb-2">
               Email
             </label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400"
+              className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app focus:outline-none focus:border-blue-400"
               placeholder="dr@consultorio.com"
               required
             />
           </div>
 
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label className="block text-sm font-medium text-app2 mb-2">
               Contraseña
             </label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-400"
+              className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app focus:outline-none focus:border-blue-400"
               placeholder="••••••••"
               required
             />
@@ -76,7 +76,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+            className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-app font-semibold py-3 rounded-lg transition-colors"
           >
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>

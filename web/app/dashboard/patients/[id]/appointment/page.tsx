@@ -85,8 +85,8 @@ export default function NewAppointmentPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400">Cargando...</div>
+      <div className="min-h-screen bg-app flex items-center justify-center">
+        <div className="text-app2">Cargando...</div>
       </div>
     )
   }
@@ -106,17 +106,17 @@ export default function NewAppointmentPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-app text-app">
 
       <main className="p-6 max-w-lg mx-auto">
         {/* Paciente */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+        <div className="bg-surface border border-app rounded-xl p-4 mb-6 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-400 flex items-center justify-center font-bold flex-shrink-0">
             {patient?.first_name[0]}{patient?.last_name[0]}
           </div>
           <div>
             <div className="font-semibold">{patient?.first_name} {patient?.last_name}</div>
-            <div className="text-sm text-gray-400">{patient?.phone}</div>
+            <div className="text-sm text-app2">{patient?.phone}</div>
           </div>
         </div>
 
@@ -124,7 +124,7 @@ export default function NewAppointmentPage() {
           {/* Fecha y hora */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                 Fecha
               </label>
               <input
@@ -132,19 +132,19 @@ export default function NewAppointmentPage() {
                 value={form.date}
                 onChange={e => set('date', e.target.value)}
                 min={new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                 Hora
               </label>
               <input
                 type="time"
                 value={form.time}
                 onChange={e => set('time', e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
                 required
               />
             </div>
@@ -152,7 +152,7 @@ export default function NewAppointmentPage() {
 
           {/* Duración */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
               Duración
             </label>
             <div className="grid grid-cols-5 gap-2">
@@ -163,8 +163,8 @@ export default function NewAppointmentPage() {
                   onClick={() => set('duration_minutes', d.value)}
                   className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
                     form.duration_minutes === d.value
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-900 border border-gray-700 text-gray-400 hover:border-gray-500'
+                      ? 'bg-blue-500 text-app'
+                      : 'bg-surface border border-app text-app2 hover:border-gray-500'
                   }`}
                 >
                   {d.label}
@@ -175,7 +175,7 @@ export default function NewAppointmentPage() {
 
           {/* Tipo de consulta */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
               Tipo de consulta
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -186,8 +186,8 @@ export default function NewAppointmentPage() {
                   onClick={() => set('appointment_type', tipo)}
                   className={`py-2 px-3 rounded-xl text-sm font-medium transition-colors text-left ${
                     form.appointment_type === tipo
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-900 border border-gray-700 text-gray-400 hover:border-gray-500'
+                      ? 'bg-blue-500 text-app'
+                      : 'bg-surface border border-app text-app2 hover:border-gray-500'
                   }`}
                 >
                   {tipo}
@@ -198,7 +198,7 @@ export default function NewAppointmentPage() {
 
           {/* Motivo */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
               Motivo de consulta
             </label>
             <input
@@ -206,13 +206,13 @@ export default function NewAppointmentPage() {
               value={form.chief_complaint}
               onChange={e => set('chief_complaint', e.target.value)}
               placeholder="Describe el motivo..."
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400"
+              className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
             />
           </div>
 
           {/* Notas internas */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
               Notas internas (solo visibles para vos)
             </label>
             <textarea
@@ -220,7 +220,7 @@ export default function NewAppointmentPage() {
               onChange={e => set('internal_notes', e.target.value)}
               rows={2}
               placeholder="Recordatorios, indicaciones especiales..."
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400 resize-none"
+              className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400 resize-none"
             />
           </div>
 
@@ -240,14 +240,14 @@ export default function NewAppointmentPage() {
             <button
               type="button"
               onClick={() => router.push(`/dashboard/patients/${params.id}`)}
-              className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3.5 rounded-xl transition-colors"
+              className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3.5 rounded-xl transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-app font-semibold py-3.5 rounded-xl transition-colors"
             >
               {saving ? 'Agendando..' : 'Confirmar turno'}
             </button>
