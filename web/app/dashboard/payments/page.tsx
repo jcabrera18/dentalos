@@ -35,6 +35,10 @@ export default function PaymentsPage() {
   const [expenseSummaryMonth, setExpenseSummaryMonth] = useState<any>(null)
   const [expenseSummaryYear, setExpenseSummaryYear] = useState<any>(null)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [showNewPatient, setShowNewPatient] = useState(false)
+  const [newPatientName, setNewPatientName] = useState('')
+  const [newPatientLastName, setNewPatientLastName] = useState('')
+  const [creatingPatient, setCreatingPatient] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -143,8 +147,8 @@ export default function PaymentsPage() {
             else if (tab === 'gastos') setShowExpenseModal(true)
           }}
           className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 ${tab === 'balance'
-              ? 'invisible'
-              : 'bg-blue-500 hover:bg-blue-600 text-white'
+            ? 'invisible'
+            : 'bg-blue-500 hover:bg-blue-600 text-white'
             }`}
         >
           + {tab === 'gastos' ? 'Registrar gasto' : 'Registrar cobro'}
@@ -346,7 +350,7 @@ export default function PaymentsPage() {
                       <div className="h-2 bg-surface2 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${expense / income > 0.8 ? 'bg-red-500' :
-                              expense / income > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+                            expense / income > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
                             }`}
                           style={{ width: `${Math.min(100, (expense / income) * 100)}%` }}
                         />
@@ -422,7 +426,7 @@ export default function PaymentsPage() {
   )
 }
 
-function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCreated }: {
+function NewPaymentModal({ token, patients: initialPatients, preselectedPatientId, onClose, onCreated }: {
   token: string
   patients: any[]
   preselectedPatientId?: string | null
@@ -439,6 +443,11 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [patients, setPatients] = useState(initialPatients)
+  const [showNewPatient, setShowNewPatient] = useState(false)
+  const [newPatientName, setNewPatientName] = useState('')
+  const [newPatientLastName, setNewPatientLastName] = useState('')
+  const [creatingPatient, setCreatingPatient] = useState(false)
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -449,9 +458,35 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
     p.phone.includes(search)
   )
 
+  const selectedPatient = patients.find(p => p.id === form.patient_id)
+
+  async function handleCreatePatient() {
+    if (!newPatientName) return
+    setCreatingPatient(true)
+    try {
+      const data = await apiFetch('/patients', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          first_name: newPatientName,
+          last_name: newPatientLastName || '.',
+          phone: 'Sin teléfono',
+        })
+      })
+      setPatients(prev => [data.data, ...prev])
+      set('patient_id', data.data.id)
+      setShowNewPatient(false)
+      setNewPatientName('')
+      setNewPatientLastName('')
+    } catch (err: any) {
+      console.error(err)
+    } finally {
+      setCreatingPatient(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.patient_id) { setError('Seleccioná un paciente'); return }
     if (!form.amount || Number(form.amount) <= 0) { setError('Ingresá un monto válido'); return }
     setLoading(true)
     setError('')
@@ -460,7 +495,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
         method: 'POST',
         token,
         body: JSON.stringify({
-          patient_id: form.patient_id,
+          patient_id: form.patient_id || undefined,
           amount: Number(form.amount),
           method: form.method,
           installments: Number(form.installments),
@@ -474,8 +509,6 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
     }
   }
 
-  const selectedPatient = patients.find(p => p.id === form.patient_id)
-
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
       <div className="bg-surface border border-app rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -483,13 +516,40 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
           <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-6 sm:hidden" />
           <h2 className="text-lg font-bold text-app mb-5">Registrar cobro</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Paciente */}
             <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Paciente</label>
+              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">
+                Paciente
+              </label>
               {selectedPatient ? (
                 <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
                   <div className="font-medium text-app">{selectedPatient.first_name} {selectedPatient.last_name}</div>
-                  <button type="button" onClick={() => set('patient_id', '')}
+                  <button type="button" onClick={() => { set('patient_id', ''); setShowNewPatient(false) }}
                     className="text-app3 hover:text-app text-sm">✕</button>
+                </div>
+              ) : showNewPatient ? (
+                <div className="bg-surface2 rounded-xl p-3 border border-blue-500/30">
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-2">Nuevo paciente rápido</div>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
+                      placeholder="Nombre"
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-blue-400" />
+                    <input type="text" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)}
+                      placeholder="Apellido"
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setShowNewPatient(false)}
+                      className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors">
+                      Cancelar
+                    </button>
+                    <button type="button" onClick={handleCreatePatient}
+                      disabled={!newPatientName || creatingPatient}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
+                      {creatingPatient ? 'Creando...' : 'Crear y usar'}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -497,7 +557,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
                     placeholder="Buscar paciente..."
                     className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 mb-2" />
                   {search && (
-                    <div className="bg-surface2 border border-app rounded-xl overflow-hidden max-h-40 overflow-y-auto">
+                    <div className="bg-surface2 border border-app rounded-xl overflow-hidden max-h-40 overflow-y-auto mb-2">
                       {filteredPatients.slice(0, 5).map(p => (
                         <div key={p.id} onClick={() => { set('patient_id', p.id); setSearch('') }}
                           className="px-4 py-2.5 hover:bg-surface3 cursor-pointer text-sm text-app">
@@ -509,10 +569,15 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
                       )}
                     </div>
                   )}
+                  <button type="button" onClick={() => setShowNewPatient(true)}
+                    className="w-full bg-surface2 hover:bg-surface3 border border-dashed border-app2 text-app2 hover:text-app text-xs font-semibold py-2.5 rounded-xl transition-colors">
+                    + Crear nuevo paciente
+                  </button>
                 </div>
               )}
             </div>
 
+            {/* Monto */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Monto</label>
               <div className="relative">
@@ -524,6 +589,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
               </div>
             </div>
 
+            {/* Forma de pago */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Forma de pago</label>
               <div className="grid grid-cols-3 gap-2">
@@ -539,6 +605,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
               </div>
             </div>
 
+            {/* Cuotas */}
             {form.method === 'credit_card' && (
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Cuotas</label>
@@ -556,6 +623,7 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
               </div>
             )}
 
+            {/* Notas */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Notas (opcional)</label>
               <input type="text" value={form.notes} onChange={e => set('notes', e.target.value)}
@@ -654,8 +722,8 @@ function NewExpenseModal({ token, onClose, onCreated }: {
               {CATEGORIAS_GASTO.map(c => (
                 <button key={c} type="button" onClick={() => set('category', c)}
                   className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${form.category === c
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-surface2 border border-app text-app2 hover:border-app2'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-surface2 border border-app text-app2 hover:border-app2'
                     }`}>
                   {c}
                 </button>

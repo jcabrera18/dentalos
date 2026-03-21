@@ -327,7 +327,7 @@ export default function AgendaPage() {
             {/* Columna horas */}
             <div>
               {HOURS.map(h => (
-                <div key={h} className="h-16 relative border-t border-gray-200 dark:border-gray-800">
+                <div key={h} className="h-16 relative border-t border-app/20">
                   <span className="absolute top-1 right-2 text-xs text-app3">{h}</span>
                 </div>
               ))}
@@ -518,8 +518,8 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, 
     p.phone.includes(search)
   ).slice(0, 5)
 
-  const TIPOS = ['Consulta general', 'Limpieza', 'Endodoncia', 'Extracción', 'Blanqueamiento', 'Ortodoncia', 'Implante', 'Corona', 'Control', 'Urgencia']
-  const DURACIONES = [
+const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']  
+const DURACIONES = [
     { value: '30', label: '30m' },
     { value: '45', label: '45m' },
     { value: '60', label: '1h' },

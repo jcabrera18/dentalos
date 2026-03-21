@@ -91,12 +91,7 @@ export default function NewAppointmentPage() {
     )
   }
 
-  const TIPOS = [
-    'Consulta general', 'Limpieza', 'Endodoncia', 'Extracción',
-    'Blanqueamiento', 'Ortodoncia', 'Implante', 'Corona',
-    'Radiografía', 'Control', 'Urgencia', 'Otro'
-  ]
-
+const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
   const DURACIONES = [
     { value: '30', label: '30 min' },
     { value: '45', label: '45 min' },
