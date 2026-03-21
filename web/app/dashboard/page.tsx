@@ -42,6 +42,16 @@ export default function DashboardPage() {
       setStats(statsData.data ?? {})
       setInactive(inactiveData.data ?? [])
       setLoading(false)
+
+      // Identificar usuario en PostHog
+      const posthog = (await import('posthog-js')).default
+      posthog.identify(meData.data.id, {
+        name: `${meData.data.first_name} ${meData.data.last_name}`,
+        email: meData.data.email,
+        clinic: meData.data.clinic_id,
+        role: meData.data.role,
+      })
+
     }
 
     load()
