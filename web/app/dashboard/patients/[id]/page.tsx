@@ -288,9 +288,13 @@ export default function PatientDetailPage() {
 
             {/* Alertas médicas */}
             {patient.allergies && (
-              <div className="bg-red-950/30 border border-red-800/40 rounded-xl p-4">
-                <div className="text-xs text-red-400 uppercase tracking-wider font-semibold mb-2">⚠️ Alergias</div>
-                <div className="text-sm text-red-300">{patient.allergies}</div>
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                <div className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2">
+                  ⚠️ Alergias
+                </div>
+                <div className="text-sm font-medium text-red-700 dark:text-red-300 mt-1">
+                  {patient.allergies}
+                </div>
               </div>
             )}
 
@@ -329,8 +333,8 @@ export default function PatientDetailPage() {
                   onClick={handleSaveNotes}
                   disabled={savingNotes}
                   className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${notesSaved
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50'
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50'
                     }`}
                 >
                   {savingNotes ? 'Guardando...' : notesSaved ? '✓ Guardado' : 'Guardar'}
@@ -724,35 +728,44 @@ function ToothSVG({ state, onClick, isSelected, number }: {
           ? 'drop-shadow-[0_0_5px_rgba(250,204,21,0.9)]'
           : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
 
+        <defs>
+          <clipPath id={`tooth-clip-${number}`}>
+            <circle cx="20" cy="20" r="17.5" />
+          </clipPath>
+        </defs>
+
+        {/* Interior con clip */}
+        <g clipPath={`url(#tooth-clip-${number})`}>
+          {!state.missing && (
+            <>
+              <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
+                fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
+              <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
+                fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
+              <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
+                fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
+              <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
+                fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
+              <line x1="6" y1="6" x2="34" y2="34" stroke="#4b5563" strokeWidth="0.8" />
+              <line x1="34" y1="6" x2="6" y2="34" stroke="#4b5563" strokeWidth="0.8" />
+              <circle cx="20" cy="20" r="7"
+                fill={fc('O')} stroke="#4b5563" strokeWidth="0.8" />
+            </>
+          )}
+          {state.missing && (
+            <>
+              <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+              <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+            </>
+          )}
+        </g>
+
+        {/* Borde exterior — encima del clip */}
         <circle cx="20" cy="20" r="18"
           fill="transparent"
           stroke={isSelected ? '#facc15' : state.missing ? '#374151' : '#4b5563'}
           strokeWidth={isSelected ? "2" : "1.5"}
         />
-
-        {!state.missing && (
-          <>
-            <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
-              fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
-            <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
-              fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
-            <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
-              fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
-            <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
-              fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
-            <line x1="6" y1="6" x2="34" y2="34" stroke="#4b5563" strokeWidth="0.8" />
-            <line x1="34" y1="6" x2="6" y2="34" stroke="#4b5563" strokeWidth="0.8" />
-            <circle cx="20" cy="20" r="7"
-              fill={fc('O')} stroke="#4b5563" strokeWidth="0.8" />
-          </>
-        )}
-
-        {state.missing && (
-          <>
-            <line x1="7" y1="7" x2="33" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
-            <line x1="33" y1="7" x2="7" y2="33" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
-          </>
-        )}
       </svg>
       <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' :
         state.missing ? 'text-gray-700' :
@@ -861,48 +874,61 @@ function OdontogramView({ odontogram, onSaveTooth }: {
 
     return (
       <svg width="110" height="110" viewBox="0 0 40 40" className="flex-shrink-0" style={{ userSelect: 'none' }}>
+        <defs>
+          <clipPath id="big-tooth-clip">
+            <circle cx="20" cy="20" r="17.5" />
+          </clipPath>
+        </defs>
+
+        <g clipPath="url(#big-tooth-clip)" pointerEvents="all">
+          {!state.missing && (
+            <>
+              <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
+                fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
+                className="cursor-pointer hover:opacity-70"
+                onClick={() => toggleFace(n, 'V')} />
+              <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
+                fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
+                className="cursor-pointer hover:opacity-70"
+                onClick={() => toggleFace(n, 'L')} />
+              <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
+                fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
+                className="cursor-pointer hover:opacity-70"
+                onClick={() => toggleFace(n, 'M')} />
+              <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
+                fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
+                className="cursor-pointer hover:opacity-70"
+                onClick={() => toggleFace(n, 'D')} />
+              <line x1="6" y1="6" x2="34" y2="34" stroke="#6b7280" strokeWidth="0.8" pointerEvents="none" />
+              <line x1="34" y1="6" x2="6" y2="34" stroke="#6b7280" strokeWidth="0.8" pointerEvents="none" />
+              <circle cx="20" cy="20" r="7"
+                fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
+                className="cursor-pointer hover:opacity-70"
+                onClick={() => toggleFace(n, 'O')} />
+            </>
+          )}
+          {state.missing && (
+            <>
+              <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
+              <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
+            </>
+          )}
+        </g>
+
         <circle cx="20" cy="20" r="18"
           fill="transparent"
           stroke="#facc15"
           strokeWidth="1.5"
+          pointerEvents="none"
         />
 
         {!state.missing && (
           <>
-            <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
-              fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
-              className="cursor-pointer hover:opacity-70"
-              onClick={() => toggleFace(n, 'V')} />
-            <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
-              fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
-              className="cursor-pointer hover:opacity-70"
-              onClick={() => toggleFace(n, 'L')} />
-            <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
-              fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
-              className="cursor-pointer hover:opacity-70"
-              onClick={() => toggleFace(n, 'M')} />
-            <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
-              fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
-              className="cursor-pointer hover:opacity-70"
-              onClick={() => toggleFace(n, 'D')} />
-            <line x1="6" y1="6" x2="34" y2="34" stroke="#6b7280" strokeWidth="0.8" />
-            <line x1="34" y1="6" x2="6" y2="34" stroke="#6b7280" strokeWidth="0.8" />
-            <circle cx="20" cy="20" r="7"
-              fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
-              className="cursor-pointer hover:opacity-70"
-              onClick={() => toggleFace(n, 'O')} />
             <text x="20" y="10" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">V</text>
             <text x="20" y="33" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">P</text>
             <text x="8" y="22" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">M</text>
             <text x="32" y="22" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">D</text>
             <text x="20" y="21.5" textAnchor="middle" fontSize="3.5" fill="#9ca3af" pointerEvents="none">O</text>
-          </>
-        )}
-
-        {state.missing && (
-          <>
-            <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
-            <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
           </>
         )}
       </svg>

@@ -6,12 +6,12 @@ import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
 const METODOS = [
-  { value: 'cash',          label: '💵 Efectivo' },
+  { value: 'cash', label: '💵 Efectivo' },
   { value: 'bank_transfer', label: '📲 Transferencia' },
-  { value: 'debit_card',    label: '💳 Débito' },
-  { value: 'credit_card',   label: '💳 Crédito' },
-  { value: 'insurance',     label: '🏥 Obra social' },
-  { value: 'other',         label: '📝 Otro' },
+  { value: 'debit_card', label: '💳 Débito' },
+  { value: 'credit_card', label: '💳 Crédito' },
+  { value: 'insurance', label: '🏥 Obra social' },
+  { value: 'other', label: '📝 Otro' },
 ]
 
 const CATEGORIAS_GASTO = [
@@ -20,22 +20,22 @@ const CATEGORIAS_GASTO = [
 ]
 
 export default function PaymentsPage() {
-  const [payments, setPayments]                         = useState<any[]>([])
-  const [loading, setLoading]                           = useState(true)
-  const [token, setToken]                               = useState('')
-  const [showModal, setShowModal]                       = useState(false)
-  const [patients, setPatients]                         = useState<any[]>([])
+  const [payments, setPayments] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [patients, setPatients] = useState<any[]>([])
   const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
-  const [summaryWeek, setSummaryWeek]                   = useState<any>(null)
-  const [summaryMonth, setSummaryMonth]                 = useState<any>(null)
-  const [summaryYear, setSummaryYear]                   = useState<any>(null)
-  const [tab, setTab]                                   = useState<'ingresos' | 'gastos' | 'balance'>('ingresos')
-  const [expenses, setExpenses]                         = useState<any[]>([])
-  const [expenseSummaryWeek, setExpenseSummaryWeek]     = useState<any>(null)
-  const [expenseSummaryMonth, setExpenseSummaryMonth]   = useState<any>(null)
-  const [expenseSummaryYear, setExpenseSummaryYear]     = useState<any>(null)
-  const [showExpenseModal, setShowExpenseModal]         = useState(false)
-  const router   = useRouter()
+  const [summaryWeek, setSummaryWeek] = useState<any>(null)
+  const [summaryMonth, setSummaryMonth] = useState<any>(null)
+  const [summaryYear, setSummaryYear] = useState<any>(null)
+  const [tab, setTab] = useState<'ingresos' | 'gastos' | 'balance'>('ingresos')
+  const [expenses, setExpenses] = useState<any[]>([])
+  const [expenseSummaryWeek, setExpenseSummaryWeek] = useState<any>(null)
+  const [expenseSummaryMonth, setExpenseSummaryMonth] = useState<any>(null)
+  const [expenseSummaryYear, setExpenseSummaryYear] = useState<any>(null)
+  const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -76,9 +76,9 @@ export default function PaymentsPage() {
 
   async function fetchAllSummaries(t: string) {
     const [weekData, monthData, yearData] = await Promise.all([
-      apiFetch('/payments/summary?period=week',  { token: t }),
+      apiFetch('/payments/summary?period=week', { token: t }),
       apiFetch('/payments/summary?period=month', { token: t }),
-      apiFetch('/payments/summary?period=year',  { token: t }),
+      apiFetch('/payments/summary?period=year', { token: t }),
     ])
     setSummaryWeek(weekData.data)
     setSummaryMonth(monthData.data)
@@ -92,9 +92,9 @@ export default function PaymentsPage() {
 
   async function fetchExpenseSummaries(t: string) {
     const [weekData, monthData, yearData] = await Promise.all([
-      apiFetch('/expenses/summary?period=week',  { token: t }),
+      apiFetch('/expenses/summary?period=week', { token: t }),
       apiFetch('/expenses/summary?period=month', { token: t }),
-      apiFetch('/expenses/summary?period=year',  { token: t }),
+      apiFetch('/expenses/summary?period=year', { token: t }),
     ])
     setExpenseSummaryWeek(weekData.data)
     setExpenseSummaryMonth(monthData.data)
@@ -121,32 +121,34 @@ export default function PaymentsPage() {
       <div className="px-6 py-4 border-b border-app flex items-center justify-between">
         <div className="flex items-center gap-1 bg-surface2 rounded-xl p-1">
           <button onClick={() => setTab('ingresos')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-              tab === 'ingresos' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
-            }`}>
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'ingresos' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
+              }`}>
             💰 Ingresos
           </button>
           <button onClick={() => setTab('gastos')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-              tab === 'gastos' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
-            }`}>
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'gastos' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
+              }`}>
             📦 Gastos
           </button>
           <button onClick={() => setTab('balance')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-              tab === 'balance' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
-            }`}>
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'balance' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
+              }`}>
             📊 Balance
           </button>
         </div>
-        {tab !== 'balance' && (
-          <button
-            onClick={() => tab === 'ingresos' ? setShowModal(true) : setShowExpenseModal(true)}
-            className="bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all"
-          >
-            + {tab === 'ingresos' ? 'Registrar cobro' : 'Registrar gasto'}
-          </button>
-        )}
+
+        <button
+          onClick={() => {
+            if (tab === 'ingresos') setShowModal(true)
+            else if (tab === 'gastos') setShowExpenseModal(true)
+          }}
+          className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 ${tab === 'balance'
+              ? 'invisible'
+              : 'bg-blue-500 hover:bg-blue-600 text-white'
+            }`}
+        >
+          + {tab === 'gastos' ? 'Registrar gasto' : 'Registrar cobro'}
+        </button>
       </div>
 
       <main className="p-6 max-w-4xl mx-auto">
@@ -155,8 +157,8 @@ export default function PaymentsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {[
                 { label: 'Esta semana', data: summaryWeek },
-                { label: 'Este mes',    data: summaryMonth },
-                { label: 'Este año',    data: summaryYear },
+                { label: 'Este mes', data: summaryMonth },
+                { label: 'Este año', data: summaryYear },
               ].map(({ label, data }) => (
                 <div key={label} className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">{label}</div>
@@ -226,8 +228,8 @@ export default function PaymentsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {[
                 { label: 'Esta semana', data: expenseSummaryWeek },
-                { label: 'Este mes',    data: expenseSummaryMonth },
-                { label: 'Este año',    data: expenseSummaryYear },
+                { label: 'Este mes', data: expenseSummaryMonth },
+                { label: 'Este año', data: expenseSummaryYear },
               ].map(({ label, data }) => (
                 <div key={label} className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">{label}</div>
@@ -292,12 +294,12 @@ export default function PaymentsPage() {
           <>
             {/* ── BALANCE ── */}
             {(['week', 'month', 'year'] as const).map((period, idx) => {
-              const labels      = ['Esta semana', 'Este mes', 'Este año']
-              const incomeData  = [summaryWeek, summaryMonth, summaryYear][idx]
+              const labels = ['Esta semana', 'Este mes', 'Este año']
+              const incomeData = [summaryWeek, summaryMonth, summaryYear][idx]
               const expenseData = [expenseSummaryWeek, expenseSummaryMonth, expenseSummaryYear][idx]
-              const income   = Number(incomeData?.total  ?? 0)
-              const expense  = Number(expenseData?.total ?? 0)
-              const balance  = income - expense
+              const income = Number(incomeData?.total ?? 0)
+              const expense = Number(expenseData?.total ?? 0)
+              const balance = income - expense
               const isPositive = balance >= 0
 
               return (
@@ -324,9 +326,8 @@ export default function PaymentsPage() {
                     </div>
                     <div>
                       <div className="text-xs text-app3 mb-1">Ganancia neta</div>
-                      <div className={`text-xl font-bold ${
-                        isPositive ? 'text-blue-600 dark:text-blue-400' : 'text-red-500 dark:text-red-400'
-                      }`}>
+                      <div className={`text-xl font-bold ${isPositive ? 'text-blue-600 dark:text-blue-400' : 'text-red-500 dark:text-red-400'
+                        }`}>
                         {isPositive ? '+' : ''}{balance.toLocaleString('es-AR')}
                       </div>
                       <div className="text-xs text-app3">
@@ -344,10 +345,9 @@ export default function PaymentsPage() {
                       </div>
                       <div className="h-2 bg-surface2 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${
-                            expense / income > 0.8 ? 'bg-red-500' :
-                            expense / income > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
-                          }`}
+                          className={`h-full rounded-full transition-all ${expense / income > 0.8 ? 'bg-red-500' :
+                              expense / income > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`}
                           style={{ width: `${Math.min(100, (expense / income) * 100)}%` }}
                         />
                       </div>
@@ -430,15 +430,15 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
   onCreated: () => void
 }) {
   const [form, setForm] = useState({
-    patient_id:   preselectedPatientId ?? '',
-    amount:       '',
-    method:       'cash',
+    patient_id: preselectedPatientId ?? '',
+    amount: '',
+    method: 'cash',
     installments: '1',
-    notes:        '',
+    notes: '',
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [search, setSearch]   = useState('')
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -460,11 +460,11 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
         method: 'POST',
         token,
         body: JSON.stringify({
-          patient_id:   form.patient_id,
-          amount:       Number(form.amount),
-          method:       form.method,
+          patient_id: form.patient_id,
+          amount: Number(form.amount),
+          method: form.method,
           installments: Number(form.installments),
-          notes:        form.notes || undefined,
+          notes: form.notes || undefined,
         })
       })
       onCreated()
@@ -529,11 +529,10 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
               <div className="grid grid-cols-3 gap-2">
                 {METODOS.map(m => (
                   <button key={m.value} type="button" onClick={() => set('method', m.value)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${
-                      form.method === m.value
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value
                         ? 'bg-blue-500 text-white'
                         : 'bg-surface2 border border-app text-app2 hover:border-app2'
-                    }`}>
+                      }`}>
                     {m.label}
                   </button>
                 ))}
@@ -544,13 +543,12 @@ function NewPaymentModal({ token, patients, preselectedPatientId, onClose, onCre
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Cuotas</label>
                 <div className="grid grid-cols-4 gap-2">
-                  {['1','3','6','12'].map(c => (
+                  {['1', '3', '6', '12'].map(c => (
                     <button key={c} type="button" onClick={() => set('installments', c)}
-                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                        form.installments === c
+                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c
                           ? 'bg-blue-500 text-white'
                           : 'bg-surface2 border border-app text-app2'
-                      }`}>
+                        }`}>
                       {c}x
                     </button>
                   ))}
@@ -592,15 +590,15 @@ function NewExpenseModal({ token, onClose, onCreated }: {
   onCreated: () => void
 }) {
   const [form, setForm] = useState({
-    amount:      '',
-    category:    '',
+    amount: '',
+    category: '',
     description: '',
-    paid_at:     new Date().toLocaleDateString('en-CA', {
+    paid_at: new Date().toLocaleDateString('en-CA', {
       timeZone: 'America/Argentina/Buenos_Aires'
     }),
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError] = useState('')
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -617,10 +615,10 @@ function NewExpenseModal({ token, onClose, onCreated }: {
         method: 'POST',
         token,
         body: JSON.stringify({
-          amount:      Number(form.amount),
-          category:    form.category,
+          amount: Number(form.amount),
+          category: form.category,
           description: form.description || undefined,
-          paid_at:     `${form.paid_at}T12:00:00-03:00`,
+          paid_at: `${form.paid_at}T12:00:00-03:00`,
         })
       })
       onCreated()
@@ -655,11 +653,10 @@ function NewExpenseModal({ token, onClose, onCreated }: {
             <div className="grid grid-cols-3 gap-2">
               {CATEGORIAS_GASTO.map(c => (
                 <button key={c} type="button" onClick={() => set('category', c)}
-                  className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
-                    form.category === c
+                  className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${form.category === c
                       ? 'bg-blue-500 text-white'
                       : 'bg-surface2 border border-app text-app2 hover:border-app2'
-                  }`}>
+                    }`}>
                   {c}
                 </button>
               ))}
