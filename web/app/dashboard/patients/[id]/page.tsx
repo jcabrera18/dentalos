@@ -19,6 +19,11 @@ export default function PatientDetailPage() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
+  const [apptPage, setApptPage] = useState(1)
+  const [notes, setNotes] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSaved, setNotesSaved] = useState(false)
+  const APPTS_PER_PAGE = 5
   const router = useRouter()
   const params = useParams()
   const supabase = createClient()
@@ -44,6 +49,7 @@ export default function PatientDetailPage() {
       setFiles(fileList ?? [])
 
       setPatient(patientData.data)
+      setNotes(patientData.data?.notes ?? '')
       setBalance(balanceData.data)
       setOdontogram(odontogramData.data ?? [])
       setToothDiagnostics(diagData.data ?? [])
@@ -51,6 +57,21 @@ export default function PatientDetailPage() {
     }
     load()
   }, [])
+
+  async function handleSaveNotes() {
+    setSavingNotes(true)
+    setNotesSaved(false)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await apiFetch(`/patients/${params.id}`, {
+      method: 'PATCH',
+      token: session.access_token,
+      body: JSON.stringify({ notes })
+    })
+    setSavingNotes(false)
+    setNotesSaved(true)
+    setTimeout(() => setNotesSaved(false), 2000)
+  }
 
   async function addDiagnostic(diag: {
     tooth_number: number
@@ -300,6 +321,32 @@ export default function PatientDetailPage() {
           {/* Columna derecha — historial + tratamientos */}
           <div className="md:col-span-2 space-y-6">
 
+            {/* Notas del paciente */}
+            <div className="bg-surface border border-app rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-app flex items-center justify-between">
+                <h3 className="font-semibold text-app">Notas del paciente</h3>
+                <button
+                  onClick={handleSaveNotes}
+                  disabled={savingNotes}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${notesSaved
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50'
+                    }`}
+                >
+                  {savingNotes ? 'Guardando...' : notesSaved ? '✓ Guardado' : 'Guardar'}
+                </button>
+              </div>
+              <div className="p-4">
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Antecedentes, observaciones generales, indicaciones especiales..."
+                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 resize-none"
+                />
+              </div>
+            </div>
+
             {/* Odontograma */}
             <div className="bg-surface border border-app rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-app">
@@ -446,51 +493,83 @@ export default function PatientDetailPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-800">
-                  {[...patient.appointments]
-                    .sort((a: any, b: any) =>
+                  {(() => {
+                    const sorted = [...patient.appointments].sort((a: any, b: any) =>
                       new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()
                     )
-                    .map((appt: any) => (
-                      <div key={appt.id} className="px-6 py-4">
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="text-sm font-mono text-app2 flex-shrink-0">
-                              {new Date(appt.starts_at).toLocaleDateString('es-AR', {
-                                day: 'numeric', month: 'short', year: 'numeric',
-                                timeZone: 'America/Argentina/Buenos_Aires'
-                              })}
+                    const total = sorted.length
+                    const totalPages = Math.ceil(total / APPTS_PER_PAGE)
+                    const paged = sorted.slice((apptPage - 1) * APPTS_PER_PAGE, apptPage * APPTS_PER_PAGE)
+
+                    return (
+                      <>
+                        {paged.map((appt: any) => (
+                          <div key={appt.id} className="px-6 py-4">
+                            <div className="flex items-start justify-between gap-4 mb-2">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="text-sm font-mono text-app2 flex-shrink-0">
+                                  {new Date(appt.starts_at).toLocaleDateString('es-AR', {
+                                    day: 'numeric', month: 'short', year: 'numeric',
+                                    timeZone: 'America/Argentina/Buenos_Aires'
+                                  })}
+                                </div>
+                                <div className="text-sm font-semibold truncate">
+                                  {appt.appointment_type ?? 'Consulta'}
+                                </div>
+                              </div>
+                              <span className={`text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' :
+                                appt.status === 'absent' ? 'bg-red-500/15 text-red-600 dark:text-red-400' :
+                                  appt.status === 'cancelled' ? 'bg-surface2 text-app3' :
+                                    'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                }`}>
+                                {appt.status === 'completed' ? 'Atendido' :
+                                  appt.status === 'absent' ? 'Ausente' :
+                                    appt.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
+                              </span>
                             </div>
-                            <div className="text-sm font-semibold truncate">
-                              {appt.appointment_type ?? 'Consulta'}
+                            {appt.clinical_notes ? (
+                              <div className="mt-2 bg-surface2/60 rounded-lg px-4 py-3 border-l-2 border-blue-500/50">
+                                <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wider mb-1">
+                                  Notas de la consulta
+                                </div>
+                                <div className="text-sm text-app2 whitespace-pre-wrap">
+                                  {appt.clinical_notes}
+                                </div>
+                              </div>
+                            ) : appt.status === 'completed' ? (
+                              <div className="mt-1 text-xs text-app3 italic">
+                                Sin notas registradas
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+
+                        {totalPages > 1 && (
+                          <div className="px-6 py-4 border-t border-app flex items-center justify-between">
+                            <span className="text-xs text-app3">
+                              {total} consultas · página {apptPage} de {totalPages}
+                            </span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setApptPage(p => Math.max(1, p - 1))}
+                                disabled={apptPage === 1}
+                                className="px-3 py-1.5 text-xs font-semibold bg-surface2 border border-app rounded-lg disabled:opacity-40 hover:bg-surface3 transition-colors active:scale-95"
+                              >
+                                ←
+                              </button>
+                              <button
+                                onClick={() => setApptPage(p => Math.min(totalPages, p + 1))}
+                                disabled={apptPage === totalPages}
+                                className="px-3 py-1.5 text-xs font-semibold bg-surface2 border border-app rounded-lg disabled:opacity-40 hover:bg-surface3 transition-colors active:scale-95"
+                              >
+                                →
+                              </button>
                             </div>
                           </div>
-                          <span className={`text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0 ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                            appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                              appt.status === 'cancelled' ? 'bg-surface2 text-app3' :
-                                'bg-amber-900/40 text-amber-400'
-                            }`}>
-                            {appt.status === 'completed' ? 'Atendido' :
-                              appt.status === 'absent' ? 'Ausente' :
-                                appt.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
-                          </span>
-                        </div>
-                        {/* Notas clínicas */}
-                        {appt.clinical_notes ? (
-                          <div className="ml-0 mt-2 bg-surface2/60 rounded-lg px-4 py-3 border-l-2 border-blue-700">
-                            <div className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">
-                              Notas de la consulta
-                            </div>
-                            <div className="text-sm text-gray-300 whitespace-pre-wrap">
-                              {appt.clinical_notes}
-                            </div>
-                          </div>
-                        ) : appt.status === 'completed' ? (
-                          <div className="mt-1 text-xs text-app3 italic">
-                            Sin notas registradas
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               )}
             </div>

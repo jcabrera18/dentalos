@@ -155,7 +155,7 @@ export default function AgendaPage() {
 
         {/* Info del turno */}
         <div className="mb-5">
-          <div className="font-bold text-lg">{selectedAppt.patient_name}</div>
+          <div className="font-bold text-lg text-app">{selectedAppt.patient_name}</div>
           <div className="text-app2 text-sm">{selectedAppt.appointment_type ?? 'Consulta'}</div>
           <div className="text-app3 text-sm font-mono mt-1">
             {new Date(selectedAppt.starts_at).toLocaleString('es-AR', {
@@ -183,8 +183,8 @@ export default function AgendaPage() {
                 <button key={status}
                   onClick={() => updateStatus(selectedAppt.id, status)}
                   className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors active:scale-95 ${selectedAppt.status === status
-                    ? 'bg-blue-500 text-app'
-                    : 'bg-surface2 hover:bg-surface3 text-gray-300'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-surface2 hover:bg-surface3 text-app2 border border-app'
                     }`}>
                   {label}
                 </button>
@@ -197,13 +197,13 @@ export default function AgendaPage() {
         <div className="space-y-2">
           <button
             onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}`)}
-            className="w-full bg-surface2 hover:bg-surface3 active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
+            className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
             Ver ficha del paciente →
           </button>
 
           <button
             onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}/appointment`)}
-            className="w-full bg-blue-900/40 hover:bg-blue-800/40 active:scale-95 text-blue-400 py-2.5 rounded-xl text-sm font-medium transition-all">
+            className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 active:scale-95 text-blue-600 dark:text-blue-400 py-2.5 rounded-xl text-sm font-medium transition-all">
             Nuevo turno para este paciente
           </button>
 
@@ -214,19 +214,19 @@ export default function AgendaPage() {
                   setEditingAppt(selectedAppt)
                   setSelectedAppt(null)
                 }}
-                className="w-full bg-surface2 hover:bg-surface3 active:scale-95 text-gray-300 py-2.5 rounded-xl text-sm font-medium transition-all">
+                className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 py-2.5 rounded-xl text-sm font-medium transition-all">
                 ✏️ Editar turno
               </button>
               <button
                 onClick={() => updateStatus(selectedAppt.id, 'cancelled')}
-                className="w-full bg-red-900/20 hover:bg-red-900/40 active:scale-95 text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
+                className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 active:scale-95 text-red-600 dark:text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
                 Cancelar turno
               </button>
             </>
           )}
           <button
             onClick={() => { setConfirmDelete(selectedAppt.id); setSelectedAppt(null) }}
-            className="w-full bg-red-900/40 hover:bg-red-900/60 active:scale-95 text-red-300 py-2.5 rounded-xl text-sm font-medium transition-all">
+            className="w-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 active:scale-95 text-red-600 dark:text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
             🗑 Eliminar turno
           </button>
         </div>
@@ -268,7 +268,7 @@ export default function AgendaPage() {
                 >
                   <span className="text-[10px] text-app3">{DAYS[i]}</span>
                   <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold transition-colors ${isSelected ? 'bg-blue-500 text-app' :
-                      isToday ? 'border border-blue-400 text-blue-400' : 'text-app'
+                    isToday ? 'border border-blue-400 text-blue-400' : 'text-app'
                     }`}>
                     {d.getDate()}
                   </span>

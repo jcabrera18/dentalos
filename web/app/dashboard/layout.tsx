@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', icon: '📊', label: 'Inicio' },
   { href: '/dashboard/agenda', icon: '📅', label: 'Agenda' },
   { href: '/dashboard/patients', icon: '👥', label: 'Pacientes' },
-  { href: '/dashboard/payments', icon: '💰', label: 'Cobros' },
+  { href: '/dashboard/payments', icon: '💰', label: 'Finanzas' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

@@ -6,14 +6,14 @@ import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
 
 export default function NewAppointmentPage() {
-  const [patient, setPatient]     = useState<any>(null)
+  const [patient, setPatient] = useState<any>(null)
   const [professional, setProfessional] = useState<any>(null)
-  const [loading, setLoading]     = useState(true)
-  const [saving, setSaving]       = useState(false)
-  const [error, setError]         = useState('')
-  const [token, setToken]         = useState('')
-  const router   = useRouter()
-  const params   = useParams()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [token, setToken] = useState('')
+  const router = useRouter()
+  const params = useParams()
   const supabase = createClient()
 
   // Form state
@@ -22,12 +22,12 @@ export default function NewAppointmentPage() {
   const defaultDate = tomorrow.toISOString().split('T')[0]
 
   const [form, setForm] = useState({
-    date:             defaultDate,
-    time:             '09:00',
+    date: defaultDate,
+    time: '09:00',
     duration_minutes: '45',
     appointment_type: '',
-    chief_complaint:  '',
-    internal_notes:   '',
+    chief_complaint: '',
+    internal_notes: '',
   })
 
   function set(field: string, value: string) {
@@ -65,13 +65,13 @@ export default function NewAppointmentPage() {
         method: 'POST',
         token,
         body: JSON.stringify({
-          patient_id:       params.id,
-          professional_id:  professional.id,
-          starts_at:        startsAt,
+          patient_id: params.id,
+          professional_id: professional.id,
+          starts_at: startsAt,
           duration_minutes: Number(form.duration_minutes),
           appointment_type: form.appointment_type || undefined,
-          chief_complaint:  form.chief_complaint  || undefined,
-          internal_notes:   form.internal_notes   || undefined,
+          chief_complaint: form.chief_complaint || undefined,
+          internal_notes: form.internal_notes || undefined,
         })
       })
 
@@ -98,10 +98,10 @@ export default function NewAppointmentPage() {
   ]
 
   const DURACIONES = [
-    { value: '30',  label: '30 min' },
-    { value: '45',  label: '45 min' },
-    { value: '60',  label: '1 hora' },
-    { value: '90',  label: '1h 30min' },
+    { value: '30', label: '30 min' },
+    { value: '45', label: '45 min' },
+    { value: '60', label: '1 hora' },
+    { value: '90', label: '1h 30min' },
     { value: '120', label: '2 horas' },
   ]
 
@@ -161,11 +161,10 @@ export default function NewAppointmentPage() {
                   key={d.value}
                   type="button"
                   onClick={() => set('duration_minutes', d.value)}
-                  className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                    form.duration_minutes === d.value
-                      ? 'bg-blue-500 text-app'
-                      : 'bg-surface border border-app text-app2 hover:border-gray-500'
-                  }`}
+                  className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.duration_minutes === d.value
+                    ? 'bg-blue-500 text-app'
+                    : 'bg-surface border border-app text-app2 hover:border-gray-500'
+                    }`}
                 >
                   {d.label}
                 </button>
@@ -184,11 +183,10 @@ export default function NewAppointmentPage() {
                   key={tipo}
                   type="button"
                   onClick={() => set('appointment_type', tipo)}
-                  className={`py-2 px-3 rounded-xl text-sm font-medium transition-colors text-left ${
-                    form.appointment_type === tipo
-                      ? 'bg-blue-500 text-app'
-                      : 'bg-surface border border-app text-app2 hover:border-gray-500'
-                  }`}
+                  className={`py-2 px-3 rounded-xl text-sm font-medium transition-colors text-left ${form.appointment_type === tipo
+                    ? 'bg-blue-500 text-app'
+                    : 'bg-surface border border-app text-app2 hover:border-gray-500'
+                    }`}
                 >
                   {tipo}
                 </button>
@@ -225,9 +223,9 @@ export default function NewAppointmentPage() {
           </div>
 
           {/* Recordatorio */}
-          <div className="bg-emerald-950/30 border border-emerald-800/40 rounded-xl p-3 flex items-center gap-2 text-sm text-emerald-400">
-            <span>✓</span>
-            <span>Se enviará recordatorio automático por WhatsApp 24hs y 2hs antes del turno</span>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+            <span className="flex-shrink-0">📱</span>
+            <span>Se enviará confirmación por WhatsApp al guardar el turno.</span>
           </div>
 
           {error && (
@@ -240,16 +238,16 @@ export default function NewAppointmentPage() {
             <button
               type="button"
               onClick={() => router.push(`/dashboard/patients/${params.id}`)}
-              className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3.5 rounded-xl transition-colors"
+              className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3.5 rounded-xl transition-colors active:scale-95"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-app font-semibold py-3.5 rounded-xl transition-colors"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors active:scale-95"
             >
-              {saving ? 'Agendando..' : 'Confirmar turno'}
+              {saving ? 'Agendando...' : 'Confirmar turno'}
             </button>
           </div>
         </form>
