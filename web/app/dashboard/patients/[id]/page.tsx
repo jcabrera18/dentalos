@@ -921,16 +921,6 @@ function OdontogramView({ odontogram, onSaveTooth }: {
           strokeWidth="1.5"
           pointerEvents="none"
         />
-
-        {!state.missing && (
-          <>
-            <text x="20" y="10" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">V</text>
-            <text x="20" y="33" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">P</text>
-            <text x="8" y="22" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">M</text>
-            <text x="32" y="22" textAnchor="middle" fontSize="4" fill="#9ca3af" pointerEvents="none">D</text>
-            <text x="20" y="21.5" textAnchor="middle" fontSize="3.5" fill="#9ca3af" pointerEvents="none">O</text>
-          </>
-        )}
       </svg>
     )
   }
