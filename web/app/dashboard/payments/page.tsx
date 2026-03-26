@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+  BarChart, Bar, Cell,
+} from 'recharts'
 
 const METODOS = [
   { value: 'cash', label: '💵 Efectivo' },
@@ -19,26 +23,63 @@ const CATEGORIAS_GASTO = [
   'Personal', 'Marketing', 'Impuestos', 'Seguros', 'Otro'
 ]
 
+const PAGE_SIZE = 20
+
+function todayAR() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+function firstOfMonthAR() {
+  const t = todayAR() // YYYY-MM-DD
+  return t.slice(0, 8) + '01'
+}
+
+function formatARS(n: number) {
+  return '$' + n.toLocaleString('es-AR')
+}
+
+function formatDateAR(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: 'numeric', month: 'short',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+}
+
 export default function PaymentsPage() {
-  const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [patients, setPatients] = useState<any[]>([])
-  const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'ingresos' | 'gastos' | 'balance' | 'pacientes'>('ingresos')
+
+  // ── Ingresos ──
+  const [payments, setPayments] = useState<any[]>([])
+  const [paymentPage, setPaymentPage] = useState(1)
+  const [hasMorePayments, setHasMorePayments] = useState(false)
   const [summaryWeek, setSummaryWeek] = useState<any>(null)
   const [summaryMonth, setSummaryMonth] = useState<any>(null)
   const [summaryYear, setSummaryYear] = useState<any>(null)
-  const [tab, setTab] = useState<'ingresos' | 'gastos' | 'balance'>('ingresos')
+  const [chartData, setChartData] = useState<{ day: string; total: number }[]>([])
+
+  // ── Gastos ──
   const [expenses, setExpenses] = useState<any[]>([])
+  const [expensePage, setExpensePage] = useState(1)
+  const [hasMoreExpenses, setHasMoreExpenses] = useState(false)
   const [expenseSummaryWeek, setExpenseSummaryWeek] = useState<any>(null)
   const [expenseSummaryMonth, setExpenseSummaryMonth] = useState<any>(null)
   const [expenseSummaryYear, setExpenseSummaryYear] = useState<any>(null)
+
+  // ── Modals ──
+  const [showModal, setShowModal] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
-  const [showNewPatient, setShowNewPatient] = useState(false)
-  const [newPatientName, setNewPatientName] = useState('')
-  const [newPatientLastName, setNewPatientLastName] = useState('')
-  const [creatingPatient, setCreatingPatient] = useState(false)
+  const [patients, setPatients] = useState<any[]>([])
+  const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
+
+  // ── Métricas pacientes ──
+  const [attendedByMonth, setAttendedByMonth] = useState<{ month: string; total: number }[]>([])
+  const [topTypes, setTopTypes] = useState<{ type: string; count: number }[]>([])
+  const [absenceRate, setAbsenceRate] = useState(0)
+  const [absenceDetail, setAbsenceDetail] = useState({ cancelled: 0, total: 0 })
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -46,31 +87,45 @@ export default function PaymentsPage() {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
-      setToken(session.access_token)
+      const t = session.access_token
+      setToken(t)
 
       await Promise.all([
-        fetchPayments(session.access_token),
-        fetchPatients(session.access_token),
-        fetchAllSummaries(session.access_token),
-        fetchExpenses(session.access_token),
-        fetchExpenseSummaries(session.access_token),
+        fetchPayments(t, 1),
+        fetchPatients(t),
+        fetchAllSummaries(t),
+        fetchExpenses(t, 1),
+        fetchExpenseSummaries(t),
+        fetchChartData(t),
       ])
 
       const searchParams = new URLSearchParams(window.location.search)
       const prePatientId = searchParams.get('patient_id')
-      if (prePatientId) {
-        setPreselectedPatientId(prePatientId)
-        setShowModal(true)
-      }
+      if (prePatientId) { setPreselectedPatientId(prePatientId); setShowModal(true) }
 
       setLoading(false)
     }
     load()
   }, [])
 
-  async function fetchPayments(t: string) {
-    const data = await apiFetch('/payments?limit=30', { token: t })
-    setPayments(data.data ?? [])
+  // ── Fetch helpers ──
+
+  async function fetchPayments(t: string, page: number) {
+    const offset = (page - 1) * PAGE_SIZE
+    const data = await apiFetch(`/payments?limit=${PAGE_SIZE}&offset=${offset}`, { token: t })
+    const list = data.data ?? []
+    setPayments(list)
+    setHasMorePayments(list.length === PAGE_SIZE)
+    setPaymentPage(page)
+  }
+
+  async function fetchExpenses(t: string, page: number) {
+    const offset = (page - 1) * PAGE_SIZE
+    const data = await apiFetch(`/expenses?limit=${PAGE_SIZE}&offset=${offset}`, { token: t })
+    const list = data.data ?? []
+    setExpenses(list)
+    setHasMoreExpenses(list.length === PAGE_SIZE)
+    setExpensePage(page)
   }
 
   async function fetchPatients(t: string) {
@@ -79,35 +134,119 @@ export default function PaymentsPage() {
   }
 
   async function fetchAllSummaries(t: string) {
-    const [weekData, monthData, yearData] = await Promise.all([
+    const [w, m, y] = await Promise.all([
       apiFetch('/payments/summary?period=week', { token: t }),
       apiFetch('/payments/summary?period=month', { token: t }),
       apiFetch('/payments/summary?period=year', { token: t }),
     ])
-    setSummaryWeek(weekData.data)
-    setSummaryMonth(monthData.data)
-    setSummaryYear(yearData.data)
-  }
-
-  async function fetchExpenses(t: string) {
-    const data = await apiFetch('/expenses?limit=30', { token: t })
-    setExpenses(data.data ?? [])
+    setSummaryWeek(w.data); setSummaryMonth(m.data); setSummaryYear(y.data)
   }
 
   async function fetchExpenseSummaries(t: string) {
-    const [weekData, monthData, yearData] = await Promise.all([
+    const [w, m, y] = await Promise.all([
       apiFetch('/expenses/summary?period=week', { token: t }),
       apiFetch('/expenses/summary?period=month', { token: t }),
       apiFetch('/expenses/summary?period=year', { token: t }),
     ])
-    setExpenseSummaryWeek(weekData.data)
-    setExpenseSummaryMonth(monthData.data)
-    setExpenseSummaryYear(yearData.data)
+    setExpenseSummaryWeek(w.data); setExpenseSummaryMonth(m.data); setExpenseSummaryYear(y.data)
+  }
+
+  async function fetchChartData(t: string) {
+    const from = firstOfMonthAR()
+    const to = todayAR()
+    // Traer todos los cobros del mes con limit alto
+    const data = await apiFetch(`/payments?from=${from}&to=${to}&limit=500`, { token: t })
+    const list: any[] = data.data ?? []
+
+    // Agrupar por día (UTC-3)
+    const byDay: Record<string, number> = {}
+    list.forEach((p) => {
+      const day = new Date(p.paid_at).toLocaleDateString('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+      })
+      byDay[day] = (byDay[day] ?? 0) + Number(p.amount)
+    })
+
+    // Generar todos los días del mes hasta hoy
+    const result: { day: string; total: number }[] = []
+    const start = new Date(`${from}T12:00:00-03:00`)
+    const end = new Date(`${to}T12:00:00-03:00`)
+    const cur = new Date(start)
+    while (cur <= end) {
+      const key = cur.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+      const label = cur.toLocaleDateString('es-AR', {
+        day: 'numeric', month: 'short',
+        timeZone: 'America/Argentina/Buenos_Aires',
+      })
+      result.push({ day: label, total: byDay[key] ?? 0 })
+      cur.setDate(cur.getDate() + 1)
+    }
+    setChartData(result)
+  }
+
+  async function fetchPatientMetrics(t: string) {
+    setLoadingMetrics(true)
+    try {
+      const sixMonthsAgo = new Date()
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+      const from = sixMonthsAgo.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+      const to = todayAR()
+
+      const data = await apiFetch(`/appointments?from=${from}&to=${to}`, { token: t })
+      const appts: any[] = data.data ?? []
+
+      // Pacientes atendidos por mes (no cancelados)
+      const monthMap: Record<string, number> = {}
+      appts.forEach((a) => {
+        if (a.status === 'cancelled') return
+        const label = new Date(a.starts_at).toLocaleDateString('es-AR', {
+          month: 'short', year: '2-digit',
+          timeZone: 'America/Argentina/Buenos_Aires',
+        })
+        monthMap[label] = (monthMap[label] ?? 0) + 1
+      })
+      // Ordenar cronológicamente (últimos 6 meses)
+      const monthEntries = Object.entries(monthMap).map(([month, total]) => ({ month, total }))
+      setAttendedByMonth(monthEntries)
+
+      // Tipos más frecuentes
+      const typeMap: Record<string, number> = {}
+      appts.forEach((a) => {
+        if (a.status === 'cancelled') return
+        const type = a.appointment_type ?? 'Sin tipo'
+        typeMap[type] = (typeMap[type] ?? 0) + 1
+      })
+      const sorted = Object.entries(typeMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([type, count]) => ({ type, count }))
+      setTopTypes(sorted)
+
+      // Tasa de ausentismo del mes actual
+      const firstOM = firstOfMonthAR()
+      const thisMonth = appts.filter((a) => {
+        const d = new Date(a.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+        return d >= firstOM && d <= to
+      })
+      const cancelled = thisMonth.filter((a) => a.status === 'cancelled').length
+      const total = thisMonth.length
+      setAbsenceRate(total > 0 ? Math.round((cancelled / total) * 100) : 0)
+      setAbsenceDetail({ cancelled, total })
+    } finally {
+      setLoadingMetrics(false)
+    }
   }
 
   async function deleteExpense(id: string) {
     await apiFetch(`/expenses/${id}`, { method: 'DELETE', token })
-    await Promise.all([fetchExpenses(token), fetchExpenseSummaries(token)])
+    await Promise.all([fetchExpenses(token, expensePage), fetchExpenseSummaries(token)])
+  }
+
+  function handleTabChange(t: typeof tab) {
+    setTab(t)
+    if (t === 'pacientes' && attendedByMonth.length === 0 && !loadingMetrics) {
+      fetchPatientMetrics(token)
+    }
   }
 
   if (loading) {
@@ -118,46 +257,41 @@ export default function PaymentsPage() {
     )
   }
 
+  const totalChart = chartData.reduce((s, d) => s + d.total, 0)
+
   return (
     <div className="min-h-screen bg-app text-app">
 
       {/* Header con tabs */}
-      <div className="px-6 py-4 border-b border-app flex items-center justify-between">
-        <div className="flex items-center gap-1 bg-surface2 rounded-xl p-1">
-          <button onClick={() => setTab('ingresos')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'ingresos' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
-              }`}>
-            💰 Ingresos
-          </button>
-          <button onClick={() => setTab('gastos')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'gastos' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
-              }`}>
-            📦 Gastos
-          </button>
-          <button onClick={() => setTab('balance')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${tab === 'balance' ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'
-              }`}>
-            📊 Balance
-          </button>
+      <div className="px-4 py-3 border-b border-app flex items-center justify-between gap-2">
+        <div className="flex items-center gap-0.5 bg-surface2 rounded-xl p-1 flex-1 overflow-x-auto">
+          {([
+            { key: 'ingresos', label: '💰 Ingresos' },
+            { key: 'gastos', label: '📦 Gastos' },
+            { key: 'balance', label: '📊 Balance' },
+            { key: 'pacientes', label: '👥 Pacientes' },
+          ] as const).map(({ key, label }) => (
+            <button key={key} onClick={() => handleTabChange(key)}
+              className={`px-3 py-2 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${tab === key ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'}`}>
+              {label}
+            </button>
+          ))}
         </div>
 
         <button
-          onClick={() => {
-            if (tab === 'ingresos') setShowModal(true)
-            else if (tab === 'gastos') setShowExpenseModal(true)
-          }}
-          className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 ${tab === 'balance'
-            ? 'invisible'
-            : 'bg-blue-500 hover:bg-blue-600 text-white'
-            }`}
+          onClick={() => { if (tab === 'ingresos') setShowModal(true); else if (tab === 'gastos') setShowExpenseModal(true) }}
+          className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 flex-shrink-0 ${(tab === 'balance' || tab === 'pacientes') ? 'invisible' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
         >
-          + {tab === 'gastos' ? 'Registrar gasto' : 'Registrar cobro'}
+          + {tab === 'gastos' ? 'Gasto' : 'Cobro'}
         </button>
       </div>
 
       <main className="p-6 max-w-4xl mx-auto">
-        {tab === 'ingresos' ? (
+
+        {/* ── INGRESOS ── */}
+        {tab === 'ingresos' && (
           <>
+            {/* Cards resumen */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {[
                 { label: 'Esta semana', data: summaryWeek },
@@ -166,19 +300,15 @@ export default function PaymentsPage() {
               ].map(({ label, data }) => (
                 <div key={label} className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">{label}</div>
-                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">
-                    ${Number(data?.total ?? 0).toLocaleString('es-AR')}
+                  <div className="text-2xl font-bold text-emerald-500 dark:text-emerald-400 mb-1">
+                    {formatARS(Number(data?.total ?? 0))}
                   </div>
                   <div className="text-xs text-app3 mb-3">{data?.transactions ?? 0} cobros</div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {(data?.byMethod ?? []).map((m: any) => (
                       <div key={m.method} className="flex items-center justify-between">
-                        <span className="text-xs text-app2">
-                          {METODOS.find(x => x.value === m.method)?.label ?? m.method}
-                        </span>
-                        <span className="text-xs font-semibold text-app">
-                          ${Number(m.total).toLocaleString('es-AR')}
-                        </span>
+                        <span className="text-xs text-app2">{METODOS.find(x => x.value === m.method)?.label ?? m.method}</span>
+                        <span className="text-xs font-semibold">{formatARS(Number(m.total))}</span>
                       </div>
                     ))}
                   </div>
@@ -186,48 +316,109 @@ export default function PaymentsPage() {
               ))}
             </div>
 
+            {/* Gráfico curva del mes */}
+            <div className="bg-surface border border-app rounded-xl p-5 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-app">Ingresos del mes</h3>
+                  <div className="text-xs text-app3 mt-0.5">
+                    {new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xl font-bold text-emerald-500 dark:text-emerald-400">{formatARS(totalChart)}</div>
+                  <div className="text-xs text-app3">{chartData.filter(d => d.total > 0).length} días con cobros</div>
+                </div>
+              </div>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis
+                      dataKey="day"
+                      tick={{ fontSize: 10, fill: 'var(--text3)' }}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={Math.floor(chartData.length / 6)}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: 'var(--text3)' }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+                      width={36}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '10px',
+                        fontSize: '12px',
+                        color: 'var(--text)',
+                      }}
+                      formatter={(val: any) => [formatARS(Number(val)), 'Ingresos']}
+                      cursor={{ stroke: 'var(--border)' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: '#10b981' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[180px] flex items-center justify-center text-app3 text-sm">Sin cobros este mes</div>
+              )}
+            </div>
+
+            {/* Historial paginado */}
             <div className="bg-surface border border-app rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-app">
-                <h3 className="font-semibold text-app">Historial de cobros</h3>
+              <div className="px-6 py-4 border-b border-app flex items-center justify-between">
+                <h3 className="font-semibold">Historial de cobros</h3>
+                <span className="text-xs text-app3">Página {paymentPage}</span>
               </div>
               {payments.length === 0 ? (
-                <div className="px-6 py-12 text-center text-app3">No hay cobros registrados todavía</div>
+                <div className="px-6 py-12 text-center text-app3">No hay cobros registrados</div>
               ) : (
-                <div className="divide-y divide-app">
-                  {payments.map((p: any) => (
-                    <div key={p.id} className="px-6 py-4 flex items-center gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-sm">
-                        💰
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-app truncate">
-                          {p.patients?.first_name} {p.patients?.last_name}
+                <>
+                  <div className="divide-y divide-app">
+                    {payments.map((p: any) => (
+                      <div key={p.id} className="px-6 py-4 flex items-center gap-4">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">💰</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold truncate">
+                            {p.patients ? `${p.patients.first_name} ${p.patients.last_name}` : <span className="text-app3 italic">Sin paciente</span>}
+                          </div>
+                          <div className="text-sm text-app2">
+                            {METODOS.find(m => m.value === p.method)?.label ?? p.method}
+                            {p.installments > 1 && ` · ${p.installments} cuotas`}
+                          </div>
+                          {p.notes && <div className="text-xs text-app3 mt-0.5 truncate">📝 {p.notes}</div>}
                         </div>
-                        <div className="text-sm text-app2">
-                          {METODOS.find(m => m.value === p.method)?.label ?? p.method}
-                          {p.installments > 1 && ` · ${p.installments} cuotas`}
-                        </div>
-                        {p.notes && <div className="text-xs text-app3 mt-0.5 truncate">📝 {p.notes}</div>}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="font-bold text-emerald-600 dark:text-emerald-400">
-                          ${Number(p.amount).toLocaleString('es-AR')}
-                        </div>
-                        <div className="text-xs text-app3">
-                          {new Date(p.paid_at).toLocaleDateString('es-AR', {
-                            day: 'numeric', month: 'short',
-                            timeZone: 'America/Argentina/Buenos_Aires'
-                          })}
+                        <div className="text-right flex-shrink-0">
+                          <div className="font-bold text-emerald-500 dark:text-emerald-400">{formatARS(Number(p.amount))}</div>
+                          <div className="text-xs text-app3">{formatDateAR(p.paid_at)}</div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <Pagination
+                    page={paymentPage}
+                    hasMore={hasMorePayments}
+                    onPrev={() => fetchPayments(token, paymentPage - 1)}
+                    onNext={() => fetchPayments(token, paymentPage + 1)}
+                  />
+                </>
               )}
             </div>
           </>
+        )}
 
-        ) : tab === 'gastos' ? (
+        {/* ── GASTOS ── */}
+        {tab === 'gastos' && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {[
@@ -237,17 +428,15 @@ export default function PaymentsPage() {
               ].map(({ label, data }) => (
                 <div key={label} className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">{label}</div>
-                  <div className="text-2xl font-bold text-red-500 dark:text-red-400 mb-2">
-                    ${Number(data?.total ?? 0).toLocaleString('es-AR')}
+                  <div className="text-2xl font-bold text-red-500 dark:text-red-400 mb-1">
+                    {formatARS(Number(data?.total ?? 0))}
                   </div>
                   <div className="text-xs text-app3 mb-3">{data?.transactions ?? 0} gastos</div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {(data?.byCategory ?? []).map((c: any) => (
                       <div key={c.category} className="flex items-center justify-between">
                         <span className="text-xs text-app2">{c.category}</span>
-                        <span className="text-xs font-semibold text-app">
-                          ${Number(c.total).toLocaleString('es-AR')}
-                        </span>
+                        <span className="text-xs font-semibold">{formatARS(Number(c.total))}</span>
                       </div>
                     ))}
                   </div>
@@ -256,47 +445,48 @@ export default function PaymentsPage() {
             </div>
 
             <div className="bg-surface border border-app rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-app">
-                <h3 className="font-semibold text-app">Historial de gastos</h3>
+              <div className="px-6 py-4 border-b border-app flex items-center justify-between">
+                <h3 className="font-semibold">Historial de gastos</h3>
+                <span className="text-xs text-app3">Página {expensePage}</span>
               </div>
               {expenses.length === 0 ? (
-                <div className="px-6 py-12 text-center text-app3">No hay gastos registrados todavía</div>
+                <div className="px-6 py-12 text-center text-app3">No hay gastos registrados</div>
               ) : (
-                <div className="divide-y divide-app">
-                  {expenses.map((e: any) => (
-                    <div key={e.id} className="px-6 py-4 flex items-center gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 dark:text-red-400 text-sm">
-                        📦
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-app truncate">{e.category}</div>
-                        {e.description && <div className="text-sm text-app2 truncate">{e.description}</div>}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="font-bold text-red-500 dark:text-red-400">
-                          -${Number(e.amount).toLocaleString('es-AR')}
+                <>
+                  <div className="divide-y divide-app">
+                    {expenses.map((e: any) => (
+                      <div key={e.id} className="px-6 py-4 flex items-center gap-4">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">📦</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold truncate">{e.category}</div>
+                          {e.description && <div className="text-sm text-app2 truncate">{e.description}</div>}
                         </div>
-                        <div className="text-xs text-app3">
-                          {new Date(e.paid_at).toLocaleDateString('es-AR', {
-                            day: 'numeric', month: 'short',
-                            timeZone: 'America/Argentina/Buenos_Aires'
-                          })}
+                        <div className="text-right flex-shrink-0">
+                          <div className="font-bold text-red-500 dark:text-red-400">-{formatARS(Number(e.amount))}</div>
+                          <div className="text-xs text-app3">{formatDateAR(e.paid_at)}</div>
                         </div>
+                        <button onClick={() => deleteExpense(e.id)}
+                          className="text-app3 hover:text-red-500 active:scale-90 transition-all flex-shrink-0">
+                          🗑
+                        </button>
                       </div>
-                      <button onClick={() => deleteExpense(e.id)}
-                        className="text-app3 hover:text-red-500 active:scale-90 transition-all text-sm flex-shrink-0">
-                        🗑
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <Pagination
+                    page={expensePage}
+                    hasMore={hasMoreExpenses}
+                    onPrev={() => fetchExpenses(token, expensePage - 1)}
+                    onNext={() => fetchExpenses(token, expensePage + 1)}
+                  />
+                </>
               )}
             </div>
           </>
+        )}
 
-        ) : (
+        {/* ── BALANCE ── */}
+        {tab === 'balance' && (
           <>
-            {/* ── BALANCE ── */}
             {(['week', 'month', 'year'] as const).map((period, idx) => {
               const labels = ['Esta semana', 'Este mes', 'Este año']
               const incomeData = [summaryWeek, summaryMonth, summaryYear][idx]
@@ -308,30 +498,21 @@ export default function PaymentsPage() {
 
               return (
                 <div key={period} className="bg-surface border border-app rounded-xl p-5 mb-4">
-                  <div className="text-xs text-app3 uppercase tracking-wider mb-4 font-semibold">
-                    {labels[idx]}
-                  </div>
-
-                  {/* Números principales */}
+                  <div className="text-xs text-app3 uppercase tracking-wider mb-4 font-semibold">{labels[idx]}</div>
                   <div className="grid grid-cols-3 gap-4 mb-5">
                     <div>
                       <div className="text-xs text-app3 mb-1">Ingresos</div>
-                      <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                        ${income.toLocaleString('es-AR')}
-                      </div>
+                      <div className="text-xl font-bold text-emerald-500 dark:text-emerald-400">{formatARS(income)}</div>
                       <div className="text-xs text-app3">{incomeData?.transactions ?? 0} cobros</div>
                     </div>
                     <div>
                       <div className="text-xs text-app3 mb-1">Gastos</div>
-                      <div className="text-xl font-bold text-red-500 dark:text-red-400">
-                        ${expense.toLocaleString('es-AR')}
-                      </div>
+                      <div className="text-xl font-bold text-red-500 dark:text-red-400">{formatARS(expense)}</div>
                       <div className="text-xs text-app3">{expenseData?.transactions ?? 0} gastos</div>
                     </div>
                     <div>
                       <div className="text-xs text-app3 mb-1">Ganancia neta</div>
-                      <div className={`text-xl font-bold ${isPositive ? 'text-blue-600 dark:text-blue-400' : 'text-red-500 dark:text-red-400'
-                        }`}>
+                      <div className={`text-xl font-bold ${isPositive ? 'text-blue-500 dark:text-blue-400' : 'text-red-500 dark:text-red-400'}`}>
                         {isPositive ? '+' : ''}{balance.toLocaleString('es-AR')}
                       </div>
                       <div className="text-xs text-app3">
@@ -340,7 +521,6 @@ export default function PaymentsPage() {
                     </div>
                   </div>
 
-                  {/* Barra de progreso */}
                   {income > 0 && (
                     <div className="mb-4">
                       <div className="flex justify-between text-xs text-app3 mb-1">
@@ -349,16 +529,13 @@ export default function PaymentsPage() {
                       </div>
                       <div className="h-2 bg-surface2 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${expense / income > 0.8 ? 'bg-red-500' :
-                            expense / income > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
-                            }`}
+                          className={`h-full rounded-full transition-all ${expense / income > 0.8 ? 'bg-red-500' : expense / income > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                           style={{ width: `${Math.min(100, (expense / income) * 100)}%` }}
                         />
                       </div>
                     </div>
                   )}
 
-                  {/* Breakdown lado a lado */}
                   {((incomeData?.byMethod?.length ?? 0) > 0 || (expenseData?.byCategory?.length ?? 0) > 0) && (
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-app">
                       <div>
@@ -366,25 +543,19 @@ export default function PaymentsPage() {
                         <div className="space-y-1">
                           {(incomeData?.byMethod ?? []).map((m: any) => (
                             <div key={m.method} className="flex justify-between text-xs">
-                              <span className="text-app2">
-                                {METODOS.find(x => x.value === m.method)?.label ?? m.method}
-                              </span>
-                              <span className="text-app font-semibold">
-                                ${Number(m.total).toLocaleString('es-AR')}
-                              </span>
+                              <span className="text-app2">{METODOS.find(x => x.value === m.method)?.label ?? m.method}</span>
+                              <span className="font-semibold">{formatARS(Number(m.total))}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-app3 uppercase tracking-wider mb-2">Por categoría de gasto</div>
+                        <div className="text-xs text-app3 uppercase tracking-wider mb-2">Por categoría</div>
                         <div className="space-y-1">
                           {(expenseData?.byCategory ?? []).map((c: any) => (
                             <div key={c.category} className="flex justify-between text-xs">
                               <span className="text-app2">{c.category}</span>
-                              <span className="text-app font-semibold">
-                                ${Number(c.total).toLocaleString('es-AR')}
-                              </span>
+                              <span className="font-semibold">{formatARS(Number(c.total))}</span>
                             </div>
                           ))}
                         </div>
@@ -396,6 +567,105 @@ export default function PaymentsPage() {
             })}
           </>
         )}
+
+        {/* ── PACIENTES ── */}
+        {tab === 'pacientes' && (
+          <>
+            {loadingMetrics ? (
+              <div className="py-20 text-center text-app3">Cargando métricas...</div>
+            ) : (
+              <div className="space-y-6">
+
+                {/* Tasa de ausentismo — métrica destacada */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-surface border border-app rounded-xl p-5">
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos este mes</div>
+                    <div className="text-3xl font-bold text-app">{absenceDetail.total}</div>
+                    <div className="text-xs text-app3 mt-1">agendados en total</div>
+                  </div>
+                  <div className="bg-surface border border-app rounded-xl p-5">
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Asistieron</div>
+                    <div className="text-3xl font-bold text-emerald-500 dark:text-emerald-400">
+                      {absenceDetail.total - absenceDetail.cancelled}
+                    </div>
+                    <div className="text-xs text-app3 mt-1">
+                      {absenceDetail.total > 0 ? `${100 - absenceRate}% del total` : '—'}
+                    </div>
+                  </div>
+                  <div className={`bg-surface border rounded-xl p-5 ${absenceRate > 20 ? 'border-red-500/40' : 'border-app'}`}>
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Tasa de ausentismo</div>
+                    <div className={`text-3xl font-bold ${absenceRate > 20 ? 'text-red-500' : absenceRate > 10 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                      {absenceRate}%
+                    </div>
+                    <div className="text-xs text-app3 mt-1">{absenceDetail.cancelled} cancelados este mes</div>
+                  </div>
+                </div>
+
+                {/* Pacientes atendidos por mes */}
+                <div className="bg-surface border border-app rounded-xl p-5">
+                  <h3 className="font-semibold mb-1">Pacientes atendidos por mes</h3>
+                  <div className="text-xs text-app3 mb-4">Últimos 6 meses · excluye cancelados</div>
+                  {attendedByMonth.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={attendedByMonth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                        <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                        <Tooltip
+                          contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', color: 'var(--text)' }}
+                          formatter={(val: any) => [val, 'Atendidos']}
+                          cursor={{ fill: 'var(--surface2)' }}
+                        />
+                        <Bar dataKey="total" radius={[6, 6, 0, 0]}>
+                          {attendedByMonth.map((_, i) => (
+                            <Cell key={i} fill={i === attendedByMonth.length - 1 ? '#3b82f6' : '#6366f1'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[200px] flex items-center justify-center text-app3 text-sm">Sin datos de turnos</div>
+                  )}
+                </div>
+
+                {/* Tratamientos más frecuentes */}
+                <div className="bg-surface border border-app rounded-xl p-5">
+                  <h3 className="font-semibold mb-1">Tipos de consulta más frecuentes</h3>
+                  <div className="text-xs text-app3 mb-4">Últimos 6 meses · excluye cancelados</div>
+                  {topTypes.length > 0 ? (
+                    <div className="space-y-3">
+                      {topTypes.map((t, i) => {
+                        const max = topTypes[0].count
+                        const pct = Math.round((t.count / max) * 100)
+                        return (
+                          <div key={t.type}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-app font-medium">{t.type}</span>
+                              <span className="text-app2 font-semibold">{t.count}</span>
+                            </div>
+                            <div className="h-2 bg-surface2 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: i === 0 ? '#3b82f6' : i === 1 ? '#6366f1' : i === 2 ? '#8b5cf6' : '#a78bfa',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-app3 text-sm">Sin datos de turnos</div>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </>
+        )}
+
       </main>
 
       {showModal && (
@@ -405,9 +675,8 @@ export default function PaymentsPage() {
           preselectedPatientId={preselectedPatientId}
           onClose={() => { setShowModal(false); setPreselectedPatientId(null) }}
           onCreated={async () => {
-            setShowModal(false)
-            setPreselectedPatientId(null)
-            await Promise.all([fetchPayments(token), fetchAllSummaries(token)])
+            setShowModal(false); setPreselectedPatientId(null)
+            await Promise.all([fetchPayments(token, 1), fetchAllSummaries(token), fetchChartData(token)])
           }}
         />
       )}
@@ -418,10 +687,35 @@ export default function PaymentsPage() {
           onClose={() => setShowExpenseModal(false)}
           onCreated={async () => {
             setShowExpenseModal(false)
-            await Promise.all([fetchExpenses(token), fetchExpenseSummaries(token)])
+            await Promise.all([fetchExpenses(token, 1), fetchExpenseSummaries(token)])
           }}
         />
       )}
+    </div>
+  )
+}
+
+function Pagination({ page, hasMore, onPrev, onNext }: {
+  page: number; hasMore: boolean; onPrev: () => void; onNext: () => void
+}) {
+  if (page === 1 && !hasMore) return null
+  return (
+    <div className="px-6 py-4 border-t border-app flex items-center justify-between">
+      <button
+        onClick={onPrev}
+        disabled={page === 1}
+        className="px-4 py-2 text-sm font-semibold bg-surface2 border border-app rounded-lg disabled:opacity-40 hover:bg-surface3 transition-colors active:scale-95"
+      >
+        ← Anterior
+      </button>
+      <span className="text-sm text-app3">Página {page}</span>
+      <button
+        onClick={onNext}
+        disabled={!hasMore}
+        className="px-4 py-2 text-sm font-semibold bg-surface2 border border-app rounded-lg disabled:opacity-40 hover:bg-surface3 transition-colors active:scale-95"
+      >
+        Siguiente →
+      </button>
     </div>
   )
 }
@@ -517,11 +811,8 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
           <h2 className="text-lg font-bold text-app mb-5">Registrar cobro</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
 
-            {/* Paciente */}
             <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">
-                Paciente
-              </label>
+              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Paciente</label>
               {selectedPatient ? (
                 <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
                   <div className="font-medium text-app">{selectedPatient.first_name} {selectedPatient.last_name}</div>
@@ -541,9 +832,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setShowNewPatient(false)}
-                      className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors">
-                      Cancelar
-                    </button>
+                      className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors">Cancelar</button>
                     <button type="button" onClick={handleCreatePatient}
                       disabled={!newPatientName || creatingPatient}
                       className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
@@ -564,9 +853,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                           {p.first_name} {p.last_name} · <span className="text-app2">{p.phone}</span>
                         </div>
                       ))}
-                      {filteredPatients.length === 0 && (
-                        <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>
-                      )}
+                      {filteredPatients.length === 0 && <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>}
                     </div>
                   )}
                   <button type="button" onClick={() => setShowNewPatient(true)}
@@ -577,7 +864,6 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
               )}
             </div>
 
-            {/* Monto */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Monto</label>
               <div className="relative">
@@ -589,33 +875,25 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
               </div>
             </div>
 
-            {/* Forma de pago */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Forma de pago</label>
               <div className="grid grid-cols-3 gap-2">
                 {METODOS.map(m => (
                   <button key={m.value} type="button" onClick={() => set('method', m.value)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-surface2 border border-app text-app2 hover:border-app2'
-                      }`}>
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value ? 'bg-blue-500 text-white' : 'bg-surface2 border border-app text-app2 hover:border-app2'}`}>
                     {m.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Cuotas */}
             {form.method === 'credit_card' && (
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Cuotas</label>
                 <div className="grid grid-cols-4 gap-2">
                   {['1', '3', '6', '12'].map(c => (
                     <button key={c} type="button" onClick={() => set('installments', c)}
-                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-surface2 border border-app text-app2'
-                        }`}>
+                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c ? 'bg-blue-500 text-white' : 'bg-surface2 border border-app text-app2'}`}>
                       {c}x
                     </button>
                   ))}
@@ -623,7 +901,6 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
               </div>
             )}
 
-            {/* Notas */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Notas (opcional)</label>
               <input type="text" value={form.notes} onChange={e => set('notes', e.target.value)}
@@ -631,9 +908,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                 className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400" />
             </div>
 
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
-            )}
+            {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>}
 
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={onClose}
@@ -661,9 +936,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
     amount: '',
     category: '',
     description: '',
-    paid_at: new Date().toLocaleDateString('en-CA', {
-      timeZone: 'America/Argentina/Buenos_Aires'
-    }),
+    paid_at: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }),
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -699,11 +972,9 @@ function NewExpenseModal({ token, onClose, onCreated }: {
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
       onClick={onClose}>
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-6"
-        onClick={e => e.stopPropagation()}>
+      <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
         <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
         <h2 className="text-lg font-bold text-app mb-5">Registrar gasto</h2>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Monto</label>
@@ -721,10 +992,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
             <div className="grid grid-cols-3 gap-2">
               {CATEGORIAS_GASTO.map(c => (
                 <button key={c} type="button" onClick={() => set('category', c)}
-                  className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${form.category === c
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-surface2 border border-app text-app2 hover:border-app2'
-                    }`}>
+                  className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${form.category === c ? 'bg-blue-500 text-white' : 'bg-surface2 border border-app text-app2 hover:border-app2'}`}>
                   {c}
                 </button>
               ))}
@@ -744,9 +1012,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
               className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400" />
           </div>
 
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
-          )}
+          {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
@@ -754,7 +1020,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
               Cancelar
             </button>
             <button type="submit" disabled={loading}
-              className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
+              className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 active:scale-95 text-white font-semibold py-3 rounded-all transition-all">
               {loading ? 'Guardando...' : 'Registrar gasto'}
             </button>
           </div>

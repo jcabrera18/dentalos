@@ -14,6 +14,8 @@ export default function PatientDetailPage() {
   const [savingTooth, setSavingTooth] = useState(false)
   const [token, setToken] = useState('')
   const [files, setFiles] = useState<any[]>([])
+  const [fileUrls, setFileUrls] = useState<Record<string, string>>({})
+  const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null)
   const [toothDiagnostics, setToothDiagnostics] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -46,7 +48,9 @@ export default function PatientDetailPage() {
       const { data: fileList } = await sb.storage
         .from('patient-files')
         .list(`${params.id}/`)
-      setFiles(fileList ?? [])
+      const list = fileList ?? []
+      setFiles(list)
+      await loadFileUrls(list)
 
       setPatient(patientData.data)
       setNotes(patientData.data?.notes ?? '')
@@ -128,6 +132,19 @@ export default function PatientDetailPage() {
     setEditMode(false)
   }
 
+  async function loadFileUrls(fileList: any[]) {
+    if (fileList.length === 0) { setFileUrls({}); return }
+    const sb = createClient()
+    const paths = fileList.map((f) => `${params.id}/${f.name}`)
+    const { data } = await sb.storage.from('patient-files').createSignedUrls(paths, 3600)
+    const urls: Record<string, string> = {}
+    data?.forEach((item) => {
+      const name = item.path?.split('/').pop()
+      if (name && item.signedUrl) urls[name] = item.signedUrl
+    })
+    setFileUrls(urls)
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -145,7 +162,9 @@ export default function PatientDetailPage() {
       const path = `${params.id}/${fileName}`
       await sb.storage.from('patient-files').upload(path, file)
       const { data: fileList } = await sb.storage.from('patient-files').list(`${params.id}/`)
-      setFiles(fileList ?? [])
+      const list = fileList ?? []
+      setFiles(list)
+      await loadFileUrls(list)
     } finally {
       setUploading(false)
     }
@@ -155,15 +174,9 @@ export default function PatientDetailPage() {
     const sb = createClient()
     await sb.storage.from('patient-files').remove([`${params.id}/${fileName}`])
     const { data: fileList } = await sb.storage.from('patient-files').list(`${params.id}/`)
-    setFiles(fileList ?? [])
-  }
-
-  async function getFileUrl(fileName: string) {
-    const sb = createClient()
-    const { data } = await sb.storage
-      .from('patient-files')
-      .createSignedUrl(`${params.id}/${fileName}`, 3600)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    const list = fileList ?? []
+    setFiles(list)
+    await loadFileUrls(list)
   }
 
   if (loading) {
@@ -407,37 +420,49 @@ export default function PatientDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-800">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-4">
                   {files.map((file: any) => {
                     const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name)
                     const isPdf = /\.pdf$/i.test(file.name)
-                    const icon = isImage ? '🖼️' : isPdf ? '📄' : '📁'
+                    const url = fileUrls[file.name]
                     const size = file.metadata?.size
                       ? `${(file.metadata.size / 1024).toFixed(0)} KB`
                       : ''
                     const date = file.created_at
                       ? new Date(file.created_at).toLocaleDateString('es-AR', {
-                        day: 'numeric', month: 'short', year: 'numeric'
+                        day: 'numeric', month: 'short'
                       })
                       : ''
 
                     return (
-                      <div key={file.name} className="px-6 py-3 flex items-center gap-3">
-                        <span className="text-2xl flex-shrink-0">{icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{file.name}</div>
+                      <div key={file.name} className="group relative bg-surface2 rounded-xl overflow-hidden border border-app">
+                        {/* Thumbnail */}
+                        <button
+                          className="w-full aspect-square flex items-center justify-center overflow-hidden bg-surface3"
+                          onClick={() => {
+                            if (url) {
+                              if (isImage) setPreviewFile({ url, name: file.name })
+                              else window.open(url, '_blank')
+                            }
+                          }}
+                        >
+                          {isImage && url ? (
+                            <img
+                              src={url}
+                              alt={file.name}
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            />
+                          ) : (
+                            <span className="text-4xl">{isPdf ? '📄' : '📁'}</span>
+                          )}
+                        </button>
+                        {/* Info + acciones */}
+                        <div className="p-2">
+                          <div className="text-xs font-medium truncate text-app">{file.name}</div>
                           <div className="text-xs text-app3">{date} {size}</div>
-                        </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => getFileUrl(file.name)}
-                            className="text-xs bg-surface2 hover:bg-surface3 active:scale-95 text-gray-300 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            Ver
-                          </button>
                           <button
                             onClick={() => handleFileDelete(file.name)}
-                            className="text-xs bg-red-900/30 hover:bg-red-900/50 active:scale-95 text-red-400 px-3 py-1.5 rounded-lg transition-all"
+                            className="mt-1.5 w-full text-xs bg-red-900/20 hover:bg-red-900/40 active:scale-95 text-red-400 py-1 rounded-lg transition-all"
                           >
                             Borrar
                           </button>
@@ -582,6 +607,42 @@ export default function PatientDetailPage() {
         </div>
       </main>
 
+      {/* Lightbox previsualización */}
+      {previewFile && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div className="relative max-w-4xl max-h-full w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            <img
+              src={previewFile.url}
+              alt={previewFile.name}
+              className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
+            />
+            <div className="absolute top-3 right-3 flex gap-2">
+              <a
+                href={previewFile.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                onClick={e => e.stopPropagation()}
+              >
+                Abrir
+              </a>
+              <button
+                onClick={() => setPreviewFile(null)}
+                className="bg-black/60 hover:bg-black/80 text-white text-xl w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+              >
+                ×
+              </button>
+            </div>
+            <div className="absolute bottom-3 left-0 right-0 text-center">
+              <span className="bg-black/60 text-white text-xs px-3 py-1 rounded-full">{previewFile.name}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal edición paciente */}
       {editMode && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
@@ -703,7 +764,7 @@ const Q3 = [31, 32, 33, 34, 35, 36, 37, 38]
 const Q4 = [48, 47, 46, 45, 44, 43, 42, 41]
 
 type FaceColor = 'red' | 'blue' | null
-type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string; missing?: boolean }
+type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string; missing?: boolean; toExtract?: boolean }
 
 function ToothSVG({ state, onClick, isSelected, number }: {
   state: ToothState
@@ -712,14 +773,14 @@ function ToothSVG({ state, onClick, isSelected, number }: {
   number: number
 }) {
   function fc(face: keyof ToothState): string {
-    if (state.missing) return '#111827'
+    if (state.missing || state.toExtract) return '#111827'
     const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
     if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
     return 'transparent'
   }
 
-  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing
+  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing || state.toExtract
 
   return (
     <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
@@ -758,18 +819,26 @@ function ToothSVG({ state, onClick, isSelected, number }: {
               <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
             </>
           )}
+          {state.toExtract && (
+            <>
+              <line x1="5" y1="5" x2="35" y2="35" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+              <line x1="35" y1="5" x2="5" y2="35" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+            </>
+          )}
         </g>
 
         {/* Borde exterior — encima del clip */}
         <circle cx="20" cy="20" r="18"
           fill="transparent"
-          stroke={isSelected ? '#facc15' : state.missing ? '#374151' : '#4b5563'}
-          strokeWidth={isSelected ? "2" : "1.5"}
+          stroke={isSelected ? '#facc15' : state.missing ? '#374151' : state.toExtract ? '#f97316' : '#4b5563'}
+          strokeWidth={isSelected ? "2" : state.toExtract ? "2" : "1.5"}
+          strokeDasharray={state.toExtract && !isSelected ? "5 3" : undefined}
         />
       </svg>
       <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' :
         state.missing ? 'text-gray-700' :
-          hasAny ? 'text-app2' : 'text-app3'
+          state.toExtract ? 'text-orange-400' :
+            hasAny ? 'text-app2' : 'text-app3'
         }`}>
         {number}
       </span>
@@ -791,6 +860,8 @@ function OdontogramView({ odontogram, onSaveTooth }: {
     odontogram.forEach(t => {
       if (t.surfaces?.includes('missing')) {
         init[t.tooth_number] = { missing: true, note: t.notes ?? '' }
+      } else if (t.surfaces?.includes('to_extract')) {
+        init[t.tooth_number] = { toExtract: true, note: t.notes ?? '' }
       } else {
         const surfaces: Record<string, FaceColor> = {}
         if (t.surfaces) {
@@ -809,37 +880,37 @@ function OdontogramView({ odontogram, onSaveTooth }: {
     return teeth[n] ?? {}
   }
 
-  function toggleFace(n: number, face: 'V' | 'M' | 'O' | 'D' | 'L') {
-    setTeeth(prev => {
-      const current = prev[n] ?? {}
-      const currentColor = current[face]
-      let newColor: FaceColor
-      if (currentColor === null || currentColor === undefined) {
-        newColor = paintColor
-      } else if (currentColor === paintColor) {
-        newColor = null
-      } else {
-        newColor = paintColor
-      }
-      return { ...prev, [n]: { ...current, [face]: newColor } }
-    })
+  function buildSurfaces(state: ToothState): string {
+    if (state.missing) return 'missing'
+    if (state.toExtract) return 'to_extract'
+    return (['V', 'M', 'O', 'D', 'L'] as const)
+      .filter(f => state[f])
+      .map(f => `${f}:${state[f]}`)
+      .join(',')
+  }
+
+  async function toggleFace(n: number, face: 'V' | 'M' | 'O' | 'D' | 'L') {
+    const current = teeth[n] ?? {}
+    const currentColor = current[face]
+    const newColor: FaceColor = (currentColor === null || currentColor === undefined)
+      ? paintColor
+      : currentColor === paintColor ? null : paintColor
+    const newState = { ...current, [face]: newColor }
+    setTeeth(prev => ({ ...prev, [n]: newState }))
+    setSaving(true)
+    await onSaveTooth(n, { surfaces: buildSurfaces(newState) }, newState.note ?? '')
+    setSaving(false)
   }
 
   function setNote(n: number, note: string) {
     setTeeth(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), note } }))
   }
 
-  async function handleSave(n: number) {
-    setSaving(true)
+  async function saveNote(n: number) {
     const state = teeth[n] ?? {}
-    const surfaces = state.missing
-      ? ['missing']
-      : (['V', 'M', 'O', 'D', 'L'] as const)
-        .filter(f => state[f])
-        .map(f => `${f}:${state[f]}`)
-    await onSaveTooth(n, { surfaces: surfaces.join(',') }, state.note ?? '')
+    setSaving(true)
+    await onSaveTooth(n, { surfaces: buildSurfaces(state) }, state.note ?? '')
     setSaving(false)
-    setSelectedTooth(null)
   }
 
   function Quadrant({ teeth: qs, label }: { teeth: number[]; label: string }) {
@@ -865,7 +936,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
   function BigToothEditor({ n }: { n: number }) {
     const state = getState(n)
     function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
-      if (state.missing) return '#111827'
+      if (state.missing || state.toExtract) return '#111827'
       const c = state[face]
       if (c === 'red') return '#dc2626'
       if (c === 'blue') return '#2563eb'
@@ -913,12 +984,19 @@ function OdontogramView({ odontogram, onSaveTooth }: {
               <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
             </>
           )}
+          {state.toExtract && (
+            <>
+              <line x1="5" y1="5" x2="35" y2="35" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+              <line x1="35" y1="5" x2="5" y2="35" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+            </>
+          )}
         </g>
 
         <circle cx="20" cy="20" r="18"
           fill="transparent"
-          stroke="#facc15"
+          stroke={state.toExtract ? '#f97316' : '#facc15'}
           strokeWidth="1.5"
+          strokeDasharray={state.toExtract ? "6 3" : undefined}
           pointerEvents="none"
         />
       </svg>
@@ -980,10 +1058,14 @@ function OdontogramView({ odontogram, onSaveTooth }: {
             {/* Notas */}
             <div className="flex-1 flex flex-col gap-3">
               <div>
-                <div className="text-xs text-app2 uppercase tracking-wider mb-1">Notas</div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs text-app2 uppercase tracking-wider">Notas</div>
+                  {saving && <span className="text-[10px] text-app3">Guardando...</span>}
+                </div>
                 <textarea
                   value={getState(selectedTooth).note ?? ''}
                   onChange={e => setNote(selectedTooth, e.target.value)}
+                  onBlur={() => saveNote(selectedTooth)}
                   rows={4}
                   placeholder="Observaciones, diagnóstico, procedimiento indicado..."
                   className="w-full bg-surface3 border border-gray-600 rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-yellow-500 resize-none"
@@ -991,14 +1073,28 @@ function OdontogramView({ odontogram, onSaveTooth }: {
               </div>
 
               <div className="flex flex-col gap-2">
-                {/* Fila 1: ausente + borrar */}
+                {/* Fila 1: próxima a extraer + ausente */}
                 <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      const newToExtract = !getState(selectedTooth).toExtract
+                      const newState = { toExtract: newToExtract, note: getState(selectedTooth).note }
+                      setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
+                      const surfaces = newToExtract ? 'to_extract' : ''
+                      await onSaveTooth(selectedTooth, { surfaces }, newState.note ?? '')
+                    }}
+                    className={`flex-1 text-xs font-semibold py-2.5 rounded-xl transition-all active:scale-95 border ${getState(selectedTooth).toExtract
+                      ? 'bg-orange-900/60 border-orange-600 text-orange-300'
+                      : 'bg-surface2 border-gray-600 text-app2 hover:border-orange-700 hover:text-orange-400'
+                      }`}
+                  >
+                    {getState(selectedTooth).toExtract ? '⚠ Próxima a extraer' : 'Próxima a extraer'}
+                  </button>
                   <button
                     onClick={async () => {
                       const newMissing = !getState(selectedTooth).missing
                       const newState = { missing: newMissing, note: getState(selectedTooth).note }
                       setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
-                      // Guardar automáticamente
                       const surfaces = newMissing ? 'missing' : ''
                       await onSaveTooth(selectedTooth, { surfaces }, newState.note ?? '')
                     }}
@@ -1007,35 +1103,24 @@ function OdontogramView({ odontogram, onSaveTooth }: {
                       : 'bg-surface2 border-gray-600 text-app2 hover:border-red-700 hover:text-red-400'
                       }`}
                   >
-                    {getState(selectedTooth).missing ? '✕ Ausente / Extraído' : 'Marcar ausente / extraído'}
+                    {getState(selectedTooth).missing ? '✕ Ausente' : 'Ausente / Extraído'}
                   </button>
+                </div>
+                {/* Fila 2: borrar */}
+                <div className="flex gap-2">
                   <button
                     onClick={async () => {
                       const newState = { note: getState(selectedTooth).note }
                       setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
                       await onSaveTooth(selectedTooth, { surfaces: '' }, newState.note ?? '')
                     }}
-                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-surface2 border border-gray-600 text-app2 hover:border-gray-500 transition-all active:scale-95"
+                    className="flex-1 px-4 py-2 rounded-xl text-xs font-semibold bg-surface2 border border-gray-600 text-app2 hover:border-gray-500 transition-all active:scale-95"
                     title="Borrar colores"
                   >
-                    Borrar
+                    Borrar marcas
                   </button>
                 </div>
 
-                {/* Fila 2: cancelar + guardar */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedTooth(null)}
-                    className="flex-1 bg-surface3 hover:bg-gray-600 text-gray-300 text-sm font-semibold py-3 rounded-xl transition-colors">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => handleSave(selectedTooth)}
-                    disabled={saving}
-                    className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-gray-900 text-sm font-bold py-3 rounded-xl transition-all active:scale-95">
-                    {saving ? 'Guardando...' : 'Guardar pieza'}
-                  </button>
-                </div>
               </div>
 
             </div>
@@ -1044,7 +1129,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
       )}
 
       {/* Leyenda */}
-      <div className="flex gap-4 mt-4 text-xs text-app3">
+      <div className="flex flex-wrap gap-4 mt-4 text-xs text-app3">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
           Ya realizado
@@ -1052,6 +1137,10 @@ function OdontogramView({ odontogram, onSaveTooth }: {
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
           Por realizar
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-full border-2 border-dashed border-orange-400 inline-block" />
+          Próxima a extraer
         </span>
       </div>
 

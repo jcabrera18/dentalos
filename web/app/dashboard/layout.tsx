@@ -22,6 +22,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setMounted(true)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        router.push('/')
+      }
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   async function handleLogout() {
