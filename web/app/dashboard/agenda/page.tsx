@@ -55,6 +55,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function AgendaPage() {
   const [appointments, setAppointments] = useState<any[]>([])
+  const [blocks, setBlocks]             = useState<any[]>([])
   const [loading, setLoading]           = useState(true)
   const [token, setToken]               = useState('')
   const [weekOffset, setWeekOffset]     = useState(0)
@@ -65,6 +66,9 @@ export default function AgendaPage() {
   const [patients, setPatients]         = useState<any[]>([])
   const [editingAppt, setEditingAppt]   = useState<any>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [showNewBlock, setShowNewBlock] = useState(false)
+  const [newBlockDate, setNewBlockDate] = useState<string | null>(null)
+  const [selectedBlock, setSelectedBlock] = useState<any>(null)
   const router   = useRouter()
   const supabase = createClient()
 
@@ -78,7 +82,7 @@ export default function AgendaPage() {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
       const [_, pData] = await Promise.all([
-        fetchAppointments(session.access_token),
+        fetchAll(session.access_token),
         apiFetch('/patients?limit=100', { token: session.access_token })
       ])
       setPatients(pData.data ?? [])
@@ -87,11 +91,19 @@ export default function AgendaPage() {
     load()
   }, [weekOffset])
 
-  async function fetchAppointments(t: string) {
+  async function fetchAll(t: string) {
     setLoading(true)
-    const data = await apiFetch(`/appointments?from=${from}&to=${to}`, { token: t })
-    setAppointments(data.data ?? [])
+    const [apptData, blockData] = await Promise.all([
+      apiFetch(`/appointments?from=${from}&to=${to}`, { token: t }),
+      apiFetch(`/schedule-blocks?from=${from}&to=${to}`, { token: t }),
+    ])
+    setAppointments(apptData.data ?? [])
+    setBlocks(blockData.data ?? [])
     setLoading(false)
+  }
+
+  async function fetchAppointments(t: string) {
+    return fetchAll(t)
   }
 
   async function updateStatus(id: string, status: string) {
@@ -99,7 +111,7 @@ export default function AgendaPage() {
       method: 'PATCH', token,
       body: JSON.stringify({ status })
     })
-    await fetchAppointments(token)
+    await fetchAll(token)
     setSelectedAppt(null)
   }
 
@@ -113,6 +125,12 @@ export default function AgendaPage() {
     setConfirmDelete(null)
   }
 
+  async function deleteBlock(id: string) {
+    await apiFetch(`/schedule-blocks/${id}`, { method: 'DELETE', token })
+    setBlocks(prev => prev.filter(b => b.id !== id))
+    setSelectedBlock(null)
+  }
+
   const today = todayArg()
 
   const dayAppts = appointments.filter(a => {
@@ -120,10 +138,22 @@ export default function AgendaPage() {
     return d === selectedDay && a.status !== 'cancelled'
   })
 
+  const dayBlocks = blocks.filter(b => {
+    const d = new Date(b.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    return d === selectedDay
+  })
+
   function apptsByDay(dateStr: string) {
     return appointments.filter(a => {
       const d = new Date(a.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
       return d === dateStr && a.status !== 'cancelled'
+    })
+  }
+
+  function blocksByDay(dateStr: string) {
+    return blocks.filter(b => {
+      const d = new Date(b.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+      return d === dateStr
     })
   }
 
@@ -156,6 +186,12 @@ export default function AgendaPage() {
           </div>
           {selectedAppt.insurance_name && (
             <div className="text-app3 text-xs mt-1">{selectedAppt.insurance_name}</div>
+          )}
+          {selectedAppt.chief_complaint && (
+            <div className="mt-3 bg-surface2 rounded-xl px-3 py-2.5 border-l-2 border-amber-400">
+              <div className="text-xs text-app3 uppercase tracking-wider mb-1">Motivo de consulta</div>
+              <div className="text-sm text-app2">{selectedAppt.chief_complaint}</div>
+            </div>
           )}
         </div>
 
@@ -233,6 +269,7 @@ export default function AgendaPage() {
               const isToday    = dateStr === today
               const isSelected = dateStr === selectedDay
               const hasAppts   = apptsByDay(dateStr).length > 0
+              const hasBlocks  = blocksByDay(dateStr).length > 0
               return (
                 <button key={i} onClick={() => setSelectedDay(dateStr)}
                   className="flex flex-col items-center gap-0.5 py-1 rounded-xl transition-colors">
@@ -243,7 +280,10 @@ export default function AgendaPage() {
                   }`}>
                     {d.getDate()}
                   </span>
-                  {hasAppts && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}`} />}
+                  <div className="flex gap-0.5">
+                    {hasAppts && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}`} />}
+                    {hasBlocks && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-400'}`} />}
+                  </div>
                 </button>
               )
             })}
@@ -251,7 +291,7 @@ export default function AgendaPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {dayAppts.length === 0 ? (
+          {dayBlocks.length === 0 && dayAppts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="text-4xl mb-3">📅</div>
               <div className="text-app2 font-medium">Sin turnos</div>
@@ -263,6 +303,26 @@ export default function AgendaPage() {
             </div>
           ) : (
             <div className="space-y-3">
+              {dayBlocks.map(block => (
+                <div key={block.id} onClick={() => setSelectedBlock(block)}
+                  className="rounded-xl border-l-4 border-l-slate-400 bg-slate-400/10 p-4 cursor-pointer active:scale-95 transition-transform">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-600 dark:text-slate-300 truncate">🔒 Bloqueado</div>
+                      {block.reason && <div className="text-sm text-slate-500 truncate">{block.reason}</div>}
+                    </div>
+                    <div className="text-right flex-shrink-0 font-mono text-sm font-bold text-slate-500">
+                      {new Date(block.starts_at).toLocaleTimeString('es-AR', {
+                        hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires'
+                      })}
+                      {' – '}
+                      {new Date(block.ends_at).toLocaleTimeString('es-AR', {
+                        hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires'
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
               {[...dayAppts].sort((a, b) =>
                 new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
               ).map(appt => (
@@ -298,7 +358,14 @@ export default function AgendaPage() {
             {weekDates[0].toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
             {weekDates[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
-          <WeekNav />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
+              className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
+              🔒 Bloquear horario
+            </button>
+            <WeekNav />
+          </div>
         </div>
 
         {/* Contenedor scroll — header sticky + grid body */}
@@ -338,6 +405,7 @@ export default function AgendaPage() {
               const dateStr = formatDate(d)
               const isToday = dateStr === today
               const dayApts = apptsByDay(dateStr)
+              const dayBlks = blocksByDay(dateStr)
               return (
                 <div key={dayIdx}
                   className={`relative border-l border-gray-200 dark:border-gray-800 ${isToday ? 'bg-blue-500/5' : ''}`}
@@ -356,6 +424,21 @@ export default function AgendaPage() {
                     <div key={i} className="absolute w-full border-t border-gray-200 dark:border-gray-800"
                       style={{ top: i * 64 }} />
                   ))}
+                  {/* Schedule blocks */}
+                  {dayBlks.map(block => (
+                    <div key={block.id}
+                      onClick={() => setSelectedBlock(block)}
+                      className="absolute left-1 right-1 rounded-md border-l-4 border-l-slate-400 bg-slate-400/20 dark:bg-slate-600/25 px-1.5 py-1 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                      style={{
+                        top:    getSlotTop(block.starts_at),
+                        height: getSlotHeight(block.starts_at, block.ends_at),
+                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(100,116,139,0.1) 4px, rgba(100,116,139,0.1) 8px)',
+                      }}>
+                      <div className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">🔒 Bloqueado</div>
+                      {block.reason && <div className="text-xs text-slate-500 truncate opacity-80">{block.reason}</div>}
+                    </div>
+                  ))}
+                  {/* Appointments */}
                   {dayApts.map(appt => (
                     <div key={appt.id}
                       onClick={() => setSelectedAppt(appt)}
@@ -375,12 +458,19 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {/* FAB */}
+      {/* FABs */}
       <button
         onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setShowNewAppt(true) }}
         className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
       >
         +
+      </button>
+      <button
+        onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
+        className="md:hidden fixed bottom-24 right-24 w-12 h-12 bg-slate-500 hover:bg-slate-600 rounded-full flex items-center justify-center text-lg shadow-lg transition-colors z-30"
+        title="Bloquear horario"
+      >
+        🔒
       </button>
 
       {showNewAppt && newApptSlot && (
@@ -392,12 +482,67 @@ export default function AgendaPage() {
           onClose={() => setShowNewAppt(false)}
           onCreated={async () => {
             setShowNewAppt(false)
-            await fetchAppointments(token)
+            await fetchAll(token)
           }}
           onPatientCreated={(patient) => {
             setPatients((prev: any[]) => [patient, ...prev])
           }}
         />
+      )}
+
+      {showNewBlock && (
+        <BlockModal
+          token={token}
+          defaultDate={newBlockDate ?? selectedDay}
+          onClose={() => setShowNewBlock(false)}
+          onCreated={async () => {
+            setShowNewBlock(false)
+            await fetchAll(token)
+          }}
+        />
+      )}
+
+      {selectedBlock && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedBlock(null)}>
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-slate-400/20 flex items-center justify-center text-xl">🔒</div>
+              <div>
+                <div className="font-bold text-app">Horario bloqueado</div>
+                <div className="text-sm text-app3">
+                  {new Date(selectedBlock.starts_at).toLocaleString('es-AR', {
+                    weekday: 'short', day: 'numeric', month: 'short',
+                    hour: '2-digit', minute: '2-digit',
+                    timeZone: 'America/Argentina/Buenos_Aires'
+                  })}
+                  {' – '}
+                  {new Date(selectedBlock.ends_at).toLocaleTimeString('es-AR', {
+                    hour: '2-digit', minute: '2-digit',
+                    timeZone: 'America/Argentina/Buenos_Aires'
+                  })}
+                </div>
+              </div>
+            </div>
+            {selectedBlock.reason && (
+              <div className="mb-4 bg-surface2 rounded-xl px-3 py-2.5 border-l-2 border-slate-400">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Motivo</div>
+                <div className="text-sm text-app2">{selectedBlock.reason}</div>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setSelectedBlock(null)}
+                className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors">
+                Cerrar
+              </button>
+              <button onClick={() => deleteBlock(selectedBlock.id)}
+                className="flex-1 bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-600 dark:text-red-400 font-semibold py-3 rounded-xl transition-colors">
+                🗑 Eliminar bloqueo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editingAppt && (
@@ -419,7 +564,7 @@ export default function AgendaPage() {
                   method: 'PATCH', token,
                   body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, appointment_type: type || undefined })
                 })
-                await fetchAppointments(token)
+                await fetchAll(token)
                 setEditingAppt(null)
               }}
               className="space-y-3"
@@ -487,6 +632,119 @@ export default function AgendaPage() {
   )
 }
 
+function BlockModal({ token, defaultDate, onClose, onCreated }: {
+  token: string
+  defaultDate: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [date, setDate]       = useState(defaultDate)
+  const [allDay, setAllDay]   = useState(false)
+  const [startTime, setStartTime] = useState('09:00')
+  const [endTime, setEndTime]     = useState('10:00')
+  const [reason, setReason]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    const startsAt = allDay
+      ? `${date}T00:00:00-03:00`
+      : `${date}T${startTime}:00-03:00`
+    const endsAt = allDay
+      ? `${date}T23:59:59-03:00`
+      : `${date}T${endTime}:00-03:00`
+
+    if (new Date(endsAt) <= new Date(startsAt)) {
+      setError('La hora de fin debe ser posterior a la de inicio.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await apiFetch('/schedule-blocks', {
+        method: 'POST', token,
+        body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, reason: reason || undefined }),
+      })
+      onCreated()
+    } catch (err: any) {
+      setError(err.message ?? 'Error al crear el bloqueo.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6"
+        onClick={e => e.stopPropagation()}>
+        <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-xl">🔒</span>
+          <h2 className="text-lg font-bold text-app">Bloquear horario</h2>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Fecha</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button type="button"
+              onClick={() => setAllDay(v => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${allDay ? 'bg-slate-500' : 'bg-surface3'}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${allDay ? 'left-5' : 'left-0.5'}`} />
+            </button>
+            <span className="text-sm text-app2">Todo el día</span>
+          </div>
+
+          {!allDay && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Desde</label>
+                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Hasta</label>
+                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">
+              Motivo <span className="text-app3 font-normal normal-case">(opcional)</span>
+            </label>
+            <input type="text" value={reason} onChange={e => setReason(e.target.value)}
+              placeholder="Ej: Congreso, Vacaciones..."
+              className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
+          </div>
+
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
+              {loading ? 'Bloqueando...' : 'Bloquear'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, onPatientCreated }: {
   token: string
   date: string
@@ -518,7 +776,7 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, 
     p.phone.includes(search)
   ).slice(0, 5)
 
-const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']  
+const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
 const DURACIONES = [
     { value: '30', label: '30m' },
     { value: '45', label: '45m' },

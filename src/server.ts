@@ -14,6 +14,7 @@ import { paymentsRoutes }     from './modules/payments/routes.js'
 import { treatmentsRoutes }   from './modules/treatments/routes.js'
 import { notificationsRoutes } from './modules/notifications/routes.js'
 import { authRoutes }         from './modules/auth/routes.js'
+import { bookingRoutes }      from './modules/booking/routes.js'
 
 import jwksRsa from 'jwks-rsa'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
@@ -112,6 +113,7 @@ await app.register(appointmentsRoutes,  { prefix: '/appointments' })
 await app.register(paymentsRoutes,      { prefix: '/payments' })
 await app.register(treatmentsRoutes,    { prefix: '/treatments' })
 await app.register(notificationsRoutes, { prefix: '/notifications' })
+await app.register(bookingRoutes,       { prefix: '/public/booking' }) // No auth required
 
 // ── Health check ──────────────────────────────
 

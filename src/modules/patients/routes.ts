@@ -86,7 +86,7 @@ export async function patientsRoutes(app: FastifyInstance) {
       .from('patients')
       .select(`
         *,
-        appointments(id, starts_at, status, appointment_type, professional_id),
+        appointments(id, starts_at, status, appointment_type, professional_id, chief_complaint, clinical_notes),
         treatments(id, name, status, sessions_planned, sessions_done, total_quoted, total_paid),
         odontogram(tooth_number, condition, notes)
       `)

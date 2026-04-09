@@ -556,6 +556,16 @@ export default function PatientDetailPage() {
                                     appt.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
                               </span>
                             </div>
+                            {appt.chief_complaint && (
+                              <div className="mt-2 bg-surface2/60 rounded-lg px-4 py-3 border-l-2 border-amber-400/70">
+                                <div className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider mb-1">
+                                  Motivo de consulta
+                                </div>
+                                <div className="text-sm text-app2 whitespace-pre-wrap">
+                                  {appt.chief_complaint}
+                                </div>
+                              </div>
+                            )}
                             {appt.clinical_notes ? (
                               <div className="mt-2 bg-surface2/60 rounded-lg px-4 py-3 border-l-2 border-blue-500/50">
                                 <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wider mb-1">
