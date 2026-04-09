@@ -63,6 +63,9 @@ export default function PaymentsPage() {
   const [expenses, setExpenses] = useState<any[]>([])
   const [expensePage, setExpensePage] = useState(1)
   const [hasMoreExpenses, setHasMoreExpenses] = useState(false)
+
+  // ── Balance (movimientos combinados) ──
+  const [balancePage, setBalancePage] = useState(1)
   const [expenseSummaryWeek, setExpenseSummaryWeek] = useState<any>(null)
   const [expenseSummaryMonth, setExpenseSummaryMonth] = useState<any>(null)
   const [expenseSummaryYear, setExpenseSummaryYear] = useState<any>(null)
@@ -244,6 +247,7 @@ export default function PaymentsPage() {
 
   function handleTabChange(t: typeof tab) {
     setTab(t)
+    if (t === 'balance') setBalancePage(1)
     if (t === 'pacientes' && attendedByMonth.length === 0 && !loadingMetrics) {
       fetchPatientMetrics(token)
     }
@@ -251,8 +255,49 @@ export default function PaymentsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-app flex items-center justify-center">
-        <div className="text-app2">Cargando...</div>
+      <div className="min-h-screen bg-app">
+        {/* Tabs bar skeleton */}
+        <div className="px-4 py-3 border-b border-app flex items-center gap-2 animate-pulse">
+          <div className="flex gap-1 flex-1">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-9 bg-surface2 rounded-lg w-24" />
+            ))}
+          </div>
+          <div className="h-9 bg-surface2 rounded-lg w-20" />
+        </div>
+        <main className="p-6 max-w-4xl mx-auto animate-pulse">
+          {/* Summary cards skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-surface border border-app rounded-xl p-5 space-y-3">
+                <div className="h-3 bg-surface2 rounded w-20" />
+                <div className="h-7 bg-surface2 rounded w-28" />
+                <div className="h-3 bg-surface2 rounded w-16" />
+                <div className="space-y-2 pt-1">
+                  <div className="h-3 bg-surface2 rounded w-full" />
+                  <div className="h-3 bg-surface2 rounded w-4/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Chart skeleton */}
+          <div className="bg-surface border border-app rounded-xl p-5 mb-6">
+            <div className="h-4 bg-surface2 rounded w-32 mb-4" />
+            <div className="h-40 bg-surface2 rounded-lg" />
+          </div>
+          {/* List rows skeleton */}
+          <div className="space-y-2">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-surface border border-app rounded-xl p-4 flex items-center gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-surface2 rounded w-48" />
+                  <div className="h-3 bg-surface2 rounded w-32" />
+                </div>
+                <div className="h-5 bg-surface2 rounded w-20" />
+              </div>
+            ))}
+          </div>
+        </main>
       </div>
     )
   }
@@ -485,7 +530,15 @@ export default function PaymentsPage() {
         )}
 
         {/* ── BALANCE ── */}
-        {tab === 'balance' && (
+        {tab === 'balance' && (() => {
+          const BPAGE = 15
+          const combined = [
+            ...payments.map(p => ({ ...p, _type: 'ingreso' as const, date: p.paid_at })),
+            ...expenses.map(e => ({ ...e, _type: 'gasto' as const, date: e.paid_at })),
+          ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          const totalPages = Math.ceil(combined.length / BPAGE) || 1
+          const pageItems = combined.slice((balancePage - 1) * BPAGE, balancePage * BPAGE)
+          return (
           <>
             {(['week', 'month', 'year'] as const).map((period, idx) => {
               const labels = ['Esta semana', 'Este mes', 'Este año']
@@ -565,8 +618,52 @@ export default function PaymentsPage() {
                 </div>
               )
             })}
+
+            {/* Tabla combinada de movimientos */}
+            {combined.length > 0 && (
+              <div className="bg-surface border border-app rounded-xl overflow-hidden mt-4">
+                <div className="px-6 py-4 border-b border-app flex items-center justify-between">
+                  <h3 className="font-semibold">Últimos movimientos</h3>
+                  <span className="text-xs text-app3">{combined.length} registros · Pág. {balancePage}/{totalPages}</span>
+                </div>
+                <div className="divide-y divide-app">
+                  {pageItems.map((item: any) => (
+                    <div key={`${item._type}-${item.id}`} className="px-6 py-3 flex items-center gap-4">
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${item._type === 'ingreso' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                        {item._type === 'ingreso' ? '💰' : '📦'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {item._type === 'ingreso'
+                            ? (item.patients ? `${item.patients.first_name} ${item.patients.last_name}` : 'Sin paciente')
+                            : item.category}
+                        </div>
+                        <div className="text-xs text-app3">
+                          {item._type === 'ingreso'
+                            ? (METODOS.find((m: any) => m.value === item.method)?.label ?? item.method)
+                            : item.description || ''}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className={`font-bold text-sm ${item._type === 'ingreso' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                          {item._type === 'ingreso' ? '+' : '-'}{formatARS(Number(item.amount))}
+                        </div>
+                        <div className="text-xs text-app3">{formatDateAR(item.date)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Pagination
+                  page={balancePage}
+                  hasMore={balancePage < totalPages}
+                  onPrev={() => setBalancePage(p => Math.max(1, p - 1))}
+                  onNext={() => setBalancePage(p => p + 1)}
+                />
+              </div>
+            )}
           </>
-        )}
+          )
+        })()}
 
         {/* ── PACIENTES ── */}
         {tab === 'pacientes' && (
@@ -972,7 +1069,8 @@ function NewExpenseModal({ token, onClose, onCreated }: {
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
       onClick={onClose}>
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface border border-app rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-6">
         <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
         <h2 className="text-lg font-bold text-app mb-5">Registrar gasto</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1025,6 +1123,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   )

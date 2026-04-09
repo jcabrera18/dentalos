@@ -245,8 +245,46 @@ export default function AgendaPage() {
 
   if (loading && appointments.length === 0) {
     return (
-      <div className="min-h-screen bg-app flex items-center justify-center">
-        <div className="text-app2">Cargando...</div>
+      <div className="bg-app text-app flex flex-col h-[calc(100vh-57px)] animate-pulse">
+        {/* Week nav skeleton */}
+        <div className="border-b border-app px-4 py-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="h-4 bg-surface2 rounded w-32" />
+            <div className="flex gap-2">
+              <div className="h-7 w-7 bg-surface2 rounded-lg" />
+              <div className="h-7 w-7 bg-surface2 rounded-lg" />
+            </div>
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {[...Array(7)].map((_, i) => (
+              <div key={i} className="flex flex-col items-center gap-1 py-1">
+                <div className="h-3 bg-surface2 rounded w-6" />
+                <div className="h-8 w-8 bg-surface2 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Time grid skeleton */}
+        <div className="flex-1 overflow-hidden relative">
+          <div className="flex h-full">
+            <div className="w-14 flex-shrink-0 border-r border-app flex flex-col">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="h-16 flex items-start pt-1 px-2">
+                  <div className="h-3 bg-surface2 rounded w-8" />
+                </div>
+              ))}
+            </div>
+            <div className="flex-1 grid grid-cols-7">
+              {[...Array(7)].map((_, col) => (
+                <div key={col} className="border-r border-app last:border-r-0">
+                  {[...Array(8)].map((_, row) => (
+                    <div key={row} className="h-16 border-b border-app/40" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -677,8 +715,9 @@ function BlockModal({ token, defaultDate, onClose, onCreated }: {
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
       onClick={onClose}>
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6"
+      <div className="bg-surface border border-app rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
+        <div className="p-6">
         <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
         <div className="flex items-center gap-2 mb-5">
           <span className="text-xl">🔒</span>
@@ -740,6 +779,7 @@ function BlockModal({ token, defaultDate, onClose, onCreated }: {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   )

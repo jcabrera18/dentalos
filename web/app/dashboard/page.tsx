@@ -64,8 +64,36 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-app flex items-center justify-center">
-        <div className="text-app2">Cargando...</div>
+      <div className="min-h-screen bg-app">
+        <main className="p-6 max-w-6xl mx-auto animate-pulse">
+          {/* Greeting skeleton */}
+          <div className="mb-6">
+            <div className="h-8 bg-surface2 rounded-lg w-64 mb-2" />
+            <div className="h-4 bg-surface2 rounded w-40" />
+          </div>
+          {/* Stats skeleton */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-surface border border-app rounded-xl p-4">
+                <div className="h-3 bg-surface2 rounded w-20 mb-3" />
+                <div className="h-8 bg-surface2 rounded w-12" />
+              </div>
+            ))}
+          </div>
+          {/* Agenda skeleton */}
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-surface border border-app rounded-xl p-4 flex items-center gap-4">
+                <div className="h-10 w-10 bg-surface2 rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-surface2 rounded w-40" />
+                  <div className="h-3 bg-surface2 rounded w-24" />
+                </div>
+                <div className="h-6 bg-surface2 rounded-full w-20" />
+              </div>
+            ))}
+          </div>
+        </main>
       </div>
     )
   }

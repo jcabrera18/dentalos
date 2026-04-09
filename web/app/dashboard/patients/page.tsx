@@ -41,8 +41,29 @@ export default function PatientsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-app flex items-center justify-center">
-        <div className="text-app2">Cargando...</div>
+      <div className="min-h-screen bg-app">
+        <main className="p-6 max-w-4xl mx-auto animate-pulse">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="h-6 bg-surface2 rounded w-28" />
+            <div className="h-9 bg-surface2 rounded-lg w-36" />
+          </div>
+          {/* Search skeleton */}
+          <div className="mb-6 h-12 bg-surface2 rounded-xl" />
+          {/* List skeleton */}
+          <div className="space-y-2">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-surface border border-app rounded-xl p-4 flex items-center gap-4">
+                <div className="h-10 w-10 bg-surface2 rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-surface2 rounded w-48" />
+                  <div className="h-3 bg-surface2 rounded w-32" />
+                </div>
+                <div className="h-4 bg-surface2 rounded w-16" />
+              </div>
+            ))}
+          </div>
+        </main>
       </div>
     )
   }

@@ -85,8 +85,27 @@ export default function NewAppointmentPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-app flex items-center justify-center">
-        <div className="text-app2">Cargando...</div>
+      <div className="min-h-screen bg-app">
+        <main className="p-6 max-w-lg mx-auto animate-pulse">
+          {/* Patient card skeleton */}
+          <div className="bg-surface border border-app rounded-xl p-4 mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 bg-surface2 rounded-full flex-shrink-0" />
+            <div className="space-y-2">
+              <div className="h-4 bg-surface2 rounded w-36" />
+              <div className="h-3 bg-surface2 rounded w-24" />
+            </div>
+          </div>
+          {/* Form skeleton */}
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-14 bg-surface2 rounded-xl" />
+              <div className="h-14 bg-surface2 rounded-xl" />
+            </div>
+            <div className="h-14 bg-surface2 rounded-xl" />
+            <div className="h-14 bg-surface2 rounded-xl" />
+            <div className="h-14 bg-surface2 rounded-xl" />
+          </div>
+        </main>
       </div>
     )
   }
