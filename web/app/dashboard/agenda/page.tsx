@@ -442,13 +442,13 @@ export default function AgendaPage() {
                   {dayApts.map(appt => (
                     <div key={appt.id}
                       onClick={() => setSelectedAppt(appt)}
-                      className={`absolute left-1 right-1 rounded-md border-l-4 px-1.5 py-1 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}
+                      className={`absolute left-1 right-1 rounded-md border-l-4 px-1.5 py-0.5 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}
                       style={{
                         top:    getSlotTop(appt.starts_at),
                         height: getSlotHeight(appt.starts_at, appt.ends_at),
                       }}>
-                      <div className="text-xs font-bold truncate">{appt.patient_name}</div>
-                      <div className="text-xs opacity-70 truncate">{appt.appointment_type}</div>
+                      <div className="text-xs font-bold leading-tight truncate">{appt.patient_name}</div>
+                      <div className="text-[10px] leading-tight opacity-70 truncate">{appt.appointment_type}</div>
                     </div>
                   ))}
                 </div>
