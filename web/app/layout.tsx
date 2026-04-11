@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { Providers } from './providers'
 import { PHProvider } from './providers/posthog'
 import { PostHogPageview } from './providers/pageview'
@@ -42,6 +43,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" suppressHydrationWarning className="dark">
+      <head>
+        {/* Google Ads Conversion Tracking */}
+        <Script 
+          src="https://www.googletagmanager.com/gtag/js?id=AW-18082738848" 
+          strategy="afterInteractive"
+        />
+        <Script 
+          id="google-ads-config" 
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'AW-18082738848');
+            `,
+          }}
+        />
+      </head>
       <body>
         <PHProvider>
           <Suspense>

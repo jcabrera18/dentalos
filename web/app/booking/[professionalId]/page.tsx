@@ -188,7 +188,7 @@ export default function BookingPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div
           className="w-8 h-8 rounded-full border-4 border-gray-200 animate-spin"
-          style={{ borderTopColor: '#6366f1' }}
+          style={{ borderTopColor: '#10b981' }}
         />
       </div>
     )
@@ -204,7 +204,7 @@ export default function BookingPage() {
     )
   }
 
-  const accent = professional?.color ?? '#6366f1'
+  const accent = professional?.color ?? '#10b981'
   const initials = `${professional?.first_name?.[0] ?? ''}${professional?.last_name?.[0] ?? ''}`
 
   return (
