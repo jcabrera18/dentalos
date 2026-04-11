@@ -259,7 +259,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors active:scale-95">
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors active:scale-95"
             >
               {saving ? 'Agendando...' : 'Confirmar turno'}
             </button>
