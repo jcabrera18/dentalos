@@ -58,6 +58,8 @@ export default function AgendaPage() {
   const [blocks, setBlocks]             = useState<any[]>([])
   const [loading, setLoading]           = useState(true)
   const [token, setToken]               = useState('')
+  const [userId, setUserId]             = useState('')
+  const [linkCopied, setLinkCopied]     = useState(false)
   const [weekOffset, setWeekOffset]     = useState(0)
   const [selectedDay, setSelectedDay]   = useState(todayArg())
   const [selectedAppt, setSelectedAppt] = useState<any>(null)
@@ -81,6 +83,8 @@ export default function AgendaPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
+      const meData = await apiFetch('/auth/me', { token: session.access_token })
+      setUserId(meData.data.id)
       const [_, pData] = await Promise.all([
         fetchAll(session.access_token),
         apiFetch('/patients?limit=100', { token: session.access_token })
@@ -401,6 +405,20 @@ export default function AgendaPage() {
               onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
               className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
               🔒 Bloquear horario
+            </button>
+            <button
+              onClick={() => {
+                const link = `${window.location.origin}/booking/${userId}`
+                navigator.clipboard.writeText(link)
+                setLinkCopied(true)
+                setTimeout(() => setLinkCopied(false), 2000)
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                linkCopied
+                  ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-300'
+                  : 'bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-300'
+              }`}>
+              {linkCopied ? '✓ Copiado' : '📋 Copiar link'}
             </button>
             <WeekNav />
           </div>
