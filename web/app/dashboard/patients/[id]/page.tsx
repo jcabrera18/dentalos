@@ -812,7 +812,7 @@ const Q2 = [21, 22, 23, 24, 25, 26, 27, 28]
 const Q3 = [31, 32, 33, 34, 35, 36, 37, 38]
 const Q4 = [48, 47, 46, 45, 44, 43, 42, 41]
 
-type FaceColor = 'red' | 'blue' | null
+type FaceColor = 'red' | 'blue' | 'emerald' | null
 type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string; missing?: boolean; toExtract?: boolean }
 
 function ToothSVG({ state, onClick, isSelected, number }: {
@@ -826,6 +826,7 @@ function ToothSVG({ state, onClick, isSelected, number }: {
     const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
     if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
+    if (c === 'emerald') return '#059669'
     return 'transparent'
   }
 
@@ -900,7 +901,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
   onSaveTooth: (toothNumber: number, surfaces: Record<string, string>, note: string) => Promise<void>
 }) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
-  const [paintColor, setPaintColor] = useState<'red' | 'blue'>('red')
+  const [paintColor, setPaintColor] = useState<'red' | 'blue' | 'emerald'>('red')
   const [saving, setSaving] = useState(false)
 
   // Estado local de cada diente
@@ -989,6 +990,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
       const c = state[face]
       if (c === 'red') return '#dc2626'
       if (c === 'blue') return '#2563eb'
+      if (c === 'emerald') return '#059669'
       return 'transparent'
     }
 
