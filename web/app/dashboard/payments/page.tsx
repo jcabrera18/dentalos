@@ -325,7 +325,7 @@ export default function PaymentsPage() {
 
         <button
           onClick={() => { if (tab === 'ingresos') setShowModal(true); else if (tab === 'gastos') setShowExpenseModal(true) }}
-          className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 flex-shrink-0 ${(tab === 'balance' || tab === 'pacientes') ? 'invisible' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+          className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 flex-shrink-0 ${(tab === 'balance' || tab === 'pacientes') ? 'invisible' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}`}
         >
           + {tab === 'gastos' ? 'Gasto' : 'Cobro'}
         </button>
@@ -565,7 +565,7 @@ export default function PaymentsPage() {
                     </div>
                     <div>
                       <div className="text-xs text-app3 mb-1">Ganancia neta</div>
-                      <div className={`text-xl font-bold ${isPositive ? 'text-blue-500 dark:text-blue-400' : 'text-red-500 dark:text-red-400'}`}>
+                      <div className={`text-xl font-bold ${isPositive ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
                         {isPositive ? '+' : ''}{balance.toLocaleString('es-AR')}
                       </div>
                       <div className="text-xs text-app3">
@@ -917,22 +917,22 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                     className="text-app3 hover:text-app text-sm">✕</button>
                 </div>
               ) : showNewPatient ? (
-                <div className="bg-surface2 rounded-xl p-3 border border-blue-500/30">
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-2">Nuevo paciente rápido</div>
+                <div className="bg-surface2 rounded-xl p-3 border border-emerald-500/30">
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-2">Nuevo paciente rápido</div>
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     <input type="text" value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
                       placeholder="Nombre"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400" />
                     <input type="text" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)}
                       placeholder="Apellido"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400" />
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setShowNewPatient(false)}
                       className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors">Cancelar</button>
                     <button type="button" onClick={handleCreatePatient}
                       disabled={!newPatientName || creatingPatient}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
                       {creatingPatient ? 'Creando...' : 'Crear y usar'}
                     </button>
                   </div>
@@ -941,7 +941,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                 <div>
                   <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Buscar paciente..."
-                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 mb-2" />
+                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400 mb-2" />
                   {search && (
                     <div className="bg-surface2 border border-app rounded-xl overflow-hidden max-h-40 overflow-y-auto mb-2">
                       {filteredPatients.slice(0, 5).map(p => (
@@ -967,7 +967,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-app3 font-bold">$</span>
                 <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
                   placeholder="0"
-                  className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-emerald-400"
                   min="1" required />
               </div>
             </div>
@@ -977,7 +977,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
               <div className="grid grid-cols-3 gap-2">
                 {METODOS.map(m => (
                   <button key={m.value} type="button" onClick={() => set('method', m.value)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value ? 'bg-blue-500 text-white' : 'bg-surface2 border border-app text-app2 hover:border-app2'}`}>
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold transition-colors ${form.method === m.value ? 'bg-emerald-500 text-white' : 'bg-surface2 border border-app text-app2 hover:border-app2'}`}>
                     {m.label}
                   </button>
                 ))}
@@ -990,7 +990,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
                 <div className="grid grid-cols-4 gap-2">
                   {['1', '3', '6', '12'].map(c => (
                     <button key={c} type="button" onClick={() => set('installments', c)}
-                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c ? 'bg-blue-500 text-white' : 'bg-surface2 border border-app text-app2'}`}>
+                      className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.installments === c ? 'bg-emerald-500 text-white' : 'bg-surface2 border border-app text-app2'}`}>
                       {c}x
                     </button>
                   ))}
@@ -1002,7 +1002,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Notas (opcional)</label>
               <input type="text" value={form.notes} onChange={e => set('notes', e.target.value)}
                 placeholder="Referencia, observación..."
-                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400" />
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
             {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>}
@@ -1080,7 +1080,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-app3 font-bold">$</span>
               <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
                 placeholder="0"
-                className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-emerald-400"
                 min="1" required />
             </div>
           </div>
@@ -1090,7 +1090,7 @@ function NewExpenseModal({ token, onClose, onCreated }: {
             <div className="grid grid-cols-3 gap-2">
               {CATEGORIAS_GASTO.map(c => (
                 <button key={c} type="button" onClick={() => set('category', c)}
-                  className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${form.category === c ? 'bg-blue-500 text-white' : 'bg-surface2 border border-app text-app2 hover:border-app2'}`}>
+                  className={`py-2 px-2 rounded-xl text-xs font-semibold transition-all active:scale-95 ${form.category === c ? 'bg-emerald-500 text-white' : 'bg-surface2 border border-app text-app2 hover:border-app2'}`}>
                   {c}
                 </button>
               ))}
@@ -1101,13 +1101,13 @@ function NewExpenseModal({ token, onClose, onCreated }: {
             <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Descripción (opcional)</label>
             <input type="text" value={form.description} onChange={e => set('description', e.target.value)}
               placeholder="Detalle del gasto..."
-              className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400" />
+              className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400" />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha</label>
             <input type="date" value={form.paid_at} onChange={e => set('paid_at', e.target.value)}
-              className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400" />
+              className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400" />
           </div>
 
           {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>}

@@ -46,7 +46,7 @@ function getSlotHeight(startsAt: string, endsAt: string): number {
 
 const STATUS_COLORS: Record<string, string> = {
   pending:     'border-l-amber-400 bg-amber-400/15 text-amber-900 dark:text-amber-200',
-  confirmed:   'border-l-blue-400 bg-blue-400/15 text-blue-900 dark:text-blue-200',
+  confirmed:   'border-l-emerald-400 bg-emerald-400/15 text-emerald-900 dark:text-emerald-200',
   completed:   'border-l-emerald-400 bg-emerald-400/15 text-emerald-900 dark:text-emerald-200',
   absent:      'border-l-red-400 bg-red-400/15 text-red-900 dark:text-red-200',
   cancelled:   'border-l-gray-400 bg-gray-400/10 text-gray-500 dark:text-gray-400',
@@ -213,7 +213,7 @@ export default function AgendaPage() {
                   onClick={() => updateStatus(selectedAppt.id, status)}
                   className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors active:scale-95 ${
                     selectedAppt.status === status
-                      ? 'bg-blue-500 text-white'
+                      ? 'bg-emerald-500 text-white'
                       : 'bg-surface2 hover:bg-surface3 text-app2 border border-app'
                   }`}>
                   {label}
@@ -229,7 +229,7 @@ export default function AgendaPage() {
             Ver ficha del paciente →
           </button>
           <button onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}/appointment`)}
-            className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 active:scale-95 text-blue-600 dark:text-blue-400 py-2.5 rounded-xl text-sm font-medium transition-all">
+            className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 active:scale-95 text-emerald-600 dark:text-emerald-400 py-2.5 rounded-xl text-sm font-medium transition-all">
             Nuevo turno para este paciente
           </button>
           {selectedAppt.status !== 'cancelled' && selectedAppt.status !== 'completed' && (
@@ -317,13 +317,13 @@ export default function AgendaPage() {
                   className="flex flex-col items-center gap-0.5 py-1 rounded-xl transition-colors">
                   <span className="text-[10px] text-app3">{DAYS[i]}</span>
                   <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold transition-colors ${
-                    isSelected ? 'bg-blue-500 text-white' :
-                    isToday ? 'border border-blue-400 text-blue-400' : 'text-app'
+                    isSelected ? 'bg-emerald-500 text-white' :
+                    isToday ? 'border border-emerald-400 text-emerald-400' : 'text-app'
                   }`}>
                     {d.getDate()}
                   </span>
                   <div className="flex gap-0.5">
-                    {hasAppts && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}`} />}
+                    {hasAppts && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-400'}`} />}
                     {hasBlocks && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-400'}`} />}
                   </div>
                 </button>
@@ -416,7 +416,7 @@ export default function AgendaPage() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 linkCopied
                   ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-300'
-                  : 'bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-300'
+                  : 'bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
               }`}>
               {linkCopied ? '✓ Copiado' : '📋 Copiar link'}
             </button>
@@ -436,7 +436,7 @@ export default function AgendaPage() {
                 <div key={i} className="py-2 text-center border-l border-gray-200 dark:border-gray-800">
                   <div className="text-[10px] text-app3 uppercase tracking-wider">{DAYS[i]}</div>
                   <div className={`text-base font-bold mx-auto w-7 h-7 flex items-center justify-center rounded-full ${
-                    isToday ? 'bg-blue-500 text-white' : 'text-app'
+                    isToday ? 'bg-emerald-500 text-white' : 'text-app'
                   }`}>
                     {d.getDate()}
                   </div>
@@ -464,7 +464,7 @@ export default function AgendaPage() {
               const dayBlks = blocksByDay(dateStr)
               return (
                 <div key={dayIdx}
-                  className={`relative border-l border-gray-200 dark:border-gray-800 ${isToday ? 'bg-blue-500/5' : ''}`}
+                  className={`relative border-l border-gray-200 dark:border-gray-800 ${isToday ? 'bg-emerald-500/5' : ''}`}
                   style={{ minHeight: `${HOURS.length * 64}px` }}
                   onClick={(e) => {
                     if (e.target === e.currentTarget) {
@@ -517,7 +517,7 @@ export default function AgendaPage() {
       {/* FABs */}
       <button
         onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setShowNewAppt(true) }}
-        className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
+        className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-emerald-500 hover:bg-emerald-600 rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
       >
         +
       </button>
@@ -538,7 +538,7 @@ export default function AgendaPage() {
         className={`md:hidden fixed bottom-24 right-40 w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all z-30 font-medium ${
           linkCopied
             ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-            : 'bg-blue-500 hover:bg-blue-600 text-white'
+            : 'bg-emerald-500 hover:bg-emerald-600 text-white'
         }`}
         title="Copiar link de agenda"
       >
@@ -645,7 +645,7 @@ export default function AgendaPage() {
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Fecha</label>
                 <input type="date" id="edit-date"
                   defaultValue={new Date(editingAppt.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Hora</label>
@@ -654,13 +654,13 @@ export default function AgendaPage() {
                     const d = new Date(editingAppt.starts_at)
                     return d.toLocaleString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
                   })()}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Tipo de consulta</label>
                 <input type="text" id="edit-type"
                   defaultValue={editingAppt.appointment_type ?? ''}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
               <div className="flex gap-3 mt-5">
                 <button type="button" onClick={() => setEditingAppt(null)}
@@ -668,7 +668,7 @@ export default function AgendaPage() {
                   Cancelar
                 </button>
                 <button type="submit"
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
                   Guardar
                 </button>
               </div>
@@ -927,15 +927,15 @@ const DURACIONES = [
                     className="text-app3 hover:text-app text-sm">✕</button>
                 </div>
               ) : newPatientMode ? (
-                <div className="bg-surface2 rounded-xl p-3 border border-blue-500/30">
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold mb-2">Nuevo paciente rápido</div>
+                <div className="bg-surface2 rounded-xl p-3 border border-emerald-500/30">
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-2">Nuevo paciente rápido</div>
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     <input type="text" value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
                       placeholder="Nombre"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400" />
                     <input type="text" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)}
                       placeholder="Apellido"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400" />
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setNewPatientMode(false)}
@@ -944,7 +944,7 @@ const DURACIONES = [
                     </button>
                     <button type="button" onClick={handleCreatePatient}
                       disabled={!newPatientName || creatingPatient}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
                       {creatingPatient ? 'Creando...' : 'Crear y usar'}
                     </button>
                   </div>
@@ -953,7 +953,7 @@ const DURACIONES = [
                 <div>
                   <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Buscar por nombre o teléfono..."
-                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 mb-2"
+                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400 mb-2"
                     autoFocus />
                   {search && (
                     <div className="bg-surface2 border border-app rounded-xl overflow-hidden mb-2">
@@ -979,12 +979,12 @@ const DURACIONES = [
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha</label>
                 <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Hora</label>
                 <input type="time" value={form.time} onChange={e => set('time', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
             </div>
 
@@ -995,7 +995,7 @@ const DURACIONES = [
                   <button key={d.value} type="button" onClick={() => set('duration_minutes', d.value)}
                     className={`py-2 rounded-xl text-sm font-semibold transition-colors ${
                       form.duration_minutes === d.value
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-emerald-500 text-white'
                         : 'bg-surface2 border border-app text-app2'
                     }`}>
                     {d.label}
@@ -1011,7 +1011,7 @@ const DURACIONES = [
                   <button key={t} type="button" onClick={() => set('appointment_type', t)}
                     className={`py-2 px-2 rounded-xl text-xs font-medium transition-colors ${
                       form.appointment_type === t
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-emerald-500 text-white'
                         : 'bg-surface2 border border-app text-app2'
                     }`}>
                     {t}
@@ -1024,7 +1024,7 @@ const DURACIONES = [
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Motivo (opcional)</label>
               <input type="text" value={form.chief_complaint} onChange={e => set('chief_complaint', e.target.value)}
                 placeholder="Descripción..."
-                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400" />
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
             {error && (
@@ -1037,7 +1037,7 @@ const DURACIONES = [
                 Cancelar
               </button>
               <button type="submit" disabled={loading}
-                className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
                 {loading ? 'Agendando...' : 'Confirmar turno'}
               </button>
             </div>

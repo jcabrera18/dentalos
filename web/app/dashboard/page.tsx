@@ -157,7 +157,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-surface border border-app rounded-xl p-4">
             <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos hoy</div>
-            <div className="text-3xl font-bold text-blue-400">{stats.total ?? 0}</div>
+            <div className="text-3xl font-bold text-emerald-400">{stats.total ?? 0}</div>
           </div>
           <div className="bg-surface border border-app rounded-xl p-4">
             <div className="text-xs text-app3 uppercase tracking-wider mb-1">Atendidos</div>
@@ -267,7 +267,7 @@ export default function DashboardPage() {
                           <button
                             onClick={() => setOpenDropdown(openDropdown === appt.id ? null : appt.id)}
                             className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all 
-    ${appt.status === 'confirmed' ? 'bg-blue-500/15 border-blue-400/30 text-blue-600 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-900/40' :
+    ${appt.status === 'confirmed' ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-600 dark:text-emerald-400 dark:border-emerald-700 dark:bg-emerald-900/40' :
                                 appt.status === 'in_progress' ? 'bg-purple-500/15 border-purple-400/30 text-purple-600 dark:text-purple-400 dark:border-purple-700 dark:bg-purple-900/40' :
                                   'bg-amber-500/15 border-amber-400/30 text-amber-600 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-900/40'
                               }`}>
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                               <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
                               <div className="absolute right-0 top-full mt-1 bg-surface border border-app rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
                                 {[
-                                  { value: 'confirmed', label: 'Confirmado', color: 'text-blue-600 dark:text-blue-400' },
+                                  { value: 'confirmed', label: 'Confirmado', color: 'text-emerald-600 dark:text-emerald-400' },
                                   { value: 'in_progress', label: 'En curso', color: 'text-purple-600 dark:text-purple-400' },
                                   { value: 'completed', label: 'Atendido', color: 'text-emerald-600 dark:text-emerald-400' },
                                   { value: 'absent', label: 'Ausente', color: 'text-red-600 dark:text-red-400' },
@@ -338,7 +338,7 @@ export default function DashboardPage() {
                   onChange={e => setClinicalNotes(e.target.value)}
                   rows={4}
                   placeholder="Procedimiento realizado, observaciones, indicaciones..."
-                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 resize-none"
+                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400 resize-none"
                   autoFocus
                 />
               </div>

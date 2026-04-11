@@ -81,7 +81,7 @@ export default function PatientsPage() {
           <h2 className="text-lg font-semibold">Pacientes</h2>
           <button
             onClick={() => setShowModal(true)}
-            className="bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all"
+            className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all"
           >
             + Nuevo paciente
           </button>
@@ -94,7 +94,7 @@ export default function PatientsPage() {
             value={search}
             onChange={e => handleSearch(e.target.value)}
             placeholder="Buscar por nombre, teléfono o DNI..."
-            className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
+            className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
           />
         </div>
 
@@ -224,13 +224,13 @@ function NewPatientModal({ token, onClose, onCreated }: {
               <div>
                 <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Nombre</label>
                 <input value={form.first_name} onChange={e => set('first_name', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400"
                   required />
               </div>
               <div>
                 <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Apellido</label>
                 <input value={form.last_name} onChange={e => set('last_name', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400"
                   required />
               </div>
             </div>
@@ -239,7 +239,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
               <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Teléfono (WhatsApp)</label>
               <input value={form.phone} onChange={e => set('phone', e.target.value)}
                 type="tel" placeholder="+54 11 ..."
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400"
                 required />
             </div>
 
@@ -247,13 +247,13 @@ function NewPatientModal({ token, onClose, onCreated }: {
               <div>
                 <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">DNI</label>
                 <input value={form.document_number} onChange={e => set('document_number', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Fecha de nacimiento</label>
                 <input value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)}
                   type="date"
-                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
             </div>
 
@@ -261,27 +261,27 @@ function NewPatientModal({ token, onClose, onCreated }: {
               <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Email</label>
               <input value={form.email} onChange={e => set('email', e.target.value)}
                 type="email"
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Obra social</label>
               <input value={form.insurance_name} onChange={e => set('insurance_name', e.target.value)}
                 placeholder="OSDE, PAMI, Swiss Medical..."
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Alergias</label>
               <input value={form.allergies} onChange={e => set('allergies', e.target.value)}
                 placeholder="Penicilina, látex..."
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Medicación actual</label>
               <input value={form.current_medications} onChange={e => set('current_medications', e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
             {error && (
@@ -296,7 +296,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
                 Cancelar
               </button>
               <button type="submit" disabled={loading}
-                className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors">
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors">
                 {loading ? 'Guardando...' : 'Guardar paciente'}
               </button>
             </div>

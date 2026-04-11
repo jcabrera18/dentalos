@@ -278,7 +278,7 @@ export default function PatientDetailPage() {
           <div className="space-y-4">
             {/* Avatar + nombre */}
             <div className="bg-surface border border-app rounded-xl p-6 text-center relative">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-emerald-400 flex items-center justify-center text-2xl font-bold mx-auto mb-3">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-400 flex items-center justify-center text-2xl font-bold mx-auto mb-3">
                 {patient.first_name[0]}{patient.last_name[0]}
               </div>
               <div className="font-bold text-lg">{patient.first_name} {patient.last_name}</div>
@@ -302,7 +302,7 @@ export default function PatientDetailPage() {
                     current_medications: patient.current_medications ?? '',
                   })
                 }}
-                className="mt-3 text-xs text-app3 hover:text-blue-400 transition-colors"
+                className="mt-3 text-xs text-app3 hover:text-emerald-400 transition-colors"
               >
                 Editar datos
               </button>
@@ -360,7 +360,7 @@ export default function PatientDetailPage() {
             {/* Acciones */}
             <button
               onClick={() => router.push(`/dashboard/patients/${params.id}/appointment`)}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-app font-semibold py-3 rounded-xl transition-colors"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-app font-semibold py-3 rounded-xl transition-colors"
             >
               📅 Nuevo turno
             </button>
@@ -386,7 +386,7 @@ export default function PatientDetailPage() {
                   disabled={savingNotes}
                   className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${notesSaved
                     ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50'
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50'
                     }`}
                 >
                   {savingNotes ? 'Guardando...' : notesSaved ? '✓ Guardado' : 'Guardar'}
@@ -398,7 +398,7 @@ export default function PatientDetailPage() {
                   onChange={e => setNotes(e.target.value)}
                   rows={4}
                   placeholder="Antecedentes, observaciones generales, indicaciones especiales..."
-                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-blue-400 resize-none"
+                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400 resize-none"
                 />
               </div>
             </div>
@@ -436,7 +436,7 @@ export default function PatientDetailPage() {
                       disabled={uploading}
                     />
                   </label>
-                  <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${uploading ? 'bg-surface3 text-app3' : 'bg-blue-500 hover:bg-blue-600 text-app'
+                  <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${uploading ? 'bg-surface3 text-app3' : 'bg-emerald-500 hover:bg-emerald-600 text-app'
                     }`}>
                     {uploading ? 'Subiendo...' : '+ Archivo'}
                     <input
@@ -533,7 +533,7 @@ export default function PatientDetailPage() {
                         {t.sessions_planned && (
                           <div className="h-1.5 bg-surface2 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full"
+                              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
                               style={{ width: `${Math.min(100, (t.sessions_done / t.sessions_planned) * 100)}%` }}
                             />
                           </div>
@@ -606,8 +606,8 @@ export default function PatientDetailPage() {
                               </div>
                             )}
                             {appt.clinical_notes ? (
-                              <div className="mt-2 bg-surface2/60 rounded-lg px-4 py-3 border-l-2 border-blue-500/50">
-                                <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wider mb-1">
+                              <div className="mt-2 bg-surface2/60 rounded-lg px-4 py-3 border-l-2 border-emerald-500/50">
+                                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider mb-1">
                                   Notas de la consulta
                                 </div>
                                 <div className="text-sm text-app2 whitespace-pre-wrap">
@@ -705,14 +705,14 @@ export default function PatientDetailPage() {
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Nombre</label>
                     <input value={editForm.first_name} onChange={e => setEditForm((f: any) => ({ ...f, first_name: e.target.value }))}
-                      className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.first_name ? 'border-red-500' : 'border-app focus:border-blue-400'
+                      className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.first_name ? 'border-red-500' : 'border-app focus:border-emerald-400'
                         }`} />
                     {editErrors.first_name && <p className="text-red-400 text-xs mt-1">{editErrors.first_name}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Apellido</label>
                     <input value={editForm.last_name} onChange={e => setEditForm((f: any) => ({ ...f, last_name: e.target.value }))}
-                      className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.last_name ? 'border-red-500' : 'border-app focus:border-blue-400'
+                      className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.last_name ? 'border-red-500' : 'border-app focus:border-emerald-400'
                         }`} />
                     {editErrors.last_name && <p className="text-red-400 text-xs mt-1">{editErrors.last_name}</p>}
                   </div>
@@ -729,7 +729,7 @@ export default function PatientDetailPage() {
                       }
                     }}
                     type="tel"
-                    className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.phone ? 'border-red-500' : 'border-app focus:border-blue-400'
+                    className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.phone ? 'border-red-500' : 'border-app focus:border-emerald-400'
                       }`}
                   />
                   {editErrors.phone && <p className="text-red-400 text-xs mt-1">Requerido</p>}
@@ -739,20 +739,20 @@ export default function PatientDetailPage() {
                   <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Email</label>
                   <input value={editForm.email} onChange={e => setEditForm((f: any) => ({ ...f, email: e.target.value }))}
                     type="email"
-                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">DNI</label>
                     <input value={editForm.document_number} onChange={e => setEditForm((f: any) => ({ ...f, document_number: e.target.value }))}
-                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Fecha de nacimiento</label>
                     <input value={editForm.date_of_birth} onChange={e => setEditForm((f: any) => ({ ...f, date_of_birth: e.target.value }))}
                       type="date"
-                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                   </div>
                 </div>
 
@@ -761,12 +761,12 @@ export default function PatientDetailPage() {
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Obra social</label>
                     <input value={editForm.insurance_name} onChange={e => setEditForm((f: any) => ({ ...f, insurance_name: e.target.value }))}
                       placeholder="OSDE, PAMI..."
-                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Plan</label>
                     <input value={editForm.insurance_plan} onChange={e => setEditForm((f: any) => ({ ...f, insurance_plan: e.target.value }))}
-                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                   </div>
                 </div>
 
@@ -774,13 +774,13 @@ export default function PatientDetailPage() {
                   <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Alergias</label>
                   <input value={editForm.allergies} onChange={e => setEditForm((f: any) => ({ ...f, allergies: e.target.value }))}
                     placeholder="Penicilina, látex..."
-                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Medicación actual</label>
                   <input value={editForm.current_medications} onChange={e => setEditForm((f: any) => ({ ...f, current_medications: e.target.value }))}
-                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-blue-400" />
+                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
                 </div>
               </div>
 
@@ -790,7 +790,7 @@ export default function PatientDetailPage() {
                   Cancelar
                 </button>
                 <button onClick={handleSaveEdit}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all">
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all">
                   Guardar
                 </button>
               </div>
@@ -1065,10 +1065,10 @@ function OdontogramView({ odontogram, onSaveTooth }: {
           title="Realizado"
         />
         <button
-          onClick={() => setPaintColor('blue')}
-          className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'blue'
-            ? 'bg-blue-600 ring-blue-500'
-            : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'
+          onClick={() => setPaintColor('emerald')}
+          className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'emerald'
+            ? 'bg-emerald-600 ring-emerald-500'
+            : 'bg-emerald-900/40 ring-transparent hover:ring-emerald-800'
             }`}
           title="Por realizar"
         />
@@ -1184,7 +1184,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
           Ya realizado
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
+          <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block" />
           Por realizar
         </span>
         <span className="flex items-center gap-1.5">

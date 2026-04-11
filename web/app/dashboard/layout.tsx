@@ -48,14 +48,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header className="hidden md:flex border-b border-app bg-app px-6 py-0 items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-1">
           <div className="text-xl font-bold text-app mr-6 py-4">
-            Dental<span className="text-blue-400">OS</span>
+            Dental<span className="text-emerald-400">OS</span>
           </div>
           {NAV_ITEMS.map(item => (
             <button
               key={item.href}
               onClick={() => router.push(item.href)}
               className={`flex items-center gap-2 px-4 py-4 text-sm font-medium border-b-2 transition-colors ${isActive(item.href)
-                ? 'border-blue-400 text-blue-400'
+                ? 'border-emerald-400 text-emerald-400'
                 : 'border-transparent text-app2 hover:text-app'
                 }`}
             >
@@ -83,7 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* MOBILE TOP BAR */}
       <header className="md:hidden flex border-b border-app bg-app px-4 py-3 items-center justify-between sticky top-0 z-40">
         <div className="text-lg font-bold text-app">
-          Dental<span className="text-blue-400">OS</span>
+          Dental<span className="text-emerald-400">OS</span>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -114,7 +114,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               key={item.href}
               onClick={() => router.push(item.href)}
               className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${isActive(item.href)
-                ? 'text-blue-400'
+                ? 'text-emerald-400'
                 : 'text-app3'
                 }`}
             >

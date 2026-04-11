@@ -49,7 +49,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-app">
-            Dental<span className="text-blue-400">OS</span>
+            Dental<span className="text-emerald-400">OS</span>
           </h1>
           <p className="text-app2 mt-1 text-sm">Comenzá tu prueba gratis</p>
           <p className="text-app2 mt-2 text-xs">
@@ -68,7 +68,7 @@ export default function RegisterPage() {
               href="https://dentalos.pro/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg transition-colors"
+              className="inline-flex items-center justify-center gap-2 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition-colors"
             >
               Ir a DentalOS <ArrowRight className="h-5 w-5" />
             </a>
@@ -92,7 +92,7 @@ export default function RegisterPage() {
                 required
                 value={form.clinic_name}
                 onChange={handleChange}
-                className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-emerald-400"
               />
             </div>
 
@@ -108,7 +108,7 @@ export default function RegisterPage() {
                   required
                   value={form.first_name}
                   onChange={handleChange}
-                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-emerald-400"
                 />
               </div>
               <div>
@@ -122,7 +122,7 @@ export default function RegisterPage() {
                   required
                   value={form.last_name}
                   onChange={handleChange}
-                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-emerald-400"
                 />
               </div>
             </div>
@@ -139,7 +139,7 @@ export default function RegisterPage() {
                 required
                 value={form.email}
                 onChange={handleChange}
-                className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-emerald-400"
               />
             </div>
 
@@ -156,14 +156,14 @@ export default function RegisterPage() {
                 minLength={6}
                 value={form.password}
                 onChange={handleChange}
-                className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app placeholder-app2 focus:outline-none focus:border-emerald-400"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {loading ? "Creando cuenta..." : "Crear cuenta gratis"}
               {!loading && <ArrowRight className="h-5 w-5" />}
@@ -176,7 +176,7 @@ export default function RegisterPage() {
         )}
 
         <div className="text-center mt-8">
-          <a href="/" className="text-sm text-blue-400 hover:underline">
+          <a href="/" className="text-sm text-emerald-400 hover:underline">
             ← Volver al inicio
           </a>
         </div>

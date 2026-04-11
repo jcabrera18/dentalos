@@ -37,7 +37,7 @@ export default function HomePage() {
       <nav className="border-b border-app/20 backdrop-blur-sm sticky top-0 z-40 bg-surface/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Link href="/" className="text-2xl font-bold">
-            Dental<span className="text-blue-500">OS</span>
+            Dental<span className="text-emerald-500">OS</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-app2 hover:text-app transition-colors font-medium">
@@ -57,7 +57,7 @@ export default function HomePage() {
             >
               Ingresar
             </button>
-            <Link href="/register" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors font-semibold text-sm">
+            <Link href="/register" className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors font-semibold text-sm">
               Registrarse
             </Link>
           </div>
@@ -68,21 +68,21 @@ export default function HomePage() {
       <section className="relative overflow-hidden px-4 py-24 md:py-32">
         <div className="max-w-5xl mx-auto text-center">
           <div className="mb-6 flex justify-center">
-            <span className="text-xs font-semibold uppercase tracking-widest text-blue-500 bg-blue-500/10 px-4 py-2 rounded-full">
+            <span className="text-xs font-semibold uppercase tracking-widest text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full">
               ✨ La solución que odontólogos como vos necesitaban
             </span>
           </div>
           <h1 className="text-5xl md:text-7xl font-black mb-8 leading-tight">
-            Consultorio odontológico <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-blue-600">en piloto automático</span>
+            Consultorio odontológico <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-emerald-600">en piloto automático</span>
           </h1>
           <p className="text-lg md:text-xl text-app2 mb-8 max-w-3xl mx-auto leading-relaxed">
             Administrá tu consultorio sin estrés. Agenda automática, fichas digitales con odontograma, finanzas claras y equipo organizado. Desde hoy mismo.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link href="/register" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg text-center">
+            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg text-center">
               Probar 10 días gratis
             </Link>
-            <a href="#features" className="border-2 border-blue-500 text-blue-500 hover:bg-blue-500/10 font-bold px-8 py-4 rounded-lg transition-all">
+            <a href="#features" className="border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 font-bold px-8 py-4 rounded-lg transition-all">
               Ver en detalle ↓
             </a>
           </div>
@@ -95,7 +95,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8">
             <div className="text-center">
-              <div className="text-4xl font-bold text-blue-500 mb-2">3x</div>
+              <div className="text-4xl font-bold text-emerald-500 mb-2">3x</div>
               <p className="text-app2 font-medium">Más eficiencia en agenda</p>
             </div>
             <div className="text-center">
@@ -128,8 +128,8 @@ export default function HomePage() {
           
           <div className="grid md:grid-cols-2 gap-8 mb-8">
             {/* Feature 1 */}
-            <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-blue-500/50 transition-all hover:shadow-lg hover:shadow-blue-500/10">
-              <div className="w-14 h-14 bg-blue-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
+            <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-500/10">
+              <div className="w-14 h-14 bg-emerald-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
                 📅
               </div>
               <h3 className="text-2xl font-bold mb-3">Agenda que trabaja por vos</h3>
@@ -195,8 +195,8 @@ export default function HomePage() {
           
           <div className="space-y-6">
             <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-blue-500">⚡</span>
+              <div className="flex-shrink-0 w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                <span className="text-lg font-bold text-emerald-500">⚡</span>
               </div>
               <div>
                 <h3 className="text-xl font-bold mb-2">Implementación en minutos</h3>
@@ -288,9 +288,9 @@ export default function HomePage() {
               }
             ].map((step, i) => (
               <div key={i} className="relative group">
-                <div className="bg-surface2 border border-app/20 rounded-2xl p-8 h-full flex flex-col group-hover:border-blue-500/50 transition-all">
+                <div className="bg-surface2 border border-app/20 rounded-2xl p-8 h-full flex flex-col group-hover:border-emerald-500/50 transition-all">
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                       {step.num}
                     </div>
                   </div>
@@ -313,36 +313,36 @@ export default function HomePage() {
             Prueba gratis 10 días completos. Sin sorpresas, sin trampas, sin tarjeta.
           </p>
 
-          <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border-2 border-blue-500/30 rounded-3xl p-12">
+          <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 border-2 border-emerald-500/30 rounded-3xl p-12">
             <h3 className="text-3xl font-bold mb-4">Plan todo incluido</h3>
             <p className="text-app2 mb-8">Acceso completo a todas las herramientas</p>
-            <p className="text-6xl font-black text-blue-500 mb-2">$0</p>
-            <p className="text-app2 mb-8">Primeros 10 días • Después, el mejor precio del mercado.</p>
+            <p className="text-6xl font-black text-emerald-500 mb-2">$0</p>
+            <p className="text-app2 mb-8">Primeros 10 días • Luego $38.000 por usuario por mes.</p>
             
             <div className="bg-white/50 dark:bg-white/10 rounded-xl p-6 mb-8 text-left space-y-3">
               <div className="flex items-center gap-3">
-                <span className="text-blue-500 font-bold">✓</span>
+                <span className="text-emerald-500 font-bold">✓</span>
                 <span className="text-app font-medium">Agenda automática 24/7</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-blue-500 font-bold">✓</span>
+                <span className="text-emerald-500 font-bold">✓</span>
                 <span className="text-app font-medium">Fichas clínicas digitales con odontograma</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-blue-500 font-bold">✓</span>
+                <span className="text-emerald-500 font-bold">✓</span>
                 <span className="text-app font-medium">Control de finanzas y facturación</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-blue-500 font-bold">✓</span>
+                <span className="text-emerald-500 font-bold">✓</span>
                 <span className="text-app font-medium">Gestión de equipo sin límites</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-blue-500 font-bold">✓</span>
+                <span className="text-emerald-500 font-bold">✓</span>
                 <span className="text-app font-medium">Soporte humano dedicado</span>
               </div>
             </div>
 
-            <Link href="/register" className="inline-block bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg mb-4">
+            <Link href="/register" className="inline-block bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg mb-4">
               Comienza tu período gratis ahora
             </Link>
             <p className="text-xs text-app2">No se requiere tarjeta de crédito</p>
@@ -401,7 +401,7 @@ export default function HomePage() {
       </section>
 
       {/* Final CTA Section */}
-      <section className="px-4 py-24 bg-gradient-to-r from-blue-500/20 to-blue-600/20 border-b border-app/20">
+      <section className="px-4 py-24 bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border-b border-app/20">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             ¿Listo para dejar de complicarte la vida?
@@ -411,10 +411,10 @@ export default function HomePage() {
             Tu turno es ahora. Prueba gratis, sin compromisos. Si no te gusta, simplemente no pagas nada.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg">
+            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg">
               ¡Quiero mis 10 días gratis!
             </Link>
-            <a href="#features" className="border-2 border-blue-500 text-blue-500 hover:bg-blue-500/10 font-bold px-8 py-4 rounded-lg transition-all">
+            <a href="#features" className="border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 font-bold px-8 py-4 rounded-lg transition-all">
               Ver más detalles
             </a>
           </div>
@@ -428,7 +428,7 @@ export default function HomePage() {
           <div className="grid md:grid-cols-4 gap-12 mb-8">
             <div>
               <h3 className="text-2xl font-bold mb-4">
-                Dental<span className="text-blue-500">OS</span>
+                Dental<span className="text-emerald-500">OS</span>
               </h3>
               <p className="text-app2 text-sm">La gestión de tu consultorio, simplificada.</p>
             </div>
@@ -474,7 +474,7 @@ export default function HomePage() {
           <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-8">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-app">
-                Dental<span className="text-blue-400">OS</span>
+                Dental<span className="text-emerald-400">OS</span>
               </h1>
               <p className="text-app2 mt-2">Ingresá a tu consultorio</p>
             </div>
@@ -488,7 +488,7 @@ export default function HomePage() {
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
                   placeholder="dr@consultorio.com"
                   required
                 />
@@ -502,7 +502,7 @@ export default function HomePage() {
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app focus:outline-none focus:border-blue-400"
+                  className="w-full bg-surface2 border border-app rounded-lg px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
                   placeholder="••••••••"
                   required
                 />
@@ -517,7 +517,7 @@ export default function HomePage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 {loading ? 'Ingresando...' : 'Ingresar'}
               </button>
@@ -525,7 +525,7 @@ export default function HomePage() {
               <div className="text-center">
                 <p className="text-app2 text-sm">
                   ¿No tenés cuenta?{' '}
-                  <Link href="/register" className="text-blue-400 hover:text-blue-300 transition-colors">
+                  <Link href="/register" className="text-emerald-400 hover:text-emerald-300 transition-colors">
                     Registrate aquí
                   </Link>
                 </p>

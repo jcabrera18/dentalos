@@ -125,7 +125,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
       <main className="p-6 max-w-lg mx-auto">
         {/* Paciente */}
         <div className="bg-surface border border-app rounded-xl p-4 mb-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-emerald-400 flex items-center justify-center font-bold flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-400 flex items-center justify-center font-bold flex-shrink-0">
             {patient?.first_name[0]}{patient?.last_name[0]}
           </div>
           <div>
@@ -146,7 +146,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
                 value={form.date}
                 onChange={e => set('date', e.target.value)}
                 min={new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
-                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
                 required
               />
             </div>
@@ -158,7 +158,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
                 type="time"
                 value={form.time}
                 onChange={e => set('time', e.target.value)}
-                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
+                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
                 required
               />
             </div>
@@ -176,7 +176,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
                   type="button"
                   onClick={() => set('duration_minutes', d.value)}
                   className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${form.duration_minutes === d.value
-                    ? 'bg-blue-500 text-app'
+                    ? 'bg-emerald-500 text-app'
                     : 'bg-surface border border-app text-app2 hover:border-gray-500'
                     }`}
                 >
@@ -198,7 +198,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
                   type="button"
                   onClick={() => set('appointment_type', tipo)}
                   className={`py-2 px-3 rounded-xl text-sm font-medium transition-colors text-left ${form.appointment_type === tipo
-                    ? 'bg-blue-500 text-app'
+                    ? 'bg-emerald-500 text-app'
                     : 'bg-surface border border-app text-app2 hover:border-gray-500'
                     }`}
                 >
@@ -218,7 +218,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
               value={form.chief_complaint}
               onChange={e => set('chief_complaint', e.target.value)}
               placeholder="Describe el motivo..."
-              className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400"
+              className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
             />
           </div>
 
@@ -232,12 +232,12 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
               onChange={e => set('internal_notes', e.target.value)}
               rows={2}
               placeholder="Recordatorios, indicaciones especiales..."
-              className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-blue-400 resize-none"
+              className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-emerald-400 resize-none"
             />
           </div>
 
           {/* Recordatorio */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
             <span className="flex-shrink-0">📱</span>
             <span>Se enviará confirmación por WhatsApp al guardar el turno.</span>
           </div>
@@ -259,7 +259,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors active:scale-95"
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors active:scale-95">
             >
               {saving ? 'Agendando...' : 'Confirmar turno'}
             </button>
