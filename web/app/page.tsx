@@ -53,7 +53,7 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowLoginModal(true)}
-              className="text-app2 hover:text-app transition-colors font-medium hidden sm:block"
+              className="text-app2 hover:text-app transition-colors font-medium text-sm"
             >
               Ingresar
             </button>
