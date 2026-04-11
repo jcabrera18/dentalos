@@ -528,6 +528,22 @@ export default function AgendaPage() {
       >
         🔒
       </button>
+      <button
+        onClick={() => {
+          const link = `${window.location.origin}/booking/${userId}`
+          navigator.clipboard.writeText(link)
+          setLinkCopied(true)
+          setTimeout(() => setLinkCopied(false), 2000)
+        }}
+        className={`md:hidden fixed bottom-24 right-40 w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all z-30 font-medium ${
+          linkCopied
+            ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+            : 'bg-blue-500 hover:bg-blue-600 text-white'
+        }`}
+        title="Copiar link de agenda"
+      >
+        {linkCopied ? '✓' : '📋'}
+      </button>
 
       {showNewAppt && newApptSlot && (
         <NewAppointmentModal
