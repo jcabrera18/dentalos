@@ -8,12 +8,13 @@ import { useRouter } from 'next/navigation'
 export default function HomePage() {
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [openFaq, setOpenFaq] = useState<number | null>(null)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -31,6 +32,33 @@ export default function HomePage() {
     router.push('/dashboard')
   }
 
+  const faqs = [
+    {
+      q: '¿Necesito instalar algo?',
+      a: 'No. DentalOS funciona 100% en el navegador y en el celular. Entrás con tu email y listo.'
+    },
+    {
+      q: '¿Qué pasa después de los 10 días gratis?',
+      a: 'Te avisamos antes de que termine el período. Si querés seguir, elegís el plan pago ($38.000 por usuario por mes). Si no, no te cobramos nada. Sin preguntas.'
+    },
+    {
+      q: '¿Mis datos están seguros?',
+      a: 'Sí. Tus datos se almacenan con respaldo automático en la nube. Vos sos el único dueño de tu información y podés exportarla cuando quieras.'
+    },
+    {
+      q: '¿Puedo usarlo desde el celular?',
+      a: 'Sí. DentalOS está optimizado para celular, tablet y computadora. Funciona desde donde estés.'
+    },
+    {
+      q: '¿Sirve para un consultorio con varios profesionales?',
+      a: 'Sí. Podés agregar más usuarios y gestionar cada agenda por separado, con permisos y roles personalizables.'
+    },
+    {
+      q: '¿Tienen soporte si tengo dudas?',
+      a: 'Sí, soporte en español por chat. No es IA ni chatbots — respondemos el mismo día.'
+    }
+  ]
+
   return (
     <div className="min-h-screen bg-app text-app flex flex-col">
       {/* Navbar */}
@@ -43,11 +71,11 @@ export default function HomePage() {
             <a href="#features" className="text-app2 hover:text-app transition-colors font-medium">
               Funcionalidades
             </a>
-            <a href="#benefits" className="text-app2 hover:text-app transition-colors font-medium">
-              Beneficios
+            <a href="#como-funciona" className="text-app2 hover:text-app transition-colors font-medium">
+              Cómo funciona
             </a>
             <a href="#pricing" className="text-app2 hover:text-app transition-colors font-medium">
-              Plan
+              Precios
             </a>
           </div>
           <div className="flex items-center gap-3">
@@ -58,57 +86,94 @@ export default function HomePage() {
               Ingresar
             </button>
             <Link href="/register" className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors font-semibold text-sm">
-              Registrarse
+              Empezar gratis →
             </Link>
           </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden px-4 py-24 md:py-32">
-        <div className="max-w-5xl mx-auto text-center">
-          <div className="mb-6 flex justify-center">
-            <span className="text-xs font-semibold uppercase tracking-widest text-emerald-500 bg-emerald-500/10 px-4 py-2 rounded-full">
-              ✨ La solución que odontólogos como vos necesitaban
+      <section className="relative overflow-hidden px-4 py-20 md:py-28">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-4xl md:text-6xl font-black mb-6 leading-tight tracking-tight">
+            Organizá tu consultorio odontológico{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-emerald-600">
+              sin papeles, sin caos.
             </span>
-          </div>
-          <h1 className="text-5xl md:text-7xl font-black mb-8 leading-tight">
-            Consultorio odontológico <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-emerald-600">en piloto automático</span>
           </h1>
-          <p className="text-lg md:text-xl text-app2 mb-8 max-w-3xl mx-auto leading-relaxed">
-            Administrá tu consultorio sin estrés. Agenda automática, fichas digitales con odontograma, finanzas claras y equipo organizado. Desde hoy mismo.
+          <p className="text-lg md:text-xl text-app2 mb-8 max-w-2xl mx-auto leading-relaxed">
+            DentalOS maneja tu agenda, pacientes, historia clínica y finanzas — todo en un solo lugar. Sin llamadas, sin planillas, sin desorden.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg text-center">
-              Probar 10 días gratis
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
+            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg text-center text-lg">
+              Empezar 10 días gratis
             </Link>
-            <a href="#features" className="border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 font-bold px-8 py-4 rounded-lg transition-all">
-              Ver en detalle ↓
+            <a href="#como-funciona" className="border-2 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 font-semibold px-8 py-4 rounded-lg transition-all text-center">
+              Ver cómo funciona ↓
             </a>
           </div>
-          <p className="text-sm text-app2">💳 Sin tarjeta de crédito • 🔒 Datos seguros • ⚡ Configuración en 5 minutos</p>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-app2">
+            <span>✓ Sin tarjeta de crédito</span>
+            <span>✓ Listo en 5 minutos</span>
+            <span>✓ Cancelás cuando querés</span>
+            <span>✓ Soporte en español</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Pain Section */}
+      <section className="px-4 py-16 bg-surface border-y border-app/20">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl md:text-3xl font-bold mb-8">
+            ¿Te suena familiar?
+          </h2>
+          <ul className="text-left space-y-3 text-app2 mb-8 max-w-lg mx-auto">
+            <li className="flex gap-3 items-start">
+              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">✗</span>
+              <span>Perdés turnos porque los anotás en papel o en WhatsApp</span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">✗</span>
+              <span>No sabés cuánto facturaste este mes hasta que lo sumás a mano</span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">✗</span>
+              <span>Los pacientes te piden la historia clínica y tardás 10 minutos en encontrarla</span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">✗</span>
+              <span>Usás 3 apps distintas para lo que debería hacer una sola</span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">✗</span>
+              <span>Salís del consultorio y seguís pensando en lo administrativo</span>
+            </li>
+          </ul>
+          <p className="text-app font-semibold text-lg">
+            No es falta de organización. Es que no tenés la herramienta correcta.
+          </p>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="px-4 py-16 bg-surface border-y border-app/20">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8">
+      <section className="px-4 py-14 border-b border-app/20">
+        <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="text-center">
-              <div className="text-4xl font-bold text-emerald-500 mb-2">3x</div>
-              <p className="text-app2 font-medium">Más eficiencia en agenda</p>
+              <div className="text-4xl font-bold text-emerald-500 mb-1">📅</div>
+              <p className="text-app font-semibold text-sm">Agenda online 24/7</p>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-emerald-500 mb-2">80%</div>
-              <p className="text-app2 font-medium">Menos tiempo administrativo</p>
+              <div className="text-4xl font-bold text-emerald-500 mb-1">🦷</div>
+              <p className="text-app font-semibold text-sm">Historia clínica digital</p>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-purple-500 mb-2">100%</div>
-              <p className="text-app2 font-medium">Control de pacientes</p>
+              <div className="text-4xl font-bold text-purple-500 mb-1">💰</div>
+              <p className="text-app font-semibold text-sm">Finanzas en tiempo real</p>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-amber-500 mb-2">24/7</div>
-              <p className="text-app2 font-medium">Agendamiento automático</p>
+              <div className="text-4xl font-bold text-amber-500 mb-1">👥</div>
+              <p className="text-app font-semibold text-sm">Gestión de pacientes</p>
             </div>
           </div>
         </div>
@@ -118,54 +183,52 @@ export default function HomePage() {
       <section id="features" className="px-4 py-24 border-b border-app/20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Todas las herramientas que necesitás
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">
+              Todo lo que necesita tu consultorio.
+              <span className="text-app2 block text-2xl md:text-3xl font-normal mt-2">Nada de lo que no necesitás.</span>
             </h2>
-            <p className="text-xl text-app2 max-w-2xl mx-auto">
-              Diseñadas específicamente para odontólogos. Intuitivo, poderoso y hecho para crecer con tu negocio.
-            </p>
           </div>
-          
-          <div className="grid md:grid-cols-2 gap-8 mb-8">
+
+          <div className="grid md:grid-cols-2 gap-8">
             {/* Feature 1 */}
             <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-500/10">
               <div className="w-14 h-14 bg-emerald-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
                 📅
               </div>
-              <h3 className="text-2xl font-bold mb-3">Agenda que trabaja por vos</h3>
-              <ul className="text-app2 space-y-2">
-                <li>✓ Tus pacientes se agendan 24/7 desde cualquier dispositivo</li>
-                <li>✓ Recordatorios automáticos por email y SMS</li>
-                <li>✓ Prevención de cancelaciones y no-shows</li>
-                <li>✓ Integración con Google Calendar y Outlook</li>
+              <h3 className="text-xl font-bold mb-3">Agenda que trabaja por vos</h3>
+              <ul className="text-app2 space-y-2 text-sm">
+                <li>✓ Tus pacientes se agendan desde cualquier dispositivo, a cualquier hora</li>
+                <li>✓ Recordatorios automáticos — menos no-shows sin que hagas nada</li>
+                <li>✓ Vista semanal/diaria clara, sin cruces ni dobles turnos</li>
+                <li>✓ Accesible desde el celular en segundos</li>
               </ul>
             </div>
 
             {/* Feature 2 */}
-            <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-500/10">
-              <div className="w-14 h-14 bg-emerald-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
-                💰
+            <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-purple-500/50 transition-all hover:shadow-lg hover:shadow-purple-500/10">
+              <div className="w-14 h-14 bg-purple-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
+                🦷
               </div>
-              <h3 className="text-2xl font-bold mb-3">Finanzas al dedal</h3>
-              <ul className="text-app2 space-y-2">
-                <li>✓ Facturación automática y seguimiento de pagos</li>
-                <li>✓ Reportes de ingresos y egresos en tiempo real</li>
-                <li>✓ Alertas de morosidad automáticas</li>
-                <li>✓ Integración con métodos de pago</li>
+              <h3 className="text-xl font-bold mb-3">Historia clínica sin papeles</h3>
+              <ul className="text-app2 space-y-2 text-sm">
+                <li>✓ Odontograma interactivo y digital</li>
+                <li>✓ Historial completo de cada paciente en un clic</li>
+                <li>✓ Evoluciones, tratamientos e imágenes adjuntas</li>
+                <li>✓ Accedés desde donde estés, en segundos</li>
               </ul>
             </div>
 
             {/* Feature 3 */}
-            <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-purple-500/50 transition-all hover:shadow-lg hover:shadow-purple-500/10">
-              <div className="w-14 h-14 bg-purple-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
-                📋
+            <div className="bg-surface border border-app/20 rounded-2xl p-8 hover:border-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-500/10">
+              <div className="w-14 h-14 bg-emerald-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
+                💰
               </div>
-              <h3 className="text-2xl font-bold mb-3">Fichas clínicas modernas</h3>
-              <ul className="text-app2 space-y-2">
-                <li>✓ Odontograma interactivo y digital</li>
-                <li>✓ Historial completo de cada paciente</li>
-                <li>✓ Formularios personalizables por especialidad</li>
-                <li>✓ Acceso desde cualquier dispositivo</li>
+              <h3 className="text-xl font-bold mb-3">Finanzas sin sorpresas</h3>
+              <ul className="text-app2 space-y-2 text-sm">
+                <li>✓ Ingresos y cobros pendientes en tiempo real</li>
+                <li>✓ Sabés exactamente cuánto facturaste cada mes</li>
+                <li>✓ Alertas de pagos pendientes automáticas</li>
+                <li>✓ Sin planillas, sin Excel, sin dolores de cabeza</li>
               </ul>
             </div>
 
@@ -174,251 +237,203 @@ export default function HomePage() {
               <div className="w-14 h-14 bg-amber-500/20 rounded-lg flex items-center justify-center text-3xl mb-6">
                 👥
               </div>
-              <h3 className="text-2xl font-bold mb-3">Equipo coordinado</h3>
-              <ul className="text-app2 space-y-2">
-                <li>✓ Gestión de higienistas y asistentes</li>
-                <li>✓ Calendarios compartidos por profesional</li>
-                <li>✓ Permisos y roles personalizables</li>
-                <li>✓ Comunicación interna integrada</li>
+              <h3 className="text-xl font-bold mb-3">Gestión de pacientes centralizada</h3>
+              <ul className="text-app2 space-y-2 text-sm">
+                <li>✓ Ficha completa de cada paciente con historial de visitas</li>
+                <li>✓ Seguimiento de tratamientos en curso</li>
+                <li>✓ Múltiples profesionales con agendas separadas</li>
+                <li>✓ Permisos y roles por usuario</li>
               </ul>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Benefits Section */}
-      <section id="benefits" className="px-4 py-24 bg-surface border-b border-app/20">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-bold text-center mb-16">
-            ¿Por qué elegir DentalOS?
+      {/* How It Works Section */}
+      <section id="como-funciona" className="px-4 py-24 bg-surface border-b border-app/20">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-bold text-center mb-4">
+            Tres pasos para tener tu consultorio ordenado hoy.
           </h2>
-          
-          <div className="space-y-6">
-            <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-emerald-500">⚡</span>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Implementación en minutos</h3>
-                <p className="text-app2">No necesitas ser experto en tecnología. En 5 minutos estás operativo. Migramos tu información antigua si lo necesitás.</p>
-              </div>
-            </div>
+          <p className="text-center text-app2 mb-16">Sin instalaciones. Sin capacitación. Sin vueltas.</p>
 
-            <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-emerald-500">🛡️</span>
+          <div className="grid md:grid-cols-3 gap-8 mb-12">
+            {[
+              {
+                num: '1',
+                title: 'Creá tu cuenta',
+                desc: 'Solo email y contraseña. Listo en menos de 2 minutos. Sin tarjeta de crédito.'
+              },
+              {
+                num: '2',
+                title: 'Configurá tu consultorio',
+                desc: 'Cargá tus horarios, servicios y pacientes. Es intuitivo — no necesitás capacitación.'
+              },
+              {
+                num: '3',
+                title: 'Manejá todo desde un lugar',
+                desc: 'Turnos, historias clínicas, cobros y reportes. Desde el consultorio o desde tu celular.'
+              }
+            ].map((step, i) => (
+              <div key={i} className="relative group">
+                <div className="bg-app border border-app/20 rounded-2xl p-8 h-full flex flex-col group-hover:border-emerald-500/50 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg mb-6">
+                    {step.num}
+                  </div>
+                  <h3 className="text-xl font-bold mb-3">{step.title}</h3>
+                  <p className="text-app2 text-sm flex-1">{step.desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Seguridad de nivel médico</h3>
-                <p className="text-app2">Cumplimos con todas las normativas de protección de datos. Encriptación de punta a punta. Tus datos son sagrados.</p>
-              </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-purple-500">📱</span>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Funciona en cualquier dispositivo</h3>
-                <p className="text-app2">Web, tablet, celular. Diseñado para trabajar desde la clínica, desde tu consultorio privado o desde donde estés.</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-amber-500">🎯</span>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Soporte humano dedicado</h3>
-                <p className="text-app2">No es IA ni chatbots. Nuestro equipo está aquí para ayudarte. Respuesta en menos de 2 horas, siempre.</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-pink-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-pink-500">💡</span>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Siempre en evolución</h3>
-                <p className="text-app2">Escuchamos a nuestros usuarios. Las nuevas features salen cada mes según tus necesidades reales.</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4 md:gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-cyan-500">🌱</span>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-2">Crece con tu consultorio</h3>
-                <p className="text-app2">Desde consultorio solo hasta clínica con 20 profesionales. La plataforma escala contigo sin problemas.</p>
-              </div>
-            </div>
+          <div className="text-center">
+            <Link href="/register" className="inline-block bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg">
+              Empezar gratis ahora
+            </Link>
+            <p className="text-sm text-app2 mt-3">Sin tarjeta · Listo en 5 minutos · Cancelás cuando querés</p>
           </div>
         </div>
       </section>
 
-      {/* How It Works Section */}
+      {/* Testimonials Section - BEFORE pricing */}
       <section className="px-4 py-24 border-b border-app/20">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-bold text-center mb-16">
-            Comenzá en 10 minutos
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">
+            Lo que dicen los odontólogos que ya lo usan
           </h2>
+          <p className="text-center text-app2 mb-12">Resultados reales de consultorios reales.</p>
 
-          <div className="grid md:grid-cols-4 gap-6">
-            {[
-              {
-                num: '1',
-                title: 'Registrate',
-                desc: 'Creá tu cuenta con tu email. Es gratis y no te pide tarjeta.'
-              },
-              {
-                num: '2',
-                title: 'Configurá tu clínica',
-                desc: 'Horarios, servicios, profesionales. Todo personalizable en minutos.'
-              },
-              {
-                num: '3',
-                title: 'Tu agenda automática',
-                desc: 'Tus pacientes se agendan 24/7 sin que vos tengas que responder.'
-              },
-              {
-                num: '4',
-                title: 'Controlá ingresos y ausentismo',
-                desc: 'Ve tus ganancias, gastos y métricas de pacientes. Identifica quiénes faltan y evita pérdidas.'
-              }
-            ].map((step, i) => (
-              <div key={i} className="relative group">
-                <div className="bg-surface2 border border-app/20 rounded-2xl p-8 h-full flex flex-col group-hover:border-emerald-500/50 transition-all">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                      {step.num}
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-bold mb-3">{step.title}</h3>
-                  <p className="text-app2 flex-1">{step.desc}</p>
-                </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-surface border border-app/20 rounded-2xl p-8">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <span key={i} className="text-amber-400 text-lg">★</span>
+                ))}
               </div>
-            ))}
+              <p className="text-app mb-6 leading-relaxed">
+                "Antes perdía 1 hora por día en administración. Ahora son 10 minutos y ya estoy atendiendo."
+              </p>
+              <p className="font-bold text-sm">Dra. María García</p>
+              <p className="text-xs text-app2">Odontóloga general · CABA</p>
+            </div>
+
+            <div className="bg-surface border border-app/20 rounded-2xl p-8">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <span key={i} className="text-amber-400 text-lg">★</span>
+                ))}
+              </div>
+              <p className="text-app mb-6 leading-relaxed">
+                "Los recordatorios automáticos solos ya justificaron el costo. Los turnos no confirmados bajaron un montón."
+              </p>
+              <p className="font-bold text-sm">Dr. Carlos López</p>
+              <p className="text-xs text-app2">Ortodoncista · Córdoba</p>
+            </div>
+
+            <div className="bg-surface border border-app/20 rounded-2xl p-8">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <span key={i} className="text-amber-400 text-lg">★</span>
+                ))}
+              </div>
+              <p className="text-app mb-6 leading-relaxed">
+                "Por fin tengo las historias clínicas en orden. La ficha de cada paciente en segundos, desde el celular."
+              </p>
+              <p className="font-bold text-sm">Dra. Silvina Rodríguez</p>
+              <p className="text-xs text-app2">Odontopediatra · Rosario</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Pricing Section */}
       <section id="pricing" className="px-4 py-24 bg-surface border-b border-app/20">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Precios que tiene sentido
+        <div className="max-w-lg mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-3">
+            Un precio. Todo incluido.
           </h2>
-          <p className="text-xl text-app2 mb-16">
-            Prueba gratis 10 días completos. Sin sorpresas, sin trampas, sin tarjeta.
+          <p className="text-app2 mb-10">
+            Probá 10 días completos sin pagar nada. Sin tarjeta. Sin sorpresas.
           </p>
 
-          <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 border-2 border-emerald-500/30 rounded-3xl p-12">
-            <h3 className="text-3xl font-bold mb-4">Plan todo incluido</h3>
-            <p className="text-app2 mb-8">Acceso completo a todas las herramientas</p>
-            <p className="text-6xl font-black text-emerald-500 mb-2">$0</p>
-            <p className="text-app2 mb-8">Primeros 10 días • Luego $38.000 por usuario por mes.</p>
-            
-            <div className="bg-white/50 dark:bg-white/10 rounded-xl p-6 mb-8 text-left space-y-3">
-              <div className="flex items-center gap-3">
-                <span className="text-emerald-500 font-bold">✓</span>
-                <span className="text-app font-medium">Agenda automática 24/7</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-emerald-500 font-bold">✓</span>
-                <span className="text-app font-medium">Fichas clínicas digitales con odontograma</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-emerald-500 font-bold">✓</span>
-                <span className="text-app font-medium">Control de finanzas y facturación</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-emerald-500 font-bold">✓</span>
-                <span className="text-app font-medium">Gestión de equipo sin límites</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-emerald-500 font-bold">✓</span>
-                <span className="text-app font-medium">Soporte humano dedicado</span>
-              </div>
+          <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 border-2 border-emerald-500/40 rounded-3xl p-10">
+            <p className="text-sm font-semibold text-emerald-400 uppercase tracking-widest mb-4">Plan todo incluido</p>
+            <div className="mb-2">
+              <span className="text-6xl font-black text-emerald-500">$38.000</span>
+            </div>
+            <p className="text-app2 text-sm mb-8">ARS por usuario / mes · <strong className="text-emerald-400">Primeros 10 días gratis</strong></p>
+
+            <div className="bg-white/5 rounded-xl p-6 mb-8 text-left space-y-3">
+              {[
+                'Agenda online con recordatorios automáticos',
+                'Historia clínica con odontograma digital',
+                'Control de finanzas y cobros pendientes',
+                'Gestión de pacientes ilimitados',
+                'Multi-usuario con permisos personalizables',
+                'Acceso desde celular, tablet o computadora',
+                'Soporte en español incluido',
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-emerald-500 font-bold flex-shrink-0">✓</span>
+                  <span className="text-app text-sm">{item}</span>
+                </div>
+              ))}
             </div>
 
-            <Link href="/register" className="inline-block bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg mb-4">
-              Comienza tu período gratis ahora
+            <Link href="/register" className="inline-block w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg mb-3 text-center">
+              Empezar 10 días gratis
             </Link>
-            <p className="text-xs text-app2">No se requiere tarjeta de crédito</p>
+            <p className="text-xs text-app2">Sin tarjeta · Cancelás cuando querés · Sin preguntas</p>
           </div>
         </div>
       </section>
 
-      {/* Social Proof / Testimonials Section */}
+      {/* FAQ Section */}
       <section className="px-4 py-24 border-b border-app/20">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-bold text-center mb-16">
-            Confían en nosotros
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">
+            Preguntas frecuentes
           </h2>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-surface border border-app/20 rounded-2xl p-8">
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <span key={i} className="text-lg">⭐</span>
-                ))}
-              </div>
-              <p className="text-app2 mb-6">
-                "Cambió completamente cómo trabajo. Ya no me llaman por teléfono, mis pacientes se autoagiendan. Una maravilla."
-              </p>
-              <p className="font-bold">Dra. María García</p>
-              <p className="text-sm text-app2">Clínica Privada, CABA</p>
-            </div>
 
-            <div className="bg-surface border border-app/20 rounded-2xl p-8">
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <span key={i} className="text-lg">⭐</span>
-                ))}
+          <div className="space-y-3">
+            {faqs.map((faq, i) => (
+              <div key={i} className="bg-surface border border-app/20 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full px-6 py-5 text-left flex items-center justify-between gap-4 hover:bg-white/5 transition-colors"
+                >
+                  <span className="font-semibold text-app">{faq.q}</span>
+                  <span className="text-emerald-500 flex-shrink-0 text-lg font-bold transition-transform" style={{ transform: openFaq === i ? 'rotate(45deg)' : 'none' }}>
+                    +
+                  </span>
+                </button>
+                {openFaq === i && (
+                  <div className="px-6 pb-5 text-app2 text-sm leading-relaxed border-t border-app/10 pt-4">
+                    {faq.a}
+                  </div>
+                )}
               </div>
-              <p className="text-app2 mb-6">
-                "Las fichas digitales con odontograma son exactamente lo que necesitaba. Muy profesional y fácil de usar."
-              </p>
-              <p className="font-bold">Dr. Carlos López</p>
-              <p className="text-sm text-app2">Consultorio en Flores</p>
-            </div>
-
-            <div className="bg-surface border border-app/20 rounded-2xl p-8">
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <span key={i} className="text-lg">⭐</span>
-                ))}
-              </div>
-              <p className="text-app2 mb-6">
-                "El control de finanzas es clarito. Sé exactamente cuánto gano, cuánto gasté y quién no pagó. Imprescindible."
-              </p>
-              <p className="font-bold">Dra. Silvina Rodríguez</p>
-              <p className="text-sm text-app2">Centro Odontológico</p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Final CTA Section */}
-      <section className="px-4 py-24 bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border-b border-app/20">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            ¿Listo para dejar de complicarte la vida?
+      <section className="px-4 py-24 bg-gradient-to-r from-emerald-500/15 to-emerald-600/15 border-b border-app/20">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-3xl md:text-5xl font-bold mb-5">
+            Tu consultorio más ordenado empieza hoy.
           </h2>
-          <p className="text-xl text-app2 mb-8 leading-relaxed">
-            Cientos de odontólogos ya están gestionando sus consultorios de forma más inteligente. 
-            Tu turno es ahora. Prueba gratis, sin compromisos. Si no te gusta, simplemente no pagas nada.
+          <p className="text-lg text-app2 mb-8">
+            Probá DentalOS 10 días gratis. Sin tarjeta, sin instalación, sin burocracia.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-8 py-4 rounded-lg transition-all transform hover:scale-105 shadow-lg">
-              ¡Quiero mis 10 días gratis!
-            </Link>
-            <a href="#features" className="border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-500/10 font-bold px-8 py-4 rounded-lg transition-all">
-              Ver más detalles
-            </a>
-          </div>
-          <p className="text-sm text-app2 mt-8">💡 Tip: Los que empiezan hoy están 30 días adelante a fin de año</p>
+          <Link href="/register" className="inline-block bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold px-10 py-5 rounded-lg transition-all transform hover:scale-105 shadow-lg text-lg">
+            Empezar gratis ahora
+          </Link>
+          <p className="text-sm text-app2 mt-5">
+            Sin tarjeta · Se tarda menos de 5 minutos · Cancelás cuando querés
+          </p>
         </div>
       </section>
 
@@ -427,7 +442,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 py-16">
           <div className="grid md:grid-cols-4 gap-12 mb-8">
             <div>
-              <h3 className="text-2xl font-bold mb-4">
+              <h3 className="text-2xl font-bold mb-3">
                 Dental<span className="text-emerald-500">OS</span>
               </h3>
               <p className="text-app2 text-sm">La gestión de tu consultorio, simplificada.</p>
@@ -436,7 +451,7 @@ export default function HomePage() {
               <h4 className="font-bold text-sm mb-4 uppercase tracking-wide">Producto</h4>
               <ul className="space-y-2 text-sm text-app2">
                 <li><a href="#features" className="hover:text-app transition-colors">Funcionalidades</a></li>
-                <li><a href="#benefits" className="hover:text-app transition-colors">Beneficios</a></li>
+                <li><a href="#como-funciona" className="hover:text-app transition-colors">Cómo funciona</a></li>
                 <li><a href="#pricing" className="hover:text-app transition-colors">Precios</a></li>
               </ul>
             </div>
@@ -460,9 +475,8 @@ export default function HomePage() {
           <div className="border-t border-app/20 pt-8 flex flex-col md:flex-row items-center justify-between">
             <p className="text-app2 text-sm">© 2026 DentalOS. Todos los derechos reservados.</p>
             <div className="flex gap-6 mt-4 md:mt-0">
-              <a href="#" className="text-app2 hover:text-app transition-colors text-sm">Twitter</a>
-              <a href="#" className="text-app2 hover:text-app transition-colors text-sm">LinkedIn</a>
               <a href="#" className="text-app2 hover:text-app transition-colors text-sm">Instagram</a>
+              <a href="#" className="text-app2 hover:text-app transition-colors text-sm">LinkedIn</a>
             </div>
           </div>
         </div>
@@ -471,19 +485,24 @@ export default function HomePage() {
       {/* Login Modal */}
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-8">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-8 relative">
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-4 right-4 text-app2 hover:text-app transition-colors text-xl leading-none"
+            >
+              ✕
+            </button>
+
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-app">
                 Dental<span className="text-emerald-400">OS</span>
               </h1>
-              <p className="text-app2 mt-2">Ingresá a tu consultorio</p>
+              <p className="text-app2 mt-2 text-sm">Ingresá a tu consultorio</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-app2 mb-2">
-                  Email
-                </label>
+                <label className="block text-sm font-medium text-app2 mb-2">Email</label>
                 <input
                   type="email"
                   value={email}
@@ -495,9 +514,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-app2 mb-2">
-                  Contraseña
-                </label>
+                <label className="block text-sm font-medium text-app2 mb-2">Contraseña</label>
                 <input
                   type="password"
                   value={password}
@@ -525,19 +542,12 @@ export default function HomePage() {
               <div className="text-center">
                 <p className="text-app2 text-sm">
                   ¿No tenés cuenta?{' '}
-                  <Link href="/register" className="text-emerald-400 hover:text-emerald-300 transition-colors">
-                    Registrate aquí
+                  <Link href="/register" className="text-emerald-400 hover:text-emerald-300 transition-colors" onClick={() => setShowLoginModal(false)}>
+                    Empezar gratis
                   </Link>
                 </p>
               </div>
             </form>
-
-            <button
-              onClick={() => setShowLoginModal(false)}
-              className="absolute top-4 right-4 text-app2 hover:text-app transition-colors"
-            >
-              ✕
-            </button>
           </div>
         </div>
       )}
