@@ -826,7 +826,7 @@ function ToothSVG({ state, onClick, isSelected, number }: {
     const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
     if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
-    if (c === 'emerald') return '#059669'
+    if (c === 'emerald') return '#2563eb'
     return 'transparent'
   }
 
@@ -990,7 +990,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
       const c = state[face]
       if (c === 'red') return '#dc2626'
       if (c === 'blue') return '#2563eb'
-      if (c === 'emerald') return '#059669'
+      if (c === 'emerald') return '#2563eb'
       return 'transparent'
     }
 
@@ -1069,8 +1069,8 @@ function OdontogramView({ odontogram, onSaveTooth }: {
         <button
           onClick={() => setPaintColor('emerald')}
           className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'emerald'
-            ? 'bg-emerald-600 ring-emerald-500'
-            : 'bg-emerald-900/40 ring-transparent hover:ring-emerald-800'
+            ? 'bg-blue-600 ring-blue-500'
+            : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'
             }`}
           title="Por realizar"
         />
@@ -1186,7 +1186,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
           Ya realizado
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block" />
+          <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
           Por realizar
         </span>
         <span className="flex items-center gap-1.5">
