@@ -15,7 +15,7 @@ const WORK_HOURS: Record<number, { start: number; end: number } | null> = {
   3: { start: 8, end: 20 },  // Wednesday
   4: { start: 8, end: 20 },  // Thursday
   5: { start: 8, end: 20 },  // Friday
-  6: { start: 8, end: 14 },  // Saturday
+  6: { start: 8, end: 20 },  // Saturday
 }
 
 function generateSlots(date: string, hours: { start: number; end: number }): string[] {
