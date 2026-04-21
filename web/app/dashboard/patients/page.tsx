@@ -113,7 +113,13 @@ export default function PatientsPage() {
                     onClick={() => router.push(`/dashboard/patients/${p.id}`)}
                     className="px-6 py-4 flex items-center gap-4 hover:bg-surface2/50 transition-colors cursor-pointer"
                   >
-                    <div className="w-10 h-10 rounded-full bg-surface3 flex items-center justify-center font-bold text-app2 flex-shrink-0">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0 ${
+                      p.gender === 'F'
+                        ? 'bg-pink-500/20 text-pink-400'
+                        : p.gender === 'M'
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-surface3 text-app2'
+                    }`}>
                       {p.first_name[0]}{p.last_name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -185,6 +191,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
   const [form, setForm] = useState({
     first_name: '', last_name: '', phone: '',
     document_number: '', date_of_birth: '',
+    gender: '',
     email: '', insurance_name: '', allergies: '',
     current_medications: ''
   })
@@ -254,6 +261,30 @@ function NewPatientModal({ token, onClose, onCreated }: {
                 <input value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)}
                   type="date"
                   className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Sexo</label>
+              <div className="flex gap-2">
+                {[{ v: 'F', label: 'Femenino' }, { v: 'M', label: 'Masculino' }, { v: 'otro', label: 'Otro' }].map(opt => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => set('gender', form.gender === opt.v ? '' : opt.v)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-all ${
+                      form.gender === opt.v
+                        ? opt.v === 'F'
+                          ? 'bg-pink-500/20 border-pink-400 text-pink-400'
+                          : opt.v === 'M'
+                          ? 'bg-blue-500/20 border-blue-400 text-blue-400'
+                          : 'bg-surface3 border-app2 text-app'
+                        : 'bg-surface2 border-app text-app3 hover:border-app2'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
 

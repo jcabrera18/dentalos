@@ -418,7 +418,7 @@ export default function AgendaPage() {
                   ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-300'
                   : 'bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
               }`}>
-              {linkCopied ? '✓ Copiado' : '📋 Copiar link'}
+              {linkCopied ? '✓ Copiado' : '📋 Link de agenda'}
             </button>
             <WeekNav />
           </div>

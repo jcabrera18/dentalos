@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
@@ -25,6 +25,7 @@ export default function PatientDetailPage() {
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
+  const [odontogramActiveType, setOdontogramActiveType] = useState<'adult' | 'child'>('adult')
   const APPTS_PER_PAGE = 5
   const router = useRouter()
   const params = useParams()
@@ -53,6 +54,7 @@ export default function PatientDetailPage() {
       await loadFileUrls(list)
 
       setPatient(patientData.data)
+      setOdontogramActiveType((patientData.data?.odontogram_type as 'adult' | 'child') ?? 'adult')
       setNotes(patientData.data?.notes ?? '')
       setBalance(balanceData.data)
       setOdontogram(odontogramData.data ?? [])
@@ -238,12 +240,36 @@ export default function PatientDetailPage() {
     ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / 31557600000)
     : null
 
+  async function updateTeethBulk(teeth: Array<{ toothNumber: number; surfaces: string; note: string }>) {
+    setSavingTooth(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await apiFetch(`/treatments/odontogram/${params.id}/bulk`, {
+        method: 'PUT',
+        token: session.access_token,
+        body: JSON.stringify({
+          teeth: teeth.map(t => {
+            const surfacesArray = t.surfaces ? t.surfaces.split(',').filter(Boolean) : []
+            return {
+              tooth_number: t.toothNumber,
+              condition: surfacesArray.length > 0 ? 'other' : 'healthy',
+              surfaces: surfacesArray,
+              notes: t.note || undefined,
+            }
+          })
+        })
+      })
+    } finally {
+      setSavingTooth(false)
+    }
+  }
+
   async function updateTooth(toothNumber: number, surfaces: Record<string, string>, note: string) {
     setSavingTooth(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      // Convertir "V:red,M:blue" a array ["V:red", "M:blue"]
       const surfacesArray = surfaces.surfaces
         ? surfaces.surfaces.split(',').filter(Boolean)
         : []
@@ -295,6 +321,7 @@ export default function PatientDetailPage() {
                     email: patient.email ?? '',
                     document_number: patient.document_number ?? '',
                     date_of_birth: patient.date_of_birth ?? '',
+                    gender: patient.gender ?? '',
                     insurance_name: patient.insurance_name ?? '',
                     insurance_plan: patient.insurance_plan ?? '',
                     insurance_number: patient.insurance_number ?? '',
@@ -405,13 +432,43 @@ export default function PatientDetailPage() {
 
             {/* Odontograma */}
             <div className="bg-surface border border-app rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-app">
+              <div className="px-6 py-4 border-b border-app flex items-center justify-between">
                 <h3 className="font-semibold">Odontograma</h3>
+                <div className="flex items-center gap-3">
+                  {savingTooth && (
+                    <span className="flex items-center gap-1.5 text-xs text-app3">
+                      <svg className="animate-spin w-3 h-3 text-yellow-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                      Guardando...
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
+                    {(['adult', 'child'] as const).map(t => (
+                      <button key={t}
+                        onClick={async () => {
+                          setOdontogramActiveType(t)
+                          const { data: { session } } = await supabase.auth.getSession()
+                          if (!session) return
+                          await apiFetch(`/patients/${params.id}`, {
+                            method: 'PATCH', token: session.access_token,
+                            body: JSON.stringify({ odontogram_type: t }),
+                          })
+                          setPatient((p: any) => ({ ...p, odontogram_type: t }))
+                        }}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${odontogramActiveType === t ? 'bg-yellow-900/50 border border-yellow-700 text-yellow-300' : 'text-app3 hover:text-app2'}`}
+                      >{t === 'adult' ? 'Adulto' : 'Niño'}</button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div className="p-4">
                 <OdontogramView
                   odontogram={odontogram}
                   onSaveTooth={updateTooth}
+                  onSaveBulk={updateTeethBulk}
+                  odontogramType={odontogramActiveType}
                 />
               </div>
             </div>
@@ -756,6 +813,30 @@ export default function PatientDetailPage() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Sexo</label>
+                  <div className="flex gap-2">
+                    {[{ v: 'F', label: 'Femenino' }, { v: 'M', label: 'Masculino' }, { v: 'otro', label: 'Otro' }].map(opt => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setEditForm((f: any) => ({ ...f, gender: f.gender === opt.v ? '' : opt.v }))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-all ${
+                          editForm.gender === opt.v
+                            ? opt.v === 'F'
+                              ? 'bg-pink-500/20 border-pink-400 text-pink-400'
+                              : opt.v === 'M'
+                              ? 'bg-blue-500/20 border-blue-400 text-blue-400'
+                              : 'bg-surface3 border-app2 text-app'
+                            : 'bg-surface2 border-app text-app3 hover:border-app2'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Obra social</label>
@@ -806,23 +887,61 @@ export default function PatientDetailPage() {
   )
 }
 
-// Cuadrantes FDI
+// Cuadrantes FDI — adulto
 const Q1 = [18, 17, 16, 15, 14, 13, 12, 11]
 const Q2 = [21, 22, 23, 24, 25, 26, 27, 28]
 const Q3 = [31, 32, 33, 34, 35, 36, 37, 38]
 const Q4 = [48, 47, 46, 45, 44, 43, 42, 41]
 
-type FaceColor = 'red' | 'blue' | 'emerald' | null
-type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string; missing?: boolean; toExtract?: boolean }
+// Cuadrantes FDI — dentición primaria (niño)
+const CQ1 = [55, 54, 53, 52, 51]
+const CQ2 = [61, 62, 63, 64, 65]
+const CQ3 = [71, 72, 73, 74, 75]
+const CQ4 = [85, 84, 83, 82, 81]
 
-function ToothSVG({ state, onClick, isSelected, number }: {
+const ADULT_UPPER = [...Q1, ...Q2]
+const ADULT_LOWER = [...Q4, ...Q3]
+const CHILD_UPPER = [...CQ1, ...CQ2]
+const CHILD_LOWER = [...CQ4, ...CQ3]
+const ALL_ARCHES = [ADULT_UPPER, ADULT_LOWER, CHILD_UPPER, CHILD_LOWER]
+
+function getTeethBetween(a: number, b: number): number[] | null {
+  for (const arch of ALL_ARCHES) {
+    const i = arch.indexOf(a), j = arch.indexOf(b)
+    if (i !== -1 && j !== -1) {
+      const [s, e] = i < j ? [i, j] : [j, i]
+      return arch.slice(s, e + 1)
+    }
+  }
+  return null
+}
+
+function nanoid6() { return Math.random().toString(36).slice(2, 8) }
+
+type ProstheticType = 'bridge' | 'removable' | 'crown'
+type Prosthetic = { id: string; type: ProstheticType; color: 'red' | 'blue'; teeth: number[] }
+
+type FaceColor = 'red' | 'blue' | 'emerald' | null
+type ToothStatus = 'missing' | 'toExtract' | 'crownExisting' | 'crownPending'
+type ToothState = { V?: FaceColor; M?: FaceColor; O?: FaceColor; D?: FaceColor; L?: FaceColor; note?: string; missing?: boolean; toExtract?: boolean; crownExisting?: boolean; crownPending?: boolean }
+
+function getToothStatus(state: ToothState): ToothStatus | null {
+  if (state.missing) return 'missing'
+  if (state.toExtract) return 'toExtract'
+  if (state.crownExisting) return 'crownExisting'
+  if (state.crownPending) return 'crownPending'
+  return null
+}
+
+function ToothSVG({ state, onClick, isSelected, number, isStartPoint }: {
   state: ToothState
   onClick: () => void
   isSelected: boolean
   number: number
+  isStartPoint?: boolean
 }) {
   function fc(face: keyof ToothState): string {
-    if (state.missing || state.toExtract) return '#111827'
+    if (state.missing || state.toExtract || state.crownExisting || state.crownPending) return '#111827'
     const c = state[face as 'V' | 'M' | 'O' | 'D' | 'L']
     if (c === 'red') return '#dc2626'
     if (c === 'blue') return '#2563eb'
@@ -830,65 +949,74 @@ function ToothSVG({ state, onClick, isSelected, number }: {
     return 'transparent'
   }
 
-  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing || state.toExtract
+  const hasAny = (['V', 'M', 'O', 'D', 'L'] as const).some(f => state[f]) || state.missing || state.toExtract || state.crownExisting || state.crownPending
 
   return (
     <div className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={onClick}>
       <svg width="32" height="32" viewBox="0 0 40 40"
-        className={`transition-all ${isSelected
-          ? 'drop-shadow-[0_0_5px_rgba(250,204,21,0.9)]'
-          : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
+        className={`transition-all ${isStartPoint
+          ? 'drop-shadow-[0_0_6px_rgba(16,185,129,0.9)]'
+          : isSelected
+            ? 'drop-shadow-[0_0_5px_rgba(250,204,21,0.9)]'
+            : 'hover:drop-shadow-[0_0_3px_rgba(156,163,175,0.4)]'}`}>
 
         <defs>
           <clipPath id={`tooth-clip-${number}`}>
-            <circle cx="20" cy="20" r="17.5" />
+            <rect x="2.5" y="2.5" width="35" height="35" />
           </clipPath>
         </defs>
 
-        {/* Interior con clip */}
         <g clipPath={`url(#tooth-clip-${number})`}>
           {!state.missing && (
             <>
-              <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
+              <path d="M20,20 L3,3 L37,3 Z"
                 fill={fc('V')} stroke="#4b5563" strokeWidth="0.8" />
-              <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
+              <path d="M20,20 L37,37 L3,37 Z"
                 fill={fc('L')} stroke="#4b5563" strokeWidth="0.8" />
-              <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
+              <path d="M20,20 L3,37 L3,3 Z"
                 fill={fc('M')} stroke="#4b5563" strokeWidth="0.8" />
-              <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
+              <path d="M20,20 L37,3 L37,37 Z"
                 fill={fc('D')} stroke="#4b5563" strokeWidth="0.8" />
-              <line x1="6" y1="6" x2="34" y2="34" stroke="#4b5563" strokeWidth="0.8" />
-              <line x1="34" y1="6" x2="6" y2="34" stroke="#4b5563" strokeWidth="0.8" />
-              <circle cx="20" cy="20" r="7"
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#4b5563" strokeWidth="0.8" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#4b5563" strokeWidth="0.8" />
+              <rect x="13" y="13" width="14" height="14"
                 fill={fc('O')} stroke="#4b5563" strokeWidth="0.8" />
             </>
           )}
           {state.missing && (
             <>
-              <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
-              <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
             </>
           )}
           {state.toExtract && (
             <>
-              <line x1="5" y1="5" x2="35" y2="35" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
-              <line x1="35" y1="5" x2="5" y2="35" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
             </>
           )}
         </g>
 
-        {/* Borde exterior — encima del clip */}
-        <circle cx="20" cy="20" r="18"
+        <rect x="2" y="2" width="36" height="36"
           fill="transparent"
-          stroke={isSelected ? '#facc15' : state.missing ? '#374151' : state.toExtract ? '#f97316' : '#4b5563'}
-          strokeWidth={isSelected ? "2" : state.toExtract ? "2" : "1.5"}
-          strokeDasharray={state.toExtract && !isSelected ? "5 3" : undefined}
+          stroke={isSelected ? '#facc15' : state.missing ? '#dc2626' : state.toExtract ? '#3b82f6' : '#4b5563'}
+          strokeWidth={isSelected ? "2" : (state.toExtract || state.missing) ? "2" : "1.5"}
+          strokeDasharray={(state.toExtract || state.missing) && !isSelected ? "5 3" : undefined}
         />
+        {(state.crownExisting || state.crownPending) && (
+          <circle cx="20" cy="20" r="19"
+            fill="transparent"
+            stroke={state.crownExisting ? '#dc2626' : '#3b82f6'}
+            strokeWidth="2"
+          />
+        )}
       </svg>
       <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-yellow-400' :
-        state.missing ? 'text-gray-700' :
-          state.toExtract ? 'text-orange-400' :
-            hasAny ? 'text-app2' : 'text-app3'
+        state.missing ? 'text-red-400' :
+          state.toExtract ? 'text-blue-400' :
+            state.crownExisting ? 'text-red-400' :
+              state.crownPending ? 'text-blue-400' :
+                hasAny ? 'text-app2' : 'text-app3'
         }`}>
         {number}
       </span>
@@ -896,15 +1024,43 @@ function ToothSVG({ state, onClick, isSelected, number }: {
   )
 }
 
-function OdontogramView({ odontogram, onSaveTooth }: {
+function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }: {
   odontogram: any[]
   onSaveTooth: (toothNumber: number, surfaces: Record<string, string>, note: string) => Promise<void>
+  onSaveBulk: (teeth: Array<{ toothNumber: number; surfaces: string; note: string }>) => Promise<void>
+  odontogramType: 'adult' | 'child'
 }) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
   const [paintColor, setPaintColor] = useState<'red' | 'blue' | 'emerald'>('red')
   const [saving, setSaving] = useState(false)
+  const [mode, setMode] = useState<'paint' | 'prosthetic'>('paint')
+  const [prostheticType, setProstheticType] = useState<ProstheticType>('bridge')
+  const [prostheticColor, setProstheticColor] = useState<'red' | 'blue'>('red')
+  const [prostheticStart, setProstheticStart] = useState<number | null>(null)
+  const [prevSnapshot, setPrevSnapshot] = useState<{ teeth: Record<number, ToothState>; prosthetics: Prosthetic[] } | null>(null)
+  const handleUndoRef = useRef<() => Promise<void>>(async () => {})
 
-  // Estado local de cada diente
+  const [prosthetics, setProsthetics] = useState<Prosthetic[]>(() => {
+    const map: Record<string, { type: string; color: string; teeth: number[] }> = {}
+    odontogram.forEach(t => {
+      const surfaces: string[] = t.surfaces ?? []
+      const marker = surfaces.find((s: string) => s.startsWith('bridge:') || s.startsWith('removable:'))
+      if (marker) {
+        const parts = marker.split(':')
+        const [type, color, id] = parts
+        if (id) {
+          if (!map[id]) map[id] = { type, color, teeth: [] }
+          map[id].teeth.push(t.tooth_number)
+        }
+      }
+    })
+    return Object.entries(map).map(([id, p]) => {
+      const arch = ALL_ARCHES.find(a => p.teeth.every(t => a.includes(t))) ?? ADULT_UPPER
+      const sorted = [...p.teeth].sort((a, b) => arch.indexOf(a) - arch.indexOf(b))
+      return { id, type: p.type as ProstheticType, color: p.color as 'red' | 'blue', teeth: sorted }
+    })
+  })
+
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(() => {
     const init: Record<number, ToothState> = {}
     odontogram.forEach(t => {
@@ -912,15 +1068,20 @@ function OdontogramView({ odontogram, onSaveTooth }: {
         init[t.tooth_number] = { missing: true, note: t.notes ?? '' }
       } else if (t.surfaces?.includes('to_extract')) {
         init[t.tooth_number] = { toExtract: true, note: t.notes ?? '' }
+      } else if (t.surfaces?.includes('crown_existing')) {
+        init[t.tooth_number] = { crownExisting: true, note: t.notes ?? '' }
+      } else if (t.surfaces?.includes('crown_pending')) {
+        init[t.tooth_number] = { crownPending: true, note: t.notes ?? '' }
       } else {
-        const surfaces: Record<string, FaceColor> = {}
+        const faceColors: Record<string, FaceColor> = {}
         if (t.surfaces) {
           t.surfaces.forEach((s: string) => {
+            if (s.startsWith('bridge:') || s.startsWith('removable:')) return
             const [face, color] = s.split(':')
-            if (face && color) surfaces[face] = color as FaceColor
+            if (face && color) faceColors[face] = color as FaceColor
           })
         }
-        init[t.tooth_number] = { ...surfaces, note: t.notes ?? '' }
+        init[t.tooth_number] = { ...faceColors, note: t.notes ?? '' }
       }
     })
     return init
@@ -930,16 +1091,63 @@ function OdontogramView({ odontogram, onSaveTooth }: {
     return teeth[n] ?? {}
   }
 
+  function takeSnapshot() {
+    const teethCopy: Record<number, ToothState> = {}
+    Object.keys(teeth).forEach(k => { teethCopy[Number(k)] = { ...teeth[Number(k)] } })
+    setPrevSnapshot({ teeth: teethCopy, prosthetics: prosthetics.map(p => ({ ...p, teeth: [...p.teeth] })) })
+  }
+
+  async function handleUndo() {
+    if (!prevSnapshot) return
+    const snap = prevSnapshot
+    setPrevSnapshot(null)
+    setTeeth(snap.teeth)
+    setProsthetics(snap.prosthetics)
+    const allNums = [...new Set([
+      ...Object.keys(snap.teeth).map(Number),
+      ...Object.keys(teeth).map(Number),
+    ])]
+    const bulkPayload: Array<{ toothNumber: number; surfaces: string; note: string }> = []
+    for (const n of allNums) {
+      const restoredState = snap.teeth[n] ?? {}
+      const curState = teeth[n] ?? {}
+      if (JSON.stringify(restoredState) !== JSON.stringify(curState)) {
+        const base = buildSurfaces(restoredState)
+        const p = snap.prosthetics.find(pr => pr.teeth.includes(n))
+        const surfaces = p ? [base, `${p.type}:${p.color}:${p.id}`].filter(Boolean).join(',') : base
+        bulkPayload.push({ toothNumber: n, surfaces, note: restoredState.note ?? '' })
+      }
+    }
+    if (bulkPayload.length > 0) {
+      setSaving(true)
+      await onSaveBulk(bulkPayload)
+      setSaving(false)
+    }
+  }
+
+  handleUndoRef.current = handleUndo
+
   function buildSurfaces(state: ToothState): string {
     if (state.missing) return 'missing'
     if (state.toExtract) return 'to_extract'
+    if (state.crownExisting) return 'crown_existing'
+    if (state.crownPending) return 'crown_pending'
     return (['V', 'M', 'O', 'D', 'L'] as const)
       .filter(f => state[f])
       .map(f => `${f}:${state[f]}`)
       .join(',')
   }
 
+  function surfacesFor(n: number, state: ToothState): string {
+    const base = buildSurfaces(state)
+    const p = prosthetics.find(pr => pr.teeth.includes(n))
+    if (!p) return base
+    const marker = `${p.type}:${p.color}:${p.id}`
+    return [base, marker].filter(Boolean).join(',')
+  }
+
   async function toggleFace(n: number, face: 'V' | 'M' | 'O' | 'D' | 'L') {
+    takeSnapshot()
     const current = teeth[n] ?? {}
     const currentColor = current[face]
     const newColor: FaceColor = (currentColor === null || currentColor === undefined)
@@ -948,7 +1156,7 @@ function OdontogramView({ odontogram, onSaveTooth }: {
     const newState = { ...current, [face]: newColor }
     setTeeth(prev => ({ ...prev, [n]: newState }))
     setSaving(true)
-    await onSaveTooth(n, { surfaces: buildSurfaces(newState) }, newState.note ?? '')
+    await onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '')
     setSaving(false)
   }
 
@@ -956,37 +1164,152 @@ function OdontogramView({ odontogram, onSaveTooth }: {
     setTeeth(prev => ({ ...prev, [n]: { ...(prev[n] ?? {}), note } }))
   }
 
-  async function saveNote(n: number) {
-    const state = teeth[n] ?? {}
+  async function setStatus(n: number, status: ToothStatus) {
+    takeSnapshot()
+    const current = teeth[n] ?? {}
+    const currentStatus = getToothStatus(current)
+    const newState: ToothState = { note: current.note }
+    if (currentStatus !== status) newState[status] = true
+    setTeeth(prev => ({ ...prev, [n]: newState }))
     setSaving(true)
-    await onSaveTooth(n, { surfaces: buildSurfaces(state) }, state.note ?? '')
+    await onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '')
     setSaving(false)
   }
 
+  async function saveNote(n: number) {
+    const state = teeth[n] ?? {}
+    setSaving(true)
+    await onSaveTooth(n, { surfaces: surfacesFor(n, state) }, state.note ?? '')
+    setSaving(false)
+  }
+
+  async function saveCrown(n: number, color: 'red' | 'blue') {
+    takeSnapshot()
+    const current = teeth[n] ?? {}
+    const isRed = color === 'red'
+    const isActive = isRed ? current.crownExisting : current.crownPending
+    const newState: ToothState = { note: current.note }
+    if (!isActive) {
+      if (isRed) newState.crownExisting = true
+      else newState.crownPending = true
+    }
+    setTeeth(prev => ({ ...prev, [n]: newState }))
+    setSaving(true)
+    await onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '')
+    setSaving(false)
+  }
+
+  async function saveProsthetic(type: ProstheticType, color: 'red' | 'blue', teethRange: number[]) {
+    takeSnapshot()
+    const id = nanoid6()
+    const marker = `${type}:${color}:${id}`
+    setSaving(true)
+    const newTeethState = { ...teeth }
+    const bulkPayload: Array<{ toothNumber: number; surfaces: string; note: string }> = []
+    for (let i = 0; i < teethRange.length; i++) {
+      const tooth = teethRange[i]
+      const isEndpoint = i === 0 || i === teethRange.length - 1
+      const shouldBeMissing = type === 'removable' || !isEndpoint
+      const newState: ToothState = shouldBeMissing
+        ? { missing: true, note: teeth[tooth]?.note ?? '' }
+        : { ...(teeth[tooth] ?? {}), note: teeth[tooth]?.note ?? '' }
+      newTeethState[tooth] = newState
+      const surfaces = [buildSurfaces(newState), marker].filter(Boolean).join(',')
+      bulkPayload.push({ toothNumber: tooth, surfaces, note: newState.note ?? '' })
+    }
+    await onSaveBulk(bulkPayload)
+    setTeeth(newTeethState)
+    setProsthetics(prev => [...prev, { id, type, color, teeth: teethRange }])
+    setSaving(false)
+  }
+
+  async function deleteProsthetic(id: string) {
+    takeSnapshot()
+    const p = prosthetics.find(pr => pr.id === id)
+    if (!p) return
+    setSaving(true)
+    for (const tooth of p.teeth) {
+      const state = teeth[tooth] ?? {}
+      await onSaveTooth(tooth, { surfaces: buildSurfaces(state) }, state.note ?? '')
+    }
+    setProsthetics(prev => prev.filter(pr => pr.id !== id))
+    setSaving(false)
+  }
+
+  function handleToothClick(n: number) {
+    if (mode !== 'prosthetic') {
+      setSelectedTooth(prev => prev === n ? null : n)
+      return
+    }
+    if (prostheticType === 'crown') {
+      saveCrown(n, prostheticColor)
+      return
+    }
+    if (prostheticStart === null) {
+      setProstheticStart(n)
+    } else if (prostheticStart === n) {
+      setProstheticStart(null)
+    } else {
+      const range = getTeethBetween(prostheticStart, n)
+      if (!range || range.length < 2) { setProstheticStart(null); return }
+      saveProsthetic(prostheticType, prostheticColor, range)
+      setProstheticStart(null)
+    }
+  }
+
   function Quadrant({ teeth: qs, label }: { teeth: number[]; label: string }) {
+    const TOOTH_W = 32, TOOTH_GAP = 2
+    const localProsthetics = prosthetics.filter(p => p.teeth.some(t => qs.includes(t)))
     return (
       <div>
         <div className="text-[10px] text-app3 font-mono text-center mb-1">{label}</div>
-        <div className="flex gap-0.5">
-          {qs.map(n => (
-            <ToothSVG
-              key={n}
-              number={n}
-              state={getState(n)}
-              isSelected={selectedTooth === n}
-              onClick={() => setSelectedTooth(selectedTooth === n ? null : n)}
-            />
-          ))}
+        <div className="relative" style={{ paddingTop: '12px' }}>
+          {localProsthetics.map(p => {
+            const qTeeth = p.teeth.filter(t => qs.includes(t))
+            if (qTeeth.length === 0) return null
+            const firstIdx = qs.indexOf(qTeeth[0])
+            const lastIdx = qs.indexOf(qTeeth[qTeeth.length - 1])
+            const left = firstIdx * (TOOTH_W + TOOTH_GAP)
+            const width = (lastIdx - firstIdx) * (TOOTH_W + TOOTH_GAP) + TOOTH_W
+            const c = p.color === 'red' ? '#dc2626' : '#3b82f6'
+            if (p.type === 'bridge') {
+              return (
+                <div key={p.id} className="absolute pointer-events-none" style={{ top: 0, left, width, height: '12px' }}>
+                  <div style={{ position: 'absolute', top: '3px', left: '5px', right: '5px', height: '4px', backgroundColor: c, borderRadius: '1px' }} />
+                  <div style={{ position: 'absolute', top: '3px', left: '5px', width: '4px', height: '9px', backgroundColor: c }} />
+                  <div style={{ position: 'absolute', top: '3px', right: '5px', width: '4px', height: '9px', backgroundColor: c }} />
+                </div>
+              )
+            } else {
+              return (
+                <div key={p.id} className="absolute pointer-events-none" style={{
+                  top: '2px', left, width, height: `${10 + TOOTH_W}px`,
+                  border: `2px dashed ${c}`, borderRadius: '4px', boxSizing: 'border-box',
+                }} />
+              )
+            }
+          })}
+          <div className="flex gap-0.5">
+            {qs.map(n => (
+              <ToothSVG
+                key={n}
+                number={n}
+                state={getState(n)}
+                isSelected={mode !== 'prosthetic' && selectedTooth === n}
+                isStartPoint={prostheticStart === n}
+                onClick={() => handleToothClick(n)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     )
   }
 
-  // Panel de caras — click directo sobre el SVG grande
   function BigToothEditor({ n }: { n: number }) {
     const state = getState(n)
     function fc(face: 'V' | 'M' | 'O' | 'D' | 'L'): string {
-      if (state.missing || state.toExtract) return '#111827'
+      if (state.missing || state.toExtract || state.crownExisting || state.crownPending) return '#111827'
       const c = state[face]
       if (c === 'red') return '#dc2626'
       if (c === 'blue') return '#2563eb'
@@ -998,32 +1321,32 @@ function OdontogramView({ odontogram, onSaveTooth }: {
       <svg width="110" height="110" viewBox="0 0 40 40" className="flex-shrink-0" style={{ userSelect: 'none' }}>
         <defs>
           <clipPath id="big-tooth-clip">
-            <circle cx="20" cy="20" r="17.5" />
+            <rect x="2.5" y="2.5" width="35" height="35" />
           </clipPath>
         </defs>
 
         <g clipPath="url(#big-tooth-clip)" pointerEvents="all">
           {!state.missing && (
             <>
-              <path d="M20,20 L6,6 A19,19 0 0,1 34,6 Z"
+              <path d="M20,20 L3,3 L37,3 Z"
                 fill={fc('V')} stroke="#6b7280" strokeWidth="0.8"
                 className="cursor-pointer hover:opacity-70"
                 onClick={() => toggleFace(n, 'V')} />
-              <path d="M20,20 L34,34 A19,19 0 0,1 6,34 Z"
+              <path d="M20,20 L37,37 L3,37 Z"
                 fill={fc('L')} stroke="#6b7280" strokeWidth="0.8"
                 className="cursor-pointer hover:opacity-70"
                 onClick={() => toggleFace(n, 'L')} />
-              <path d="M20,20 L6,34 A19,19 0 0,1 6,6 Z"
+              <path d="M20,20 L3,37 L3,3 Z"
                 fill={fc('M')} stroke="#6b7280" strokeWidth="0.8"
                 className="cursor-pointer hover:opacity-70"
                 onClick={() => toggleFace(n, 'M')} />
-              <path d="M20,20 L34,6 A19,19 0 0,1 34,34 Z"
+              <path d="M20,20 L37,3 L37,37 Z"
                 fill={fc('D')} stroke="#6b7280" strokeWidth="0.8"
                 className="cursor-pointer hover:opacity-70"
                 onClick={() => toggleFace(n, 'D')} />
-              <line x1="6" y1="6" x2="34" y2="34" stroke="#6b7280" strokeWidth="0.8" pointerEvents="none" />
-              <line x1="34" y1="6" x2="6" y2="34" stroke="#6b7280" strokeWidth="0.8" pointerEvents="none" />
-              <circle cx="20" cy="20" r="7"
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#6b7280" strokeWidth="0.8" pointerEvents="none" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#6b7280" strokeWidth="0.8" pointerEvents="none" />
+              <rect x="13" y="13" width="14" height="14"
                 fill={fc('O')} stroke="#6b7280" strokeWidth="0.8"
                 className="cursor-pointer hover:opacity-70"
                 onClick={() => toggleFace(n, 'O')} />
@@ -1031,82 +1354,148 @@ function OdontogramView({ odontogram, onSaveTooth }: {
           )}
           {state.missing && (
             <>
-              <line x1="5" y1="5" x2="35" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
-              <line x1="35" y1="5" x2="5" y2="35" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
             </>
           )}
           {state.toExtract && (
             <>
-              <line x1="5" y1="5" x2="35" y2="35" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
-              <line x1="35" y1="5" x2="5" y2="35" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
             </>
           )}
         </g>
 
-        <circle cx="20" cy="20" r="18"
+        <rect x="2" y="2" width="36" height="36"
           fill="transparent"
-          stroke={state.toExtract ? '#f97316' : '#facc15'}
+          stroke={state.toExtract ? '#3b82f6' : state.missing ? '#dc2626' : '#facc15'}
           strokeWidth="1.5"
-          strokeDasharray={state.toExtract ? "6 3" : undefined}
+          strokeDasharray={(state.toExtract || state.missing) ? "6 3" : undefined}
           pointerEvents="none"
         />
+        {(state.crownExisting || state.crownPending) && (
+          <circle cx="20" cy="20" r="19"
+            fill="transparent"
+            stroke={state.crownExisting ? '#dc2626' : '#3b82f6'}
+            strokeWidth="2"
+            pointerEvents="none"
+          />
+        )}
       </svg>
     )
   }
 
   return (
     <div>
-      {/* Color selector — minimalista */}
-      <div className="flex items-center gap-2 mb-4">
-        <button
-          onClick={() => setPaintColor('red')}
-          className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'red'
-            ? 'bg-red-600 ring-red-500'
-            : 'bg-red-900/40 ring-transparent hover:ring-red-800'
-            }`}
-          title="Realizado"
-        />
-        <button
-          onClick={() => setPaintColor('emerald')}
-          className={`w-8 h-8 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'emerald'
-            ? 'bg-blue-600 ring-blue-500'
-            : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'
-            }`}
-          title="Por realizar"
-        />
-        <span className="text-xs text-app3">
-          Tocá una cara para pintar · Tocá de nuevo para borrar
-        </span>
+      {/* Barra superior */}
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Selector de modo */}
+          <div className="flex gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
+            <button
+              onClick={() => { setMode('paint'); setProstheticStart(null) }}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${mode === 'paint' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+            >Normal</button>
+            <button
+              onClick={() => { setMode('prosthetic'); setSelectedTooth(null) }}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${mode === 'prosthetic' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+            >Prótesis</button>
+          </div>
+
+          {mode === 'paint' && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPaintColor('red')}
+                className={`w-7 h-7 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'red' ? 'bg-red-600 ring-red-500' : 'bg-red-900/40 ring-transparent hover:ring-red-800'}`}
+                title="Realizado" />
+              <button onClick={() => setPaintColor('emerald')}
+                className={`w-7 h-7 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'emerald' ? 'bg-blue-600 ring-blue-500' : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'}`}
+                title="Por realizar" />
+              <span className="text-xs text-app3">Tocá para pintar · Tocá de nuevo para borrar</span>
+            </div>
+          )}
+
+          {mode === 'prosthetic' && (
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
+                <button onClick={() => { setProstheticType('bridge'); setProstheticStart(null) }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'bridge' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+                >Puente</button>
+                <button onClick={() => { setProstheticType('removable'); setProstheticStart(null) }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'removable' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+                >Removible</button>
+                <button onClick={() => { setProstheticType('crown'); setProstheticStart(null) }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'crown' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+                >Corona</button>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setProstheticColor('red')}
+                  className={`w-5 h-5 rounded-full ring-2 ring-offset-1 ring-offset-gray-900 transition-all ${prostheticColor === 'red' ? 'bg-red-600 ring-red-500' : 'bg-red-900/40 ring-transparent hover:ring-red-800'}`}
+                  title="Existente (rojo)" />
+                <button onClick={() => setProstheticColor('blue')}
+                  className={`w-5 h-5 rounded-full ring-2 ring-offset-1 ring-offset-gray-900 transition-all ${prostheticColor === 'blue' ? 'bg-blue-600 ring-blue-500' : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'}`}
+                  title="A realizar (azul)" />
+              </div>
+              {prostheticStart && (
+                <span className="text-xs text-emerald-400 font-mono">{prostheticStart} →</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {prevSnapshot && !saving && (
+          <button
+            onClick={() => handleUndoRef.current()}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface2 border border-gray-600 text-app2 hover:border-gray-500 hover:text-app transition-all active:scale-95 shrink-0"
+          >
+            ↩ Deshacer
+          </button>
+        )}
       </div>
 
       {/* Grid cuadrantes */}
-      <div className="overflow-x-auto pb-2">
+      <div className={`overflow-x-auto pb-2 transition-opacity ${saving ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="inline-flex flex-col gap-1 min-w-full">
-          <div className="flex gap-3 justify-center">
-            <Quadrant teeth={Q1} label="Q1" />
-            <div className="w-px bg-surface3" />
-            <Quadrant teeth={Q2} label="Q2" />
-          </div>
-          <div className="border-t border-dashed border-app my-1" />
-          <div className="flex gap-3 justify-center">
-            <Quadrant teeth={Q4} label="Q4" />
-            <div className="w-px bg-surface3" />
-            <Quadrant teeth={Q3} label="Q3" />
-          </div>
+          {odontogramType === 'adult' ? (
+            <>
+              <div className="flex gap-3 justify-center">
+                <Quadrant teeth={Q1} label="Q1" />
+                <div className="w-px bg-surface3" />
+                <Quadrant teeth={Q2} label="Q2" />
+              </div>
+              <div className="border-t border-dashed border-app my-1" />
+              <div className="flex gap-3 justify-center">
+                <Quadrant teeth={Q4} label="Q4" />
+                <div className="w-px bg-surface3" />
+                <Quadrant teeth={Q3} label="Q3" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex gap-3 justify-center">
+                <Quadrant teeth={CQ1} label="Q5" />
+                <div className="w-px bg-surface3" />
+                <Quadrant teeth={CQ2} label="Q6" />
+              </div>
+              <div className="border-t border-dashed border-app my-1" />
+              <div className="flex gap-3 justify-center">
+                <Quadrant teeth={CQ4} label="Q8" />
+                <div className="w-px bg-surface3" />
+                <Quadrant teeth={CQ3} label="Q7" />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Editor de pieza seleccionada */}
-      {selectedTooth && (
+      {selectedTooth && mode !== 'prosthetic' && (
         <div className="mt-4 bg-surface2 rounded-xl border border-yellow-700/50 p-4">
           <div className="flex items-start gap-4">
-            {/* SVG grande editable */}
             <div className="flex flex-col items-center gap-1 flex-shrink-0">
               <BigToothEditor n={selectedTooth} />
               <span className="text-xs text-yellow-400 font-mono font-bold">Pieza {selectedTooth}</span>
             </div>
 
-            {/* Notas */}
             <div className="flex-1 flex flex-col gap-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -1124,82 +1513,133 @@ function OdontogramView({ odontogram, onSaveTooth }: {
               </div>
 
               <div className="flex flex-col gap-2">
-                {/* Fila 1: próxima a extraer + ausente */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={async () => {
-                      const newToExtract = !getState(selectedTooth).toExtract
-                      const newState = { toExtract: newToExtract, note: getState(selectedTooth).note }
-                      setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
-                      const surfaces = newToExtract ? 'to_extract' : ''
-                      await onSaveTooth(selectedTooth, { surfaces }, newState.note ?? '')
-                    }}
-                    className={`flex-1 text-xs font-semibold py-2.5 rounded-xl transition-all active:scale-95 border ${getState(selectedTooth).toExtract
-                      ? 'bg-orange-900/60 border-orange-600 text-orange-300'
-                      : 'bg-surface2 border-gray-600 text-app2 hover:border-orange-700 hover:text-orange-400'
-                      }`}
-                  >
-                    {getState(selectedTooth).toExtract ? '⚠ Próxima a extraer' : 'Próxima a extraer'}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const newMissing = !getState(selectedTooth).missing
-                      const newState = { missing: newMissing, note: getState(selectedTooth).note }
-                      setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
-                      const surfaces = newMissing ? 'missing' : ''
-                      await onSaveTooth(selectedTooth, { surfaces }, newState.note ?? '')
-                    }}
-                    className={`flex-1 text-xs font-semibold py-2.5 rounded-xl transition-all active:scale-95 border ${getState(selectedTooth).missing
-                      ? 'bg-red-900/60 border-red-600 text-red-300'
-                      : 'bg-surface2 border-gray-600 text-app2 hover:border-red-700 hover:text-red-400'
-                      }`}
-                  >
-                    {getState(selectedTooth).missing ? '✕ Ausente' : 'Ausente / Extraído'}
-                  </button>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] text-app3 font-mono uppercase tracking-wide">Estado de la pieza</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {([
+                      { key: 'toExtract' as ToothStatus, label: 'Próx. a extraer', activeClass: 'bg-blue-900/60 border-blue-600 text-blue-300', hoverClass: 'hover:border-blue-700 hover:text-blue-400' },
+                      { key: 'missing' as ToothStatus, label: 'Ausente / Extraído', activeClass: 'bg-red-900/60 border-red-600 text-red-300', hoverClass: 'hover:border-red-700 hover:text-red-400' },
+                    ] as const).map(({ key, label, activeClass, hoverClass }) => {
+                      const active = getToothStatus(getState(selectedTooth)) === key
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setStatus(selectedTooth, key)}
+                          className={`text-xs font-semibold py-2.5 rounded-xl transition-all active:scale-95 border ${active ? activeClass : `bg-surface2 border-gray-600 text-app2 ${hoverClass}`}`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-                {/* Fila 2: borrar */}
+                {(() => {
+                  const tp = prosthetics.find(p => p.teeth.includes(selectedTooth))
+                  if (!tp) return null
+                  return (
+                    <div className="flex items-center justify-between bg-surface3 rounded-lg px-3 py-2 border border-gray-700">
+                      <span className="text-xs text-app2">
+                        {tp.type === 'bridge' ? 'Puente fijo' : tp.type === 'removable' ? 'Prótesis removible' : 'Corona'} · {tp.color === 'red' ? 'Existente' : 'A realizar'} · piezas {tp.teeth.join(', ')}
+                      </span>
+                      <button onClick={() => deleteProsthetic(tp.id)} className="text-xs text-red-400 hover:text-red-300 font-semibold ml-3 shrink-0">
+                        Eliminar
+                      </button>
+                    </div>
+                  )
+                })()}
                 <div className="flex gap-2">
                   <button
                     onClick={async () => {
                       const newState = { note: getState(selectedTooth).note }
                       setTeeth(prev => ({ ...prev, [selectedTooth]: newState }))
-                      await onSaveTooth(selectedTooth, { surfaces: '' }, newState.note ?? '')
+                      await onSaveTooth(selectedTooth, { surfaces: surfacesFor(selectedTooth, newState) }, newState.note ?? '')
                     }}
                     className="flex-1 px-4 py-2 rounded-xl text-xs font-semibold bg-surface2 border border-gray-600 text-app2 hover:border-gray-500 transition-all active:scale-95"
-                    title="Borrar colores"
                   >
                     Borrar marcas
                   </button>
                 </div>
-
               </div>
-
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de prótesis aplicadas */}
+      {mode === 'prosthetic' && prosthetics.length > 0 && (
+        <div className="mt-4 bg-surface2 rounded-xl border border-gray-700 overflow-hidden">
+          <div className="px-3 py-2 border-b border-gray-700">
+            <span className="text-xs font-semibold text-app2 uppercase tracking-wider">Prótesis aplicadas</span>
+          </div>
+          <div className="divide-y divide-gray-700/50">
+            {prosthetics.map(p => (
+              <div key={p.id} className="flex items-center justify-between px-3 py-2">
+                <span className="text-xs text-app2">
+                  <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${p.color === 'red' ? 'bg-red-500' : 'bg-blue-500'}`} />
+                  {p.type === 'bridge' ? 'Puente fijo' : 'Removible'} · {p.color === 'red' ? 'Existente' : 'A realizar'} · piezas {p.teeth.join(', ')}
+                </span>
+                <button
+                  onClick={() => deleteProsthetic(p.id)}
+                  className="text-xs text-red-400 hover:text-red-300 font-semibold ml-3 shrink-0 active:scale-95 transition-all"
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Leyenda */}
       <div className="flex flex-wrap gap-4 mt-4 text-xs text-app3">
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
-          Ya realizado
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
-          Por realizar
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full border-2 border-dashed border-orange-400 inline-block" />
-          Próxima a extraer
-        </span>
+        {mode === 'paint' ? (
+          <>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
+              Ya realizado
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
+              Por realizar
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 border-2 border-dashed border-blue-400 inline-block" />
+              Próxima a extraer
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 border-2 border-dashed border-red-500 inline-block" />
+              Ausente / Extraído
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full border-2 border-red-500 inline-block" />
+              Corona existente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full border-2 border-blue-500 inline-block" />
+              Corona próxima
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-2 bg-red-600 inline-block rounded-sm" />
+              Puente fijo existente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-2 bg-blue-600 inline-block rounded-sm" />
+              Puente fijo a realizar
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-3 border-2 border-dashed border-red-500 inline-block" />
+              Removible existente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-3 border-2 border-dashed border-blue-500 inline-block" />
+              Removible a realizar
+            </span>
+          </>
+        )}
       </div>
-
-
-
     </div>
-
-
-
   )
 }
