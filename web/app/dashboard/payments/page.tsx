@@ -74,6 +74,9 @@ export default function PaymentsPage() {
   const [showModal, setShowModal] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [editingPayment, setEditingPayment] = useState<any | null>(null)
+  const [paymentToDelete, setPaymentToDelete] = useState<any | null>(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
+  const [deletePaymentError, setDeletePaymentError] = useState('')
   const [patients, setPatients] = useState<any[]>([])
   const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
 
@@ -135,6 +138,28 @@ export default function PaymentsPage() {
   async function fetchPatients(t: string) {
     const data = await apiFetch('/patients?limit=100', { token: t })
     setPatients(data.data ?? [])
+  }
+
+  async function confirmDeletePayment() {
+    if (!token || !paymentToDelete) return
+    setDeletingPayment(true)
+    setDeletePaymentError('')
+    try {
+      await apiFetch(`/payments/${paymentToDelete.id}`, {
+        method: 'DELETE',
+        token,
+      })
+      await Promise.all([
+        fetchPayments(token, paymentPage),
+        fetchAllSummaries(token),
+        fetchChartData(token),
+      ])
+      setPaymentToDelete(null)
+    } catch (err) {
+      setDeletePaymentError(err instanceof Error ? err.message : 'No se pudo eliminar el cobro')
+    } finally {
+      setDeletingPayment(false)
+    }
   }
 
   async function fetchAllSummaries(t: string) {
@@ -438,35 +463,43 @@ export default function PaymentsPage() {
               ) : (
                 <>
                   <div className="divide-y divide-app">
-                    {payments.map((p: any) => (
-                      <div key={p.id} className="px-6 py-4 flex items-center gap-4">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">💰</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold truncate">
-                            {p.patients ? `${p.patients.first_name} ${p.patients.last_name}` : <span className="text-app3 italic">Sin paciente</span>}
+                      {payments.map((p: any) => (
+                        <div key={p.id} className="px-6 py-4 flex items-center gap-4">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">💰</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold truncate">
+                              {p.patients ? `${p.patients.first_name} ${p.patients.last_name}` : <span className="text-app3 italic">Sin paciente</span>}
+                            </div>
+                            <div className="text-sm text-app2">
+                              {METODOS.find(m => m.value === p.method)?.label ?? p.method}
+                              {p.installments > 1 && ` · ${p.installments} cuotas`}
+                            </div>
+                            {p.notes && <div className="text-xs text-app3 mt-0.5 truncate">📝 {p.notes}</div>}
                           </div>
-                          <div className="text-sm text-app2">
-                            {METODOS.find(m => m.value === p.method)?.label ?? p.method}
-                            {p.installments > 1 && ` · ${p.installments} cuotas`}
+                          <div className="text-right flex-shrink-0">
+                            <div className="font-bold text-emerald-500 dark:text-emerald-400">{formatARS(Number(p.amount))}</div>
+                            <div className="text-xs text-app3">{formatDateAR(p.paid_at)}</div>
                           </div>
-                          {p.notes && <div className="text-xs text-app3 mt-0.5 truncate">📝 {p.notes}</div>}
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingPayment(p)
+                                setPreselectedPatientId(null)
+                                setShowModal(true)
+                              }}
+                              className="flex-shrink-0 bg-surface2 hover:bg-surface3 border border-app text-app2 hover:text-app text-xs font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => setPaymentToDelete(p)}
+                              className="flex-shrink-0 bg-surface2 hover:bg-surface3 border border-app text-app2 hover:text-app text-xs font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className="font-bold text-emerald-500 dark:text-emerald-400">{formatARS(Number(p.amount))}</div>
-                          <div className="text-xs text-app3">{formatDateAR(p.paid_at)}</div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setEditingPayment(p)
-                            setPreselectedPatientId(null)
-                            setShowModal(true)
-                          }}
-                          className="flex-shrink-0 bg-surface2 hover:bg-surface3 border border-app text-app2 hover:text-app text-xs font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
-                        >
-                          Editar
-                        </button>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                   <Pagination
                     page={paymentPage}
@@ -802,6 +835,45 @@ export default function PaymentsPage() {
             await Promise.all([fetchPayments(token, pageToRefresh), fetchAllSummaries(token), fetchChartData(token)])
           }}
         />
+      )}
+
+      {paymentToDelete && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setPaymentToDelete(null)}
+        >
+          <div
+            className="bg-surface border border-app rounded-2xl w-full max-w-sm"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-app">
+              <h2 className="text-lg font-semibold">Confirmar eliminación</h2>
+              <p className="text-sm text-app3 mt-1">¿Eliminar este cobro de forma definitiva?</p>
+            </div>
+            <div className="px-6 py-4 space-y-2">
+              {deletePaymentError && (
+                <div className="px-3 py-2 rounded-lg bg-red-600/10 text-xs text-red-500">
+                  {deletePaymentError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPaymentToDelete(null)}
+                  className="flex-1 bg-surface2 hover:bg-surface3 border border-app rounded-xl text-sm font-semibold py-3 transition-all active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDeletePayment}
+                  disabled={deletingPayment}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold py-3 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {deletingPayment ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showExpenseModal && (

@@ -1306,12 +1306,25 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
   const [paintColor, setPaintColor] = useState<'red' | 'blue' | 'emerald'>('red')
   const [saving, setSaving] = useState(false)
+  const savingCountRef = useRef(0)
   const [mode, setMode] = useState<'paint' | 'prosthetic'>('paint')
   const [prostheticType, setProstheticType] = useState<ProstheticType>('bridge')
   const [prostheticColor, setProstheticColor] = useState<'red' | 'blue'>('red')
   const [prostheticStart, setProstheticStart] = useState<number | null>(null)
   const [prevSnapshot, setPrevSnapshot] = useState<{ teeth: Record<number, ToothState>; prosthetics: Prosthetic[] } | null>(null)
   const handleUndoRef = useRef<() => Promise<void>>(async () => {})
+
+  function startSaving() {
+    savingCountRef.current++
+    setSaving(true)
+  }
+  function doneSaving() {
+    savingCountRef.current--
+    if (savingCountRef.current <= 0) {
+      savingCountRef.current = 0
+      setSaving(false)
+    }
+  }
 
   const [prosthetics, setProsthetics] = useState<Prosthetic[]>(() => {
     const map: Record<string, { type: string; color: string; teeth: number[] }> = {}
@@ -1392,9 +1405,9 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
       }
     }
     if (bulkPayload.length > 0) {
-      setSaving(true)
+      startSaving()
       await onSaveBulk(bulkPayload)
-      setSaving(false)
+      doneSaving()
     }
   }
 
@@ -1428,9 +1441,8 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
       : currentColor === paintColor ? null : paintColor
     const newState = { ...current, [face]: newColor }
     setTeeth(prev => ({ ...prev, [n]: newState }))
-    setSaving(true)
-    await onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '')
-    setSaving(false)
+    startSaving()
+    onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '').finally(doneSaving)
   }
 
   function setNote(n: number, note: string) {
@@ -1444,16 +1456,14 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
     const newState: ToothState = { note: current.note }
     if (currentStatus !== status) newState[status] = true
     setTeeth(prev => ({ ...prev, [n]: newState }))
-    setSaving(true)
-    await onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '')
-    setSaving(false)
+    startSaving()
+    onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '').finally(doneSaving)
   }
 
   async function saveNote(n: number) {
     const state = teeth[n] ?? {}
-    setSaving(true)
-    await onSaveTooth(n, { surfaces: surfacesFor(n, state) }, state.note ?? '')
-    setSaving(false)
+    startSaving()
+    onSaveTooth(n, { surfaces: surfacesFor(n, state) }, state.note ?? '').finally(doneSaving)
   }
 
   async function saveCrown(n: number, color: 'red' | 'blue') {
@@ -1467,16 +1477,15 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
       else newState.crownPending = true
     }
     setTeeth(prev => ({ ...prev, [n]: newState }))
-    setSaving(true)
-    await onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '')
-    setSaving(false)
+    startSaving()
+    onSaveTooth(n, { surfaces: surfacesFor(n, newState) }, newState.note ?? '').finally(doneSaving)
   }
 
   async function saveProsthetic(type: ProstheticType, color: 'red' | 'blue', teethRange: number[]) {
     takeSnapshot()
     const id = nanoid6()
     const marker = `${type}:${color}:${id}`
-    setSaving(true)
+    startSaving()
     const newTeethState = { ...teeth }
     const bulkPayload: Array<{ toothNumber: number; surfaces: string; note: string }> = []
     for (let i = 0; i < teethRange.length; i++) {
@@ -1490,23 +1499,23 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
       const surfaces = [buildSurfaces(newState), marker].filter(Boolean).join(',')
       bulkPayload.push({ toothNumber: tooth, surfaces, note: newState.note ?? '' })
     }
-    await onSaveBulk(bulkPayload)
     setTeeth(newTeethState)
     setProsthetics(prev => [...prev, { id, type, color, teeth: teethRange }])
-    setSaving(false)
+    onSaveBulk(bulkPayload).finally(doneSaving)
   }
 
   async function deleteProsthetic(id: string) {
     takeSnapshot()
     const p = prosthetics.find(pr => pr.id === id)
     if (!p) return
-    setSaving(true)
-    for (const tooth of p.teeth) {
+    startSaving()
+    Promise.all(p.teeth.map(tooth => {
       const state = teeth[tooth] ?? {}
-      await onSaveTooth(tooth, { surfaces: buildSurfaces(state) }, state.note ?? '')
-    }
-    setProsthetics(prev => prev.filter(pr => pr.id !== id))
-    setSaving(false)
+      return onSaveTooth(tooth, { surfaces: buildSurfaces(state) }, state.note ?? '')
+    })).finally(() => {
+      setProsthetics(prev => prev.filter(pr => pr.id !== id))
+      doneSaving()
+    })
   }
 
   function handleToothClick(n: number) {
@@ -1725,7 +1734,7 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
       </div>
 
       {/* Grid cuadrantes */}
-      <div className={`overflow-x-auto pb-2 transition-opacity ${saving ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className="overflow-x-auto pb-2">
         <div className="inline-flex flex-col gap-1 min-w-full">
           {odontogramType === 'adult' ? (
             <>
