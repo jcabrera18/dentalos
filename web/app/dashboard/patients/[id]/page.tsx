@@ -17,6 +17,35 @@ function hasExplicitTotalAmount(payment: { total_amount?: number | string | null
   return payment.total_amount !== null && payment.total_amount !== undefined
 }
 
+function normalizePatientTextField(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function buildPatientUpdatePayload(editForm: Record<string, unknown>) {
+  const payload: Record<string, string | null> = {
+    first_name: normalizePatientTextField(editForm.first_name),
+    last_name: normalizePatientTextField(editForm.last_name),
+    phone: normalizePatientTextField(editForm.phone),
+    email: normalizePatientTextField(editForm.email),
+    document_number: normalizePatientTextField(editForm.document_number),
+    gender: typeof editForm.gender === 'string' && editForm.gender ? editForm.gender : null,
+    insurance_name: normalizePatientTextField(editForm.insurance_name),
+    insurance_plan: normalizePatientTextField(editForm.insurance_plan),
+    insurance_number: normalizePatientTextField(editForm.insurance_number),
+    allergies: normalizePatientTextField(editForm.allergies),
+    current_medications: normalizePatientTextField(editForm.current_medications),
+  }
+
+  const dateOfBirth = normalizePatientTextField(editForm.date_of_birth)
+
+  // The API expects a real YYYY-MM-DD value for DATE columns; empty strings break the PATCH.
+  if (dateOfBirth) {
+    payload.date_of_birth = dateOfBirth
+  }
+
+  return payload
+}
+
 export default function PatientDetailPage() {
   const [patient, setPatient] = useState<any>(null)
   const [accountSummary, setAccountSummary] = useState(EMPTY_ACCOUNT_SUMMARY)
@@ -32,6 +61,8 @@ export default function PatientDetailPage() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
+  const [editSubmitError, setEditSubmitError] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [apptPage, setApptPage] = useState(1)
@@ -201,20 +232,27 @@ export default function PatientDetailPage() {
       return
     }
     setEditErrors({})
+    setEditSubmitError('')
 
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
-    await apiFetch(`/patients/${params.id}`, {
-      method: 'PATCH',
-      token: session.access_token,
-      body: JSON.stringify({
-        ...editForm,
-        gender: editForm.gender || null,
+    setSavingEdit(true)
+
+    try {
+      await apiFetch(`/patients/${params.id}`, {
+        method: 'PATCH',
+        token: session.access_token,
+        body: JSON.stringify(buildPatientUpdatePayload(editForm))
       })
-    })
-    const data = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
-    setPatient(data.data)
-    setEditMode(false)
+      const data = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
+      setPatient(data.data)
+      setEditMode(false)
+      setDeleteConfirm(false)
+    } catch (err: unknown) {
+      setEditSubmitError(err instanceof Error ? err.message : 'No se pudo guardar el paciente')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   async function loadFileUrls(fileList: any[]) {
@@ -938,7 +976,8 @@ export default function PatientDetailPage() {
               <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-lg font-bold">Editar paciente</h2>
-                <button onClick={() => setEditMode(false)} className="text-app3 hover:text-app transition-colors p-1 rounded-lg hover:bg-surface2">
+                <button onClick={() => { setEditMode(false); setDeleteConfirm(false); setEditSubmitError('') }}
+                  className="text-app3 hover:text-app transition-colors p-1 rounded-lg hover:bg-surface2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
@@ -1055,6 +1094,12 @@ export default function PatientDetailPage() {
                 </div>
               </div>
 
+              {editSubmitError && (
+                <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {editSubmitError}
+                </div>
+              )}
+
               {/* Eliminar paciente */}
               <div className="mt-6 pt-5 border-t border-app">
                 {!deleteConfirm ? (
@@ -1093,13 +1138,15 @@ export default function PatientDetailPage() {
               </div>
 
               <div className="flex gap-3 mt-4">
-                <button onClick={() => { setEditMode(false); setDeleteConfirm(false) }}
-                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors">
+                <button onClick={() => { setEditMode(false); setDeleteConfirm(false); setEditSubmitError('') }}
+                  disabled={savingEdit}
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors disabled:opacity-60">
                   Cancelar
                 </button>
                 <button onClick={handleSaveEdit}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all">
-                  Guardar
+                  disabled={savingEdit}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all disabled:opacity-60">
+                  {savingEdit ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </div>
