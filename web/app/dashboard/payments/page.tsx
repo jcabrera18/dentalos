@@ -216,9 +216,9 @@ export default function PaymentsPage() {
   async function fetchPatientMetrics(t: string) {
     setLoadingMetrics(true)
     try {
-      const sixMonthsAgo = new Date()
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-      const from = sixMonthsAgo.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+      const ninetyDaysAgo = new Date()
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 89)
+      const from = ninetyDaysAgo.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
       const to = todayAR()
 
       const data = await apiFetch(`/appointments?from=${from}&to=${to}`, { token: t })
@@ -752,7 +752,7 @@ export default function PaymentsPage() {
                 {/* Pacientes atendidos por mes */}
                 <div className="bg-surface border border-app rounded-xl p-5">
                   <h3 className="font-semibold mb-1">Pacientes atendidos por mes</h3>
-                  <div className="text-xs text-app3 mb-4">Últimos 6 meses · excluye cancelados</div>
+                  <div className="text-xs text-app3 mb-4">Últimos 90 días · excluye cancelados</div>
                   {attendedByMonth.length > 0 ? (
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={attendedByMonth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -779,7 +779,7 @@ export default function PaymentsPage() {
                 {/* Tratamientos más frecuentes */}
                 <div className="bg-surface border border-app rounded-xl p-5">
                   <h3 className="font-semibold mb-1">Tipos de consulta más frecuentes</h3>
-                  <div className="text-xs text-app3 mb-4">Últimos 6 meses · excluye cancelados</div>
+                  <div className="text-xs text-app3 mb-4">Últimos 90 días · excluye cancelados</div>
                   {topTypes.length > 0 ? (
                     <div className="space-y-3">
                       {topTypes.map((t, i) => {
