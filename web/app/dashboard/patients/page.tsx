@@ -207,10 +207,14 @@ function NewPatientModal({ token, onClose, onCreated }: {
     setLoading(true)
     setError('')
     try {
+      const payload: Record<string, string> = { document_type: 'DNI' }
+      for (const [k, v] of Object.entries(form)) {
+        if (v !== '') payload[k] = v
+      }
       await apiFetch('/patients', {
         method: 'POST',
         token,
-        body: JSON.stringify({ ...form, document_type: 'DNI' })
+        body: JSON.stringify(payload)
       })
       onCreated()
     } catch (err: any) {
@@ -221,12 +225,17 @@ function NewPatientModal({ token, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface border border-app rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-6 sm:hidden" />
-          <h2 className="text-lg font-bold text-app mb-6">Nuevo paciente</h2>
+          <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg font-bold text-app">Nuevo paciente</h2>
+            <button onClick={onClose} className="text-app3 hover:text-app transition-colors p-1 rounded-lg hover:bg-surface2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Nombre</label>
@@ -242,12 +251,19 @@ function NewPatientModal({ token, onClose, onCreated }: {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Teléfono (WhatsApp)</label>
-              <input value={form.phone} onChange={e => set('phone', e.target.value)}
-                type="tel" placeholder="+54 11 ..."
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400"
-                required />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Teléfono (WhatsApp)</label>
+                <input value={form.phone} onChange={e => set('phone', e.target.value)}
+                  type="tel" placeholder="+54 11 ..."
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Email</label>
+                <input value={form.email} onChange={e => set('email', e.target.value)}
+                  type="email"
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -289,30 +305,24 @@ function NewPatientModal({ token, onClose, onCreated }: {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Email</label>
-              <input value={form.email} onChange={e => set('email', e.target.value)}
-                type="email"
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
-            </div>
-
-            <div>
               <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Obra social</label>
               <input value={form.insurance_name} onChange={e => set('insurance_name', e.target.value)}
                 placeholder="OSDE, PAMI, Swiss Medical..."
                 className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Alergias</label>
-              <input value={form.allergies} onChange={e => set('allergies', e.target.value)}
-                placeholder="Penicilina, látex..."
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Medicación actual</label>
-              <input value={form.current_medications} onChange={e => set('current_medications', e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Alergias</label>
+                <input value={form.allergies} onChange={e => set('allergies', e.target.value)}
+                  placeholder="Penicilina, látex..."
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Medicación actual</label>
+                <input value={form.current_medications} onChange={e => set('current_medications', e.target.value)}
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+              </div>
             </div>
 
             {error && (

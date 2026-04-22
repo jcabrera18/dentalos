@@ -73,6 +73,7 @@ export default function PaymentsPage() {
   // ── Modals ──
   const [showModal, setShowModal] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [editingPayment, setEditingPayment] = useState<any | null>(null)
   const [patients, setPatients] = useState<any[]>([])
   const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
 
@@ -324,7 +325,14 @@ export default function PaymentsPage() {
         </div>
 
         <button
-          onClick={() => { if (tab === 'ingresos') setShowModal(true); else if (tab === 'gastos') setShowExpenseModal(true) }}
+          onClick={() => {
+            if (tab === 'ingresos') {
+              setEditingPayment(null)
+              setShowModal(true)
+            } else if (tab === 'gastos') {
+              setShowExpenseModal(true)
+            }
+          }}
           className={`font-semibold px-4 py-2 rounded-lg text-sm transition-all active:scale-95 flex-shrink-0 ${(tab === 'balance' || tab === 'pacientes') ? 'invisible' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}`}
         >
           + {tab === 'gastos' ? 'Gasto' : 'Cobro'}
@@ -447,6 +455,16 @@ export default function PaymentsPage() {
                           <div className="font-bold text-emerald-500 dark:text-emerald-400">{formatARS(Number(p.amount))}</div>
                           <div className="text-xs text-app3">{formatDateAR(p.paid_at)}</div>
                         </div>
+                        <button
+                          onClick={() => {
+                            setEditingPayment(p)
+                            setPreselectedPatientId(null)
+                            setShowModal(true)
+                          }}
+                          className="flex-shrink-0 bg-surface2 hover:bg-surface3 border border-app text-app2 hover:text-app text-xs font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
+                        >
+                          Editar
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -766,14 +784,22 @@ export default function PaymentsPage() {
       </main>
 
       {showModal && (
-        <NewPaymentModal
+        <PaymentModal
           token={token}
           patients={patients}
+          payment={editingPayment}
           preselectedPatientId={preselectedPatientId}
-          onClose={() => { setShowModal(false); setPreselectedPatientId(null) }}
-          onCreated={async () => {
-            setShowModal(false); setPreselectedPatientId(null)
-            await Promise.all([fetchPayments(token, 1), fetchAllSummaries(token), fetchChartData(token)])
+          onClose={() => {
+            setShowModal(false)
+            setPreselectedPatientId(null)
+            setEditingPayment(null)
+          }}
+          onSaved={async () => {
+            const pageToRefresh = editingPayment ? paymentPage : 1
+            setShowModal(false)
+            setPreselectedPatientId(null)
+            setEditingPayment(null)
+            await Promise.all([fetchPayments(token, pageToRefresh), fetchAllSummaries(token), fetchChartData(token)])
           }}
         />
       )}
@@ -817,20 +843,27 @@ function Pagination({ page, hasMore, onPrev, onNext }: {
   )
 }
 
-function NewPaymentModal({ token, patients: initialPatients, preselectedPatientId, onClose, onCreated }: {
+function PaymentModal({ token, patients: initialPatients, payment, preselectedPatientId, onClose, onSaved }: {
   token: string
   patients: any[]
+  payment?: any | null
   preselectedPatientId?: string | null
   onClose: () => void
-  onCreated: () => void
+  onSaved: () => void
 }) {
-  const [form, setForm] = useState({
-    patient_id: preselectedPatientId ?? '',
-    amount: '',
-    method: 'cash',
-    installments: '1',
-    notes: '',
-  })
+  const isEditing = Boolean(payment)
+  const [form, setForm] = useState(() => ({
+    patient_id: payment?.patient_id ?? preselectedPatientId ?? '',
+    total_amount: payment?.total_amount !== null && payment?.total_amount !== undefined
+      ? String(Number(payment.total_amount))
+      : '',
+    amount: payment?.amount !== null && payment?.amount !== undefined
+      ? String(Number(payment.amount))
+      : '0',
+    method: payment?.method ?? 'cash',
+    installments: String(payment?.installments ?? 1),
+    notes: payment?.notes ?? '',
+  }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -844,12 +877,16 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
     setForm(f => ({ ...f, [field]: value }))
   }
 
+  const editingPatient = payment?.patients
+    ? { id: payment.patient_id, ...payment.patients }
+    : null
+
   const filteredPatients = patients.filter(p =>
     `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    p.phone.includes(search)
+    (p.phone ?? '').includes(search)
   )
 
-  const selectedPatient = patients.find(p => p.id === form.patient_id)
+  const selectedPatient = patients.find(p => p.id === form.patient_id) ?? editingPatient
 
   async function handleCreatePatient() {
     if (!newPatientName) return
@@ -876,24 +913,40 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
     }
   }
 
+  const totalAmount = Number(form.total_amount) || 0
+  const paidAmount = Number(form.amount) || 0
+  const installments = form.method === 'credit_card' ? Number(form.installments) : 1
+  const remaining = totalAmount > 0 ? totalAmount - paidAmount : 0
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.amount || Number(form.amount) <= 0) { setError('Ingresá un monto válido'); return }
+    if (!form.patient_id) { setError('Seleccioná un paciente'); return }
+    if (paidAmount < 0) { setError('Ingresá un monto válido'); return }
+    if (paidAmount === 0 && totalAmount <= 0) {
+      setError('Si no entrega nada, cargá el total del servicio para dejarlo en cuenta corriente')
+      return
+    }
+    if (totalAmount > 0 && paidAmount > totalAmount) { setError('El monto entregado no puede superar el total'); return }
     setLoading(true)
     setError('')
     try {
-      await apiFetch('/payments', {
-        method: 'POST',
+      const payload = {
+        amount: paidAmount,
+        total_amount: totalAmount > 0 ? totalAmount : (isEditing ? null : undefined),
+        method: form.method,
+        installments,
+        notes: form.notes.trim() ? form.notes.trim() : (isEditing ? null : undefined),
+      }
+
+      await apiFetch(isEditing ? `/payments/${payment.id}` : '/payments', {
+        method: isEditing ? 'PATCH' : 'POST',
         token,
         body: JSON.stringify({
-          patient_id: form.patient_id || undefined,
-          amount: Number(form.amount),
-          method: form.method,
-          installments: Number(form.installments),
-          notes: form.notes || undefined,
+          ...(isEditing ? {} : { patient_id: form.patient_id || undefined }),
+          ...payload,
         })
       })
-      onCreated()
+      onSaved()
     } catch (err: any) {
       setError(err.message)
       setLoading(false)
@@ -905,16 +958,25 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
       <div className="bg-surface border border-app rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-6 sm:hidden" />
-          <h2 className="text-lg font-bold text-app mb-5">Registrar cobro</h2>
+          <h2 className="text-lg font-bold text-app mb-5">{isEditing ? 'Editar cobro' : 'Registrar cobro'}</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
 
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Paciente</label>
               {selectedPatient ? (
                 <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
-                  <div className="font-medium text-app">{selectedPatient.first_name} {selectedPatient.last_name}</div>
-                  <button type="button" onClick={() => { set('patient_id', ''); setShowNewPatient(false) }}
-                    className="text-app3 hover:text-app text-sm">✕</button>
+                  <div>
+                    <div className="font-medium text-app">{selectedPatient.first_name} {selectedPatient.last_name}</div>
+                    {isEditing && <div className="text-xs text-app3 mt-0.5">Paciente del cobro</div>}
+                  </div>
+                  {!isEditing && (
+                    <button type="button" onClick={() => { set('patient_id', ''); setShowNewPatient(false) }}
+                      className="text-app3 hover:text-app text-sm">✕</button>
+                  )}
+                </div>
+              ) : isEditing ? (
+                <div className="bg-surface2 rounded-xl px-4 py-3 text-sm text-app3">
+                  Paciente no disponible
                 </div>
               ) : showNewPatient ? (
                 <div className="bg-surface2 rounded-xl p-3 border border-emerald-500/30">
@@ -962,14 +1024,45 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Monto</label>
+              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Total del servicio <span className="text-app3 font-normal normal-case">(opcional)</span></label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-app3 font-bold">$</span>
+                <input type="number" value={form.total_amount} onChange={e => set('total_amount', e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-emerald-400"
+                  min="1" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Monto entregado</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-app3 font-bold">$</span>
                 <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
+                  onFocus={() => {
+                    if (form.amount === '0') set('amount', '')
+                  }}
+                  onBlur={() => {
+                    if (form.amount === '') set('amount', '0')
+                  }}
                   placeholder="0"
                   className="w-full bg-surface2 border border-app rounded-xl pl-8 pr-4 py-3 text-app text-xl font-bold focus:outline-none focus:border-emerald-400"
-                  min="1" required />
+                  min="0" required />
               </div>
+              {remaining > 0 && (
+                <div className="mt-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5">
+                  <span className="text-amber-500 text-lg">⚠️</span>
+                  <div>
+                    <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">Queda debiendo </span>
+                    <span className="text-sm font-bold text-amber-500">${remaining.toLocaleString('es-AR')}</span>
+                  </div>
+                </div>
+              )}
+              {totalAmount > 0 && paidAmount >= totalAmount && (
+                <div className="mt-2 flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">✓ Pago completo</span>
+                </div>
+              )}
             </div>
 
             <div>
@@ -1014,7 +1107,7 @@ function NewPaymentModal({ token, patients: initialPatients, preselectedPatientI
               </button>
               <button type="submit" disabled={loading}
                 className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
-                {loading ? 'Guardando...' : 'Registrar cobro'}
+                {loading ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Registrar cobro'}
               </button>
             </div>
           </form>

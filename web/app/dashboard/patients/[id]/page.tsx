@@ -5,14 +5,25 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
 
+const EMPTY_ACCOUNT_SUMMARY = {
+  total_billed: 0,
+  total_collected: 0,
+  balance_due: 0,
+  payments_count: 0,
+  last_payment_at: null,
+}
+
+function hasExplicitTotalAmount(payment: { total_amount?: number | string | null }) {
+  return payment.total_amount !== null && payment.total_amount !== undefined
+}
+
 export default function PatientDetailPage() {
   const [patient, setPatient] = useState<any>(null)
-  const [balance, setBalance] = useState<any>(null)
+  const [accountSummary, setAccountSummary] = useState(EMPTY_ACCOUNT_SUMMARY)
   const [loading, setLoading] = useState(true)
   const [odontogram, setOdontogram] = useState<any[]>([])
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
   const [savingTooth, setSavingTooth] = useState(false)
-  const [token, setToken] = useState('')
   const [files, setFiles] = useState<any[]>([])
   const [fileUrls, setFileUrls] = useState<Record<string, string>>({})
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null)
@@ -21,8 +32,12 @@ export default function PatientDetailPage() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [apptPage, setApptPage] = useState(1)
   const [notes, setNotes] = useState('')
+  const [showAccountModal, setShowAccountModal] = useState(false)
+  const [accountPayments, setAccountPayments] = useState<any[]>([])
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
   const [odontogramActiveType, setOdontogramActiveType] = useState<'adult' | 'child'>('adult')
@@ -31,17 +46,38 @@ export default function PatientDetailPage() {
   const params = useParams()
   const supabase = createClient()
 
+  async function refreshAccountSummary(accessToken: string) {
+    const summaryData = await apiFetch(`/patients/${params.id}/account-summary`, {
+      token: accessToken,
+    })
+    setAccountSummary(summaryData.data ?? EMPTY_ACCOUNT_SUMMARY)
+  }
+
+  async function refreshAccountPayments(accessToken: string) {
+    const paymentsData = await apiFetch(`/payments?patient_id=${params.id}&limit=500`, {
+      token: accessToken,
+    })
+    setAccountPayments(paymentsData.data ?? [])
+  }
+
+  async function refreshAccountState(accessToken: string) {
+    await Promise.all([
+      refreshAccountSummary(accessToken),
+      refreshAccountPayments(accessToken),
+    ])
+  }
+
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
-      setToken(session.access_token)
 
-      const [patientData, balanceData, odontogramData, diagData] = await Promise.all([
+      const [patientData, accountSummaryData, odontogramData, diagData, paymentsData] = await Promise.all([
         apiFetch(`/patients/${params.id}`, { token: session.access_token }),
-        apiFetch(`/patients/${params.id}/balance`, { token: session.access_token }),
+        apiFetch(`/patients/${params.id}/account-summary`, { token: session.access_token }),
         apiFetch(`/treatments/odontogram/${params.id}`, { token: session.access_token }),
         apiFetch(`/treatments/tooth-diagnostics/${params.id}`, { token: session.access_token }),
+        apiFetch(`/payments?patient_id=${params.id}&limit=500`, { token: session.access_token }),
       ])
 
       const { createClient: createSupabase } = await import('@/lib/supabase')
@@ -54,14 +90,41 @@ export default function PatientDetailPage() {
       await loadFileUrls(list)
 
       setPatient(patientData.data)
+      setAccountSummary(accountSummaryData.data ?? EMPTY_ACCOUNT_SUMMARY)
       setOdontogramActiveType((patientData.data?.odontogram_type as 'adult' | 'child') ?? 'adult')
       setNotes(patientData.data?.notes ?? '')
-      setBalance(balanceData.data)
       setOdontogram(odontogramData.data ?? [])
       setToothDiagnostics(diagData.data ?? [])
+      setAccountPayments(paymentsData.data ?? [])
       setLoading(false)
     }
     load()
+  }, [])
+
+  useEffect(() => {
+    async function syncAccountState() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await refreshAccountState(session.access_token)
+    }
+
+    function handleWindowFocus() {
+      void syncAccountState()
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void syncAccountState()
+      }
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   async function handleSaveNotes() {
@@ -77,6 +140,13 @@ export default function PatientDetailPage() {
     setSavingNotes(false)
     setNotesSaved(true)
     setTimeout(() => setNotesSaved(false), 2000)
+  }
+
+  async function openAccountModal() {
+    setShowAccountModal(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await refreshAccountState(session.access_token)
   }
 
   async function addDiagnostic(diag: {
@@ -110,11 +180,21 @@ export default function PatientDetailPage() {
     setToothDiagnostics(d => d.filter(x => x.id !== id))
   }
 
+  async function handleDeletePatient() {
+    setDeleting(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await apiFetch(`/patients/${params.id}`, {
+      method: 'DELETE',
+      token: session.access_token,
+    })
+    router.push('/dashboard/patients')
+  }
+
   async function handleSaveEdit() {
     const errors: Record<string, string> = {}
     if (!editForm.first_name?.trim()) errors.first_name = 'Requerido'
     if (!editForm.last_name?.trim()) errors.last_name = 'Requerido'
-    if (!editForm.phone?.trim() || editForm.phone === 'Sin teléfono') errors.phone = 'Requerido'
 
     if (Object.keys(errors).length > 0) {
       setEditErrors(errors)
@@ -127,7 +207,10 @@ export default function PatientDetailPage() {
     await apiFetch(`/patients/${params.id}`, {
       method: 'PATCH',
       token: session.access_token,
-      body: JSON.stringify(editForm)
+      body: JSON.stringify({
+        ...editForm,
+        gender: editForm.gender || null,
+      })
     })
     const data = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
     setPatient(data.data)
@@ -317,7 +400,7 @@ export default function PatientDetailPage() {
                   setEditMode(true); setEditForm({
                     first_name: patient.first_name,
                     last_name: patient.last_name,
-                    phone: patient.phone,
+                    phone: patient.phone ?? '',
                     email: patient.email ?? '',
                     document_number: patient.document_number ?? '',
                     date_of_birth: patient.date_of_birth ?? '',
@@ -334,18 +417,6 @@ export default function PatientDetailPage() {
                 Editar datos
               </button>
             </div>
-
-            {/* Saldo */}
-            {balance && Number(balance.balance_due) > 0 && (
-              <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-4">
-                <div className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-1">
-                  💸 Saldo pendiente
-                </div>
-                <div className="text-2xl font-bold text-red-400">
-                  ${Number(balance.balance_due).toLocaleString('es-AR')}
-                </div>
-              </div>
-            )}
 
             {/* Contacto */}
             <div className="bg-surface border border-app rounded-xl p-4 space-y-3">
@@ -393,10 +464,10 @@ export default function PatientDetailPage() {
             </button>
 
             <button
-              onClick={() => router.push(`/dashboard/payments?patient_id=${params.id}&patient_name=${patient.first_name} ${patient.last_name}`)}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all"
+              onClick={openAccountModal}
+              className="w-full bg-surface2 hover:bg-surface3 border border-app text-app2 hover:text-app text-sm font-semibold py-2.5 rounded-xl transition-all active:scale-95"
             >
-              💰 Registrar cobro
+              📋 Ver cuenta corriente
             </button>
 
           </div>
@@ -713,6 +784,116 @@ export default function PatientDetailPage() {
         </div>
       </main>
 
+      {/* Modal cuenta corriente */}
+      {showAccountModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setShowAccountModal(false)}>
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-app flex items-center justify-between shrink-0">
+              <div>
+                <h2 className="text-lg font-bold">Cuenta corriente</h2>
+                <div className="text-sm text-app2">{patient.first_name} {patient.last_name}</div>
+              </div>
+              <button onClick={() => setShowAccountModal(false)}
+                className="text-app3 hover:text-app p-1 rounded-lg hover:bg-surface2 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <>
+              {/* Resumen */}
+              <div className="px-6 py-4 border-b border-app shrink-0">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-surface2 rounded-xl p-3 text-center">
+                    <div className="text-xs text-app3 mb-1">Total facturado</div>
+                    <div className="text-base font-bold text-app">${Number(accountSummary.total_billed).toLocaleString('es-AR')}</div>
+                  </div>
+                  <div className="bg-surface2 rounded-xl p-3 text-center">
+                    <div className="text-xs text-app3 mb-1">Total cobrado</div>
+                    <div className="text-base font-bold text-emerald-500">${Number(accountSummary.total_collected).toLocaleString('es-AR')}</div>
+                  </div>
+                  <div className={`rounded-xl p-3 text-center ${Number(accountSummary.balance_due) > 0 ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50' : 'bg-surface2'}`}>
+                    <div className={`text-xs mb-1 ${Number(accountSummary.balance_due) > 0 ? 'text-red-700 dark:text-red-400' : 'text-app3'}`}>Saldo pendiente</div>
+                    <div className={`text-base font-bold ${Number(accountSummary.balance_due) > 0 ? 'text-red-800 dark:text-red-400' : 'text-app3'}`}>
+                      ${Number(accountSummary.balance_due).toLocaleString('es-AR')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Historial */}
+              <div className="flex-1 overflow-y-auto">
+                {accountPayments.length === 0 ? (
+                  <div className="px-6 py-12 text-center text-app3 text-sm">Sin cobros registrados</div>
+                ) : (
+                  <div className="divide-y divide-app">
+                    {[...accountPayments].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime()).map((p: any) => {
+                      const servicio = hasExplicitTotalAmount(p) ? Number(p.total_amount) : 0
+                      const pagado = Number(p.amount)
+                      const debe = Math.max(servicio - pagado, 0)
+                      const METODOS: Record<string, string> = {
+                        cash: '💵 Efectivo', bank_transfer: '📲 Transferencia',
+                        debit_card: '💳 Débito', credit_card: '💳 Crédito',
+                        insurance: '🏥 Obra social', other: '📝 Otro',
+                      }
+                      return (
+                        <div key={p.id} className="px-6 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs text-app3 font-mono">
+                                {new Date(p.paid_at).toLocaleDateString('es-AR', {
+                                  day: 'numeric', month: 'short', year: 'numeric',
+                                  timeZone: 'America/Argentina/Buenos_Aires'
+                                })}
+                              </div>
+                              <div className="text-sm font-medium text-app mt-0.5">
+                                {METODOS[p.method] ?? p.method}
+                              </div>
+                              {p.notes && <div className="text-xs text-app3 mt-0.5 truncate">{p.notes}</div>}
+                            </div>
+                            <div className="text-right shrink-0 space-y-0.5">
+                              {hasExplicitTotalAmount(p) && servicio !== pagado && (
+                                <div className="text-xs text-app3">
+                                  Total: <span className="font-semibold">${servicio.toLocaleString('es-AR')}</span>
+                                </div>
+                              )}
+                              <div className="text-sm font-bold text-emerald-500">
+                                +${pagado.toLocaleString('es-AR')}
+                              </div>
+                              {debe > 0 && (
+                                <div className="text-xs font-semibold text-amber-500">
+                                  Debe: ${debe.toLocaleString('es-AR')}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-app shrink-0">
+                <button
+                  onClick={() => {
+                    setShowAccountModal(false)
+                    router.push(`/dashboard/payments?patient_id=${params.id}&patient_name=${patient.first_name} ${patient.last_name}`)
+                  }}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all text-sm"
+                >
+                  💰 Registrar nuevo cobro
+                </button>
+              </div>
+            </>
+          </div>
+        </div>
+      )}
+
       {/* Lightbox previsualización */}
       {previewFile && (
         <div
@@ -752,10 +933,15 @@ export default function PatientDetailPage() {
       {/* Modal edición paciente */}
       {editMode && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-surface border border-app rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
-              <h2 className="text-lg font-bold mb-5">Editar paciente</h2>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-bold">Editar paciente</h2>
+                <button onClick={() => setEditMode(false)} className="text-app3 hover:text-app transition-colors p-1 rounded-lg hover:bg-surface2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
 
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
@@ -775,28 +961,30 @@ export default function PatientDetailPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Teléfono</label>
-                  <input
-                    value={editForm.phone}
-                    onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))}
-                    onFocus={() => {
-                      if (editForm.phone === 'Sin teléfono') {
-                        setEditForm((f: any) => ({ ...f, phone: '' }))
-                      }
-                    }}
-                    type="tel"
-                    className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.phone ? 'border-red-500' : 'border-app focus:border-emerald-400'
-                      }`}
-                  />
-                  {editErrors.phone && <p className="text-red-400 text-xs mt-1">Requerido</p>}
-                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Teléfono</label>
+                    <input
+                      value={editForm.phone ?? ''}
+                      onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))}
+                      onFocus={() => {
+                        if (editForm.phone === 'Sin teléfono') {
+                          setEditForm((f: any) => ({ ...f, phone: '' }))
+                        }
+                      }}
+                      type="tel"
+                      className={`w-full bg-surface2 border rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none ${editErrors.phone ? 'border-red-500' : 'border-app focus:border-emerald-400'
+                        }`}
+                    />
+                    {editErrors.phone && <p className="text-red-400 text-xs mt-1">Requerido</p>}
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Email</label>
-                  <input value={editForm.email} onChange={e => setEditForm((f: any) => ({ ...f, email: e.target.value }))}
-                    type="email"
-                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  <div>
+                    <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Email</label>
+                    <input value={editForm.email} onChange={e => setEditForm((f: any) => ({ ...f, email: e.target.value }))}
+                      type="email"
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -851,22 +1039,61 @@ export default function PatientDetailPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Alergias</label>
-                  <input value={editForm.allergies} onChange={e => setEditForm((f: any) => ({ ...f, allergies: e.target.value }))}
-                    placeholder="Penicilina, látex..."
-                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Alergias</label>
+                    <input value={editForm.allergies} onChange={e => setEditForm((f: any) => ({ ...f, allergies: e.target.value }))}
+                      placeholder="Penicilina, látex..."
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Medicación actual</label>
-                  <input value={editForm.current_medications} onChange={e => setEditForm((f: any) => ({ ...f, current_medications: e.target.value }))}
-                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  <div>
+                    <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Medicación actual</label>
+                    <input value={editForm.current_medications} onChange={e => setEditForm((f: any) => ({ ...f, current_medications: e.target.value }))}
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => setEditMode(false)}
+              {/* Eliminar paciente */}
+              <div className="mt-6 pt-5 border-t border-app">
+                {!deleteConfirm ? (
+                  <button
+                    onClick={() => setDeleteConfirm(true)}
+                    className="w-full text-sm text-red-400 hover:text-red-300 font-semibold py-2 rounded-xl hover:bg-red-500/10 transition-all"
+                  >
+                    Eliminar paciente
+                  </button>
+                ) : (
+                  <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-4 space-y-3">
+                    <p className="text-sm text-red-300 font-semibold text-center">
+                      ¿Seguro que querés eliminar a {patient.first_name} {patient.last_name}?
+                    </p>
+                    <p className="text-xs text-red-400/70 text-center">
+                      Esta acción es irreversible y borrará todos sus datos.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setDeleteConfirm(false)}
+                        disabled={deleting}
+                        className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-2.5 rounded-xl transition-colors text-sm"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleDeletePatient}
+                        disabled={deleting}
+                        className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-semibold py-2.5 rounded-xl transition-all text-sm disabled:opacity-60"
+                      >
+                        {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-4">
+                <button onClick={() => { setEditMode(false); setDeleteConfirm(false) }}
                   className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors">
                   Cancelar
                 </button>
@@ -985,14 +1212,14 @@ function ToothSVG({ state, onClick, isSelected, number, isStartPoint }: {
           )}
           {state.missing && (
             <>
-              <line x1="3" y1="3" x2="37" y2="37" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
-              <line x1="37" y1="3" x2="3" y2="37" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" />
             </>
           )}
           {state.toExtract && (
             <>
-              <line x1="3" y1="3" x2="37" y2="37" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
-              <line x1="37" y1="3" x2="3" y2="37" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeDasharray="4 2" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
             </>
           )}
         </g>
@@ -1001,7 +1228,6 @@ function ToothSVG({ state, onClick, isSelected, number, isStartPoint }: {
           fill="transparent"
           stroke={isSelected ? '#facc15' : state.missing ? '#dc2626' : state.toExtract ? '#3b82f6' : '#4b5563'}
           strokeWidth={isSelected ? "2" : (state.toExtract || state.missing) ? "2" : "1.5"}
-          strokeDasharray={(state.toExtract || state.missing) && !isSelected ? "5 3" : undefined}
         />
         {(state.crownExisting || state.crownPending) && (
           <circle cx="20" cy="20" r="19"
@@ -1354,14 +1580,14 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
           )}
           {state.missing && (
             <>
-              <line x1="3" y1="3" x2="37" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
-              <line x1="37" y1="3" x2="3" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
             </>
           )}
           {state.toExtract && (
             <>
-              <line x1="3" y1="3" x2="37" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
-              <line x1="37" y1="3" x2="3" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="5 3" pointerEvents="none" />
+              <line x1="3" y1="3" x2="37" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
+              <line x1="37" y1="3" x2="3" y2="37" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" pointerEvents="none" />
             </>
           )}
         </g>
@@ -1370,7 +1596,6 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
           fill="transparent"
           stroke={state.toExtract ? '#3b82f6' : state.missing ? '#dc2626' : '#facc15'}
           strokeWidth="1.5"
-          strokeDasharray={(state.toExtract || state.missing) ? "6 3" : undefined}
           pointerEvents="none"
         />
         {(state.crownExisting || state.crownPending) && (
@@ -1603,11 +1828,11 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
               Por realizar
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 border-2 border-dashed border-blue-400 inline-block" />
+              <svg width="12" height="12" viewBox="0 0 12 12" className="inline-block flex-shrink-0"><line x1="1" y1="1" x2="11" y2="11" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" /><line x1="11" y1="1" x2="1" y2="11" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" /></svg>
               Próxima a extraer
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 border-2 border-dashed border-red-500 inline-block" />
+              <svg width="12" height="12" viewBox="0 0 12 12" className="inline-block flex-shrink-0"><line x1="1" y1="1" x2="11" y2="11" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" /><line x1="11" y1="1" x2="1" y2="11" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" /></svg>
               Ausente / Extraído
             </span>
           </>
