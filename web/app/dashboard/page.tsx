@@ -250,7 +250,7 @@ export default function DashboardPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{appt.patient_name}</div>
-                    <div className="text-sm text-app2 truncate">{appt.appointment_type}</div>
+                    <div className="text-sm text-app2 truncate">{[appt.appointment_type, appt.professional_name].filter(Boolean).join(' · ')}</div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {appt.status === 'completed' || appt.status === 'absent' || appt.status === 'cancelled' ? (

@@ -374,6 +374,7 @@ export default function AgendaPage() {
                     <div className="min-w-0">
                       <div className="font-bold text-app truncate">{appt.patient_name}</div>
                       <div className="text-sm opacity-80 truncate">{appt.appointment_type ?? 'Consulta'}</div>
+                      {appt.professional_name && <div className="text-xs opacity-60 mt-0.5">{appt.professional_name}</div>}
                       {appt.insurance_name && <div className="text-xs opacity-60 mt-1">{appt.insurance_name}</div>}
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -504,7 +505,7 @@ export default function AgendaPage() {
                         height: getSlotHeight(appt.starts_at, appt.ends_at),
                       }}>
                       <div className="text-xs font-bold leading-tight truncate">{appt.patient_name}</div>
-                      <div className="text-[10px] leading-tight opacity-70 truncate">{appt.appointment_type}</div>
+                      <div className="text-[10px] leading-tight opacity-70 truncate">{[appt.appointment_type, appt.professional_name].filter(Boolean).join(' · ')}</div>
                     </div>
                   ))}
                 </div>
@@ -847,7 +848,7 @@ function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, 
   const selectedPatient = patients.find(p => p.id === patientId)
   const filtered = patients.filter(p =>
     `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    p.phone.includes(search)
+    (p.phone ?? '').includes(search)
   ).slice(0, 5)
 
 const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
@@ -1006,18 +1007,12 @@ const DURACIONES = [
 
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Tipo de consulta</label>
-              <div className="grid grid-cols-3 gap-2">
+              <select value={form.appointment_type} onChange={e => set('appointment_type', e.target.value)}
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400">
                 {TIPOS.map(t => (
-                  <button key={t} type="button" onClick={() => set('appointment_type', t)}
-                    className={`py-2 px-2 rounded-xl text-xs font-medium transition-colors ${
-                      form.appointment_type === t
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-surface2 border border-app text-app2'
-                    }`}>
-                    {t}
-                  </button>
+                  <option key={t} value={t}>{t}</option>
                 ))}
-              </div>
+              </select>
             </div>
 
             <div>
