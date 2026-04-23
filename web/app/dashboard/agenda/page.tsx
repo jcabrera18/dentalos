@@ -66,6 +66,8 @@ export default function AgendaPage() {
   const [showNewAppt, setShowNewAppt]   = useState(false)
   const [newApptSlot, setNewApptSlot]   = useState<{ date: string; time: string } | null>(null)
   const [patients, setPatients]         = useState<any[]>([])
+  const [professionals, setProfessionals] = useState<any[]>([])
+  const [selectedProfId, setSelectedProfId] = useState('')
   const [editingAppt, setEditingAppt]   = useState<any>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showNewBlock, setShowNewBlock] = useState(false)
@@ -85,11 +87,13 @@ export default function AgendaPage() {
       setToken(session.access_token)
       const meData = await apiFetch('/auth/me', { token: session.access_token })
       setUserId(meData.data.id)
-      const [_, pData] = await Promise.all([
+      const [_, pData, profData] = await Promise.all([
         fetchAll(session.access_token),
-        apiFetch('/patients?limit=100', { token: session.access_token })
+        apiFetch('/patients?limit=100', { token: session.access_token }),
+        apiFetch('/professionals', { token: session.access_token }),
       ])
       setPatients(pData.data ?? [])
+      setProfessionals(profData.data ?? [])
       setLoading(false)
     }
     load()
@@ -139,25 +143,25 @@ export default function AgendaPage() {
 
   const dayAppts = appointments.filter(a => {
     const d = new Date(a.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    return d === selectedDay && a.status !== 'cancelled'
+    return d === selectedDay && a.status !== 'cancelled' && (!selectedProfId || a.professional_id === selectedProfId)
   })
 
   const dayBlocks = blocks.filter(b => {
     const d = new Date(b.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    return d === selectedDay
+    return d === selectedDay && (!selectedProfId || b.professional_id === selectedProfId)
   })
 
   function apptsByDay(dateStr: string) {
     return appointments.filter(a => {
       const d = new Date(a.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-      return d === dateStr && a.status !== 'cancelled'
+      return d === dateStr && a.status !== 'cancelled' && (!selectedProfId || a.professional_id === selectedProfId)
     })
   }
 
   function blocksByDay(dateStr: string) {
     return blocks.filter(b => {
       const d = new Date(b.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-      return d === dateStr
+      return d === dateStr && (!selectedProfId || b.professional_id === selectedProfId)
     })
   }
 
@@ -305,6 +309,20 @@ export default function AgendaPage() {
             </span>
             <WeekNav />
           </div>
+          {professionals.length > 1 && (
+            <div className="mb-2">
+              <select
+                value={selectedProfId}
+                onChange={e => setSelectedProfId(e.target.value)}
+                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400"
+              >
+                <option value="">Todos los profesionales</option>
+                {professionals.map(p => (
+                  <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-7 gap-0">
             {weekDates.map((d, i) => {
               const dateStr    = formatDate(d)
@@ -402,6 +420,18 @@ export default function AgendaPage() {
             {weekDates[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
           <div className="flex items-center gap-3">
+            {professionals.length > 1 && (
+              <select
+                value={selectedProfId}
+                onChange={e => setSelectedProfId(e.target.value)}
+                className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-emerald-400"
+              >
+                <option value="">Todos los profesionales</option>
+                {professionals.map(p => (
+                  <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
               className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
