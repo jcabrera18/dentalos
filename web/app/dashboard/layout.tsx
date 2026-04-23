@@ -23,6 +23,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [copyState, setCopyState] = useState<'idle' | 'loading' | 'copied' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showInviteSuccess, setShowInviteSuccess] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -44,13 +46,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         token: session.access_token,
         body: JSON.stringify({ role: 'professional' }),
       })
-      await navigator.clipboard.writeText(res.data.link)
+      const link: string = res.data.link
+      setInviteLink(link)
+      try {
+        await navigator.clipboard.writeText(link)
+        setLinkCopied(true)
+      } catch {
+        setLinkCopied(false)
+      }
       setShowInviteSuccess(true)
       setCopyState('idle')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al generar el link'
       setErrorMessage(msg)
       setCopyState('idle')
+    }
+  }
+
+  async function handleCopyLinkManual() {
+    if (!inviteLink) return
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      setLinkCopied(true)
+    } catch {
+      // si aún falla, el usuario puede seleccionar el texto manualmente
     }
   }
 
@@ -172,17 +191,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl">🔗</span>
             </div>
-            <h3 className="font-bold text-lg text-app mb-2">¡Link copiado!</h3>
+            <h3 className="font-bold text-lg text-app mb-2">
+              {linkCopied ? '¡Link copiado!' : 'Link generado'}
+            </h3>
             <p className="text-app3 text-sm mb-4">
               Compartí este link con el profesional que querés invitar. Una vez que se una a tu clínica, podrá:
             </p>
-            <ul className="text-left text-sm text-app3 space-y-2 mb-6">
+            <ul className="text-left text-sm text-app3 space-y-2 mb-4">
               <li className="flex items-center gap-2"><span className="text-emerald-400">📅</span> Ver y gestionar la agenda</li>
               <li className="flex items-center gap-2"><span className="text-emerald-400">👥</span> Compartir y acceder a los pacientes</li>
               <li className="flex items-center gap-2"><span className="text-emerald-400">💰</span> Ver las finanzas de la clínica</li>
             </ul>
+            {inviteLink && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 bg-surface2 rounded-xl px-3 py-2 text-left">
+                  <span className="text-xs text-app3 truncate flex-1 font-mono select-all">{inviteLink}</span>
+                  <button
+                    onClick={handleCopyLinkManual}
+                    className="shrink-0 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                  >
+                    {linkCopied ? '✓' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            )}
             <button
-              onClick={() => setShowInviteSuccess(false)}
+              onClick={() => { setShowInviteSuccess(false); setInviteLink(null); setLinkCopied(false) }}
               className="w-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
             >
               Entendido
