@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle } from 'lucide-react'
 
 const HOURS = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+const SLOT_H = 48 // px por hora — alta densidad
 
 function getWeekDates(offset = 0) {
   const now = new Date()
@@ -28,29 +30,36 @@ function todayArg() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
-function getSlotTop(startsAt: string): number {
-  const d = new Date(startsAt)
-  const argTime = d.toLocaleTimeString('es-AR', {
+function fmt24(iso: string) {
+  return new Date(iso).toLocaleTimeString('es-AR', {
     hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: 'America/Argentina/Buenos_Aires'
+    timeZone: 'America/Argentina/Buenos_Aires',
   })
-  const [h, m] = argTime.split(':').map(Number)
-  const startHour = 6
-  return Math.max(0, (h - startHour) * 64 + (m / 60) * 64)
+}
+
+function formatDuration(min: number) {
+  if (!min) return ''
+  return min < 60 ? `${min}m` : `${Math.floor(min / 60)}h${min % 60 ? `${min % 60}m` : ''}`
+}
+
+function getSlotTop(startsAt: string): number {
+  const [h, m] = fmt24(startsAt).split(':').map(Number)
+  return Math.max(0, (h - 6) * SLOT_H + (m / 60) * SLOT_H)
 }
 
 function getSlotHeight(startsAt: string, endsAt: string): number {
   const diff = (new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 60000
-  return Math.max(32, (diff / 60) * 64)
+  return Math.max(20, (diff / 60) * SLOT_H)
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  pending:     'border-l-amber-400 bg-amber-400/15 text-amber-900 dark:text-amber-200',
-  confirmed:   'border-l-emerald-400 bg-emerald-400/15 text-emerald-900 dark:text-emerald-200',
-  completed:   'border-l-emerald-400 bg-emerald-400/15 text-emerald-900 dark:text-emerald-200',
-  absent:      'border-l-red-400 bg-red-400/15 text-red-900 dark:text-red-200',
-  cancelled:   'border-l-gray-400 bg-gray-400/10 text-gray-500 dark:text-gray-400',
-  in_progress: 'border-l-purple-400 bg-purple-400/15 text-purple-900 dark:text-purple-200',
+// Estado = color (no tipo ni profesional)
+const STATUS_CONFIG: Record<string, { border: string; bg: string; dot: string; label: string; textClass: string }> = {
+  pending:     { border: 'border-l-amber-400',   bg: 'bg-amber-400/10',   dot: 'bg-amber-400',            label: 'Sin confirmar', textClass: 'text-amber-800 dark:text-amber-200' },
+  confirmed:   { border: 'border-l-[#00C4BC]',   bg: 'bg-[#00C4BC]/10',   dot: 'bg-[#00C4BC]',            label: 'Confirmado',    textClass: 'text-teal-800 dark:text-teal-200'   },
+  in_progress: { border: 'border-l-violet-400',  bg: 'bg-violet-400/10',  dot: 'bg-violet-400',           label: 'En atención',   textClass: 'text-violet-800 dark:text-violet-200' },
+  completed:   { border: 'border-l-app3',        bg: 'bg-surface2',       dot: 'bg-app3',                 label: 'Atendido',      textClass: 'text-app3'                          },
+  absent:      { border: 'border-l-red-400',     bg: 'bg-red-400/10',     dot: 'bg-red-400',              label: 'No vino',       textClass: 'text-red-800 dark:text-red-200'     },
+  cancelled:   { border: 'border-l-app3',        bg: 'bg-surface2/50',    dot: 'bg-app3',                 label: 'Cancelado',     textClass: 'text-app3'                          },
 }
 
 export default function AgendaPage() {
@@ -199,81 +208,108 @@ export default function AgendaPage() {
     </div>
   )
 
-  const ApptModal = () => selectedAppt ? (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-      onClick={() => setSelectedAppt(null)}>
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6"
-        onClick={e => e.stopPropagation()}>
-        <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
-        <div className="mb-5">
-          <div className="font-bold text-lg text-app">{selectedAppt.patient_name}</div>
-          <div className="text-app2 text-sm">{selectedAppt.appointment_type ?? 'Consulta'}</div>
-          {selectedAppt.professional_name && (
-            <div className="text-app3 text-sm mt-1">
-              Atiende: {selectedAppt.professional_name}
+  const ApptModal = () => {
+    if (!selectedAppt) return null
+    const cfg = STATUS_CONFIG[selectedAppt.status] ?? STATUS_CONFIG.pending
+    const isActionable = !['completed', 'absent', 'cancelled'].includes(selectedAppt.status)
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+        onClick={() => setSelectedAppt(null)}>
+        <div className="bg-surface border border-app rounded-2xl w-full max-w-sm"
+          onClick={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="p-5 pb-4">
+            <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-4 sm:hidden" />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-bold text-lg text-app leading-tight">{selectedAppt.patient_name}</div>
+                <div className="flex items-center gap-2 mt-1 text-sm text-app2">
+                  {selectedAppt.appointment_type && <span>{selectedAppt.appointment_type}</span>}
+                  {selectedAppt.duration_minutes && (
+                    <span className="flex items-center gap-1 text-app3">
+                      <Clock size={12} />{formatDuration(selectedAppt.duration_minutes)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-app3 mt-1 tabular-nums">
+                  {new Date(selectedAppt.starts_at).toLocaleDateString('es-AR', {
+                    weekday: 'short', day: 'numeric', month: 'short',
+                    timeZone: 'America/Argentina/Buenos_Aires'
+                  })} · {fmt24(selectedAppt.starts_at)}
+                </div>
+              </div>
+              {/* Status badge */}
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${
+                selectedAppt.status === 'pending'     ? 'bg-amber-400/10 border-amber-400/20 text-amber-400' :
+                selectedAppt.status === 'confirmed'   ? 'bg-[#E6F8F1] border-[#00C4BC]/20 text-[#00C4BC]' :
+                selectedAppt.status === 'in_progress' ? 'bg-violet-400/10 border-violet-400/20 text-violet-400' :
+                selectedAppt.status === 'completed'   ? 'bg-surface2 border-app text-app3' :
+                selectedAppt.status === 'absent'      ? 'bg-red-400/10 border-red-400/20 text-red-400' :
+                'bg-surface2 border-app text-app3'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                {cfg.label}
+              </span>
             </div>
-          )}
-          <div className="text-app3 text-sm mt-1">
-            {new Date(selectedAppt.starts_at).toLocaleString('es-AR', {
-              weekday: 'short', day: 'numeric', month: 'short',
-              hour: '2-digit', minute: '2-digit',
-              timeZone: 'America/Argentina/Buenos_Aires'
-            })}
+
+            {selectedAppt.chief_complaint && (
+              <div className="mt-3 bg-surface2 rounded-xl px-3 py-2.5 border-l-2 border-amber-400 flex items-start gap-2">
+                <AlertTriangle size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-app2">{selectedAppt.chief_complaint}</div>
+              </div>
+            )}
           </div>
-          {selectedAppt.insurance_name && (
-            <div className="text-app3 text-xs mt-1">{selectedAppt.insurance_name}</div>
-          )}
-          {selectedAppt.chief_complaint && (
-            <div className="mt-3 bg-surface2 rounded-xl px-3 py-2.5 border-l-2 border-amber-400">
-              <div className="text-xs text-app3 uppercase tracking-wider mb-1">Motivo de consulta</div>
-              <div className="text-sm text-app2">{selectedAppt.chief_complaint}</div>
-            </div>
-          )}
-        </div>
 
-        {selectedAppt.status !== 'cancelled' && selectedAppt.status !== 'completed' && (
-          <>
-            <div className="text-xs text-app3 uppercase tracking-wider mb-2">Cambiar estado</div>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {[
-                { status: 'confirmed',   label: '✓ Confirmado' },
-                { status: 'completed',   label: 'Atendido' },
-                { status: 'absent',      label: 'Ausente' },
-                { status: 'in_progress', label: 'En curso' },
-              ].map(({ status, label }) => (
-                <button key={status}
-                  onClick={() => updateStatus(selectedAppt.id, status)}
-                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors active:scale-95 ${
-                    selectedAppt.status === status
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-surface2 hover:bg-surface3 text-app2 border border-app'
-                  }`}>
-                  {label}
+          {/* Quick actions */}
+          {isActionable && (
+            <div className="px-5 pb-4 space-y-2">
+              {selectedAppt.status === 'pending' && (
+                <button onClick={() => updateStatus(selectedAppt.id, 'confirmed')}
+                  className="w-full flex items-center justify-center gap-2 bg-[#E6F8F1] hover:bg-[#00C4BC] hover:text-white text-[#00C4BC] font-semibold py-3 rounded-xl transition-all active:scale-95 text-sm">
+                  <UserCheck size={16} /> Confirmar turno
                 </button>
-              ))}
+              )}
+              {(selectedAppt.status === 'pending' || selectedAppt.status === 'confirmed') && (
+                <button onClick={() => updateStatus(selectedAppt.id, 'in_progress')}
+                  className="w-full flex items-center justify-center gap-2 bg-violet-400/10 hover:bg-violet-400 hover:text-white text-violet-400 font-semibold py-3 rounded-xl transition-all active:scale-95 text-sm">
+                  <Play size={16} /> Iniciar atención
+                </button>
+              )}
+              {selectedAppt.status === 'in_progress' && (
+                <button onClick={() => updateStatus(selectedAppt.id, 'completed')}
+                  className="w-full flex items-center justify-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-semibold py-3 rounded-xl transition-all active:scale-95 text-sm">
+                  <CheckCircle size={16} /> Marcar como atendido
+                </button>
+              )}
+              <button onClick={() => updateStatus(selectedAppt.id, 'absent')}
+                className="w-full flex items-center justify-center gap-2 bg-surface2 hover:bg-red-400/10 hover:text-red-400 text-app2 font-semibold py-3 rounded-xl transition-all active:scale-95 text-sm">
+                <XCircle size={16} /> No vino
+              </button>
             </div>
-          </>
-        )}
-
-        <div className="space-y-2">
-          <button onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}`)}
-            className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
-            Ver ficha del paciente →
-          </button>
-          {selectedAppt.status !== 'cancelled' && selectedAppt.status !== 'completed' && (
-            <button onClick={() => { setEditingAppt(selectedAppt); setSelectedAppt(null) }}
-              className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 py-2.5 rounded-xl text-sm font-medium transition-all">
-              ✏️ Editar turno
-            </button>
           )}
-          <button onClick={() => { setConfirmDelete(selectedAppt.id); setSelectedAppt(null) }}
-            className="w-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 active:scale-95 text-red-600 dark:text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
-            🗑 Eliminar turno
-          </button>
+
+          {/* Secondary actions */}
+          <div className="px-5 pb-5 pt-0 space-y-2 border-t border-app pt-4">
+            <button onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}`)}
+              className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
+              Ver ficha del paciente →
+            </button>
+            {isActionable && (
+              <button onClick={() => { setEditingAppt(selectedAppt); setSelectedAppt(null) }}
+                className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 py-2.5 rounded-xl text-sm font-medium transition-all">
+                Editar turno
+              </button>
+            )}
+            <button onClick={() => { setConfirmDelete(selectedAppt.id); setSelectedAppt(null) }}
+              className="w-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 active:scale-95 text-red-400 py-2.5 rounded-xl text-sm font-medium transition-all">
+              Eliminar turno
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  ) : null
+    )
+  }
 
   if (loading && appointments.length === 0) {
     return (
@@ -348,7 +384,7 @@ export default function AgendaPage() {
               <select
                 value={selectedProfId}
                 onChange={e => setSelectedProfId(e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400"
+                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
                 {professionals.map(p => (
@@ -369,13 +405,13 @@ export default function AgendaPage() {
                   className="flex flex-col items-center gap-0.5 py-1 rounded-xl transition-colors">
                   <span className="text-[10px] text-app3">{DAYS[i]}</span>
                   <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold transition-colors ${
-                    isSelected ? 'bg-emerald-500 text-white' :
-                    isToday ? 'border border-emerald-400 text-emerald-400' : 'text-app'
+                    isSelected ? 'bg-[#00C4BC] text-white' :
+                    isToday ? 'border border-[#00C4BC] text-[#00C4BC]' : 'text-app'
                   }`}>
                     {d.getDate()}
                   </span>
                   <div className="flex gap-0.5">
-                    {hasAppts && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-400'}`} />}
+                    {hasAppts && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-[#00C4BC]'}`} />}
                     {hasBlocks && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-400'}`} />}
                   </div>
                 </button>
@@ -419,27 +455,68 @@ export default function AgendaPage() {
               ))}
               {[...dayAppts].sort((a, b) =>
                 new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
-              ).map(appt => (
-                <div key={appt.id} onClick={() => setSelectedAppt(appt)}
-                  className={`rounded-xl border-l-4 p-4 cursor-pointer active:scale-95 transition-transform ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-bold text-app truncate">{appt.patient_name}</div>
-                      <div className="text-sm opacity-80 truncate">{appt.appointment_type ?? 'Consulta'}</div>
-                      {appt.professional_name && <div className="text-xs opacity-60 mt-0.5">{appt.professional_name}</div>}
-                      {appt.insurance_name && <div className="text-xs opacity-60 mt-1">{appt.insurance_name}</div>}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="font-mono text-sm font-bold">
-                        {new Date(appt.starts_at).toLocaleTimeString('es-AR', {
-                          hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires'
-                        })}
+              ).map(appt => {
+                const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
+                const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
+                return (
+                  <div key={appt.id} className={`rounded-xl border-l-4 ${cfg.border} ${cfg.bg} overflow-hidden`}>
+                    {/* Main row */}
+                    <div className="flex items-start gap-3 p-3" onClick={() => setSelectedAppt(appt)}>
+                      {/* Hora */}
+                      <div className="tabular-nums text-sm font-semibold text-app2 w-12 flex-shrink-0 pt-0.5">
+                        {fmt24(appt.starts_at)}
                       </div>
-                      <div className="text-xs opacity-60 mt-0.5">{appt.duration_minutes} min</div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-app text-sm truncate">{appt.patient_name}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {appt.appointment_type && <span className="text-xs text-app2 truncate">{appt.appointment_type}</span>}
+                          {appt.duration_minutes && (
+                            <span className="flex items-center gap-0.5 text-xs text-app3 flex-shrink-0">
+                              <Clock size={10} />{formatDuration(appt.duration_minutes)}
+                            </span>
+                          )}
+                          {appt.chief_complaint && (
+                            <AlertTriangle size={11} className="text-amber-400 flex-shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                      {/* Status badge */}
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.textClass}`}>
+                        <span className={`w-1 h-1 rounded-full ${cfg.dot}`} />
+                        {cfg.label}
+                      </span>
                     </div>
+                    {/* Quick actions inline */}
+                    {!isDone && (
+                      <div className="flex gap-1 px-3 pb-2.5">
+                        {appt.status === 'pending' && (
+                          <button onClick={() => updateStatus(appt.id, 'confirmed')}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white transition-all active:scale-95">
+                            <UserCheck size={12} /> Confirmar
+                          </button>
+                        )}
+                        {(appt.status === 'pending' || appt.status === 'confirmed') && (
+                          <button onClick={() => updateStatus(appt.id, 'in_progress')}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white transition-all active:scale-95">
+                            <Play size={12} /> Iniciar
+                          </button>
+                        )}
+                        {appt.status === 'in_progress' && (
+                          <button onClick={() => updateStatus(appt.id, 'completed')}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-[#00C4BC] text-white hover:bg-[#00aaa3] transition-all active:scale-95">
+                            <CheckCircle size={12} /> Atendido
+                          </button>
+                        )}
+                        <button onClick={() => updateStatus(appt.id, 'absent')}
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app3 hover:bg-red-400/10 hover:text-red-400 transition-all active:scale-95">
+                          <XCircle size={12} /> No vino
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -458,7 +535,7 @@ export default function AgendaPage() {
               <select
                 value={selectedProfId}
                 onChange={e => setSelectedProfId(e.target.value)}
-                className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-emerald-400"
+                className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
                 {professionals.map(p => (
@@ -488,8 +565,8 @@ export default function AgendaPage() {
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 linkCopied
-                  ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-300'
-                  : 'bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+                  ? 'bg-[#E6F8F1] border border-[#00C4BC]/50 text-[#00C4BC]'
+                  : 'bg-[#E6F8F1] hover:bg-[#00C4BC]/20 border border-[#00C4BC]/30 text-[#00C4BC]'
               }`}>
               {linkCopied ? '✓ Copiado' : '📋 Link de agenda'}
             </button>
@@ -509,7 +586,7 @@ export default function AgendaPage() {
                 <div key={i} className="py-2 text-center border-l border-gray-200 dark:border-gray-800">
                   <div className="text-[10px] text-app3 uppercase tracking-wider">{DAYS[i]}</div>
                   <div className={`text-base font-bold mx-auto w-7 h-7 flex items-center justify-center rounded-full ${
-                    isToday ? 'bg-emerald-500 text-white' : 'text-app'
+                    isToday ? 'bg-[#00C4BC] text-white' : 'text-app'
                   }`}>
                     {d.getDate()}
                   </div>
@@ -523,8 +600,8 @@ export default function AgendaPage() {
             {/* Columna horas */}
             <div>
               {HOURS.map(h => (
-                <div key={h} className="h-16 relative border-t border-app/20">
-                  <span className="absolute top-1 right-2 text-xs text-app3">{h}</span>
+                <div key={h} className="relative border-t border-app/20" style={{ height: SLOT_H }}>
+                  <span className="absolute top-1 right-1.5 text-[10px] tabular-nums text-app3 leading-none">{h}</span>
                 </div>
               ))}
             </div>
@@ -537,49 +614,104 @@ export default function AgendaPage() {
               const dayBlks = blocksByDay(dateStr)
               return (
                 <div key={dayIdx}
-                  className={`relative border-l border-gray-200 dark:border-gray-800 ${isToday ? 'bg-emerald-500/5' : ''}`}
-                  style={{ minHeight: `${HOURS.length * 64}px` }}
+                  className={`relative border-l border-app/30 ${isToday ? 'bg-[#00C4BC]/5' : ''}`}
+                  style={{ minHeight: `${HOURS.length * SLOT_H}px` }}
                   onClick={(e) => {
                     if (e.target === e.currentTarget) {
                       const rect = e.currentTarget.getBoundingClientRect()
                       const y = e.clientY - rect.top
-                      const hourIndex = Math.floor(y / 64)
+                      const hourIndex = Math.floor(y / SLOT_H)
                       const hour = 6 + hourIndex
                       setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:00` })
                       setShowNewAppt(true)
                     }
                   }}>
                   {HOURS.map((_, i) => (
-                    <div key={i} className="absolute w-full border-t border-gray-200 dark:border-gray-800"
-                      style={{ top: i * 64 }} />
+                    <div key={i} className="absolute w-full border-t border-app/20"
+                      style={{ top: i * SLOT_H }} />
                   ))}
+
                   {/* Schedule blocks */}
                   {dayBlks.map(block => (
                     <div key={block.id}
                       onClick={() => setSelectedBlock(block)}
-                      className="absolute left-1 right-1 rounded-md border-l-4 border-l-slate-400 bg-slate-400/20 dark:bg-slate-600/25 px-1.5 py-1 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+                      className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 bg-slate-400/15 px-1 py-0.5 cursor-pointer hover:bg-slate-400/25 transition-colors overflow-hidden"
                       style={{
                         top:    getSlotTop(block.starts_at),
                         height: getSlotHeight(block.starts_at, block.ends_at),
-                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(100,116,139,0.1) 4px, rgba(100,116,139,0.1) 8px)',
+                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.08) 3px, rgba(100,116,139,0.08) 6px)',
                       }}>
-                      <div className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">🔒 Bloqueado</div>
-                      {block.reason && <div className="text-xs text-slate-500 truncate opacity-80">{block.reason}</div>}
+                      <div className="text-[10px] font-bold text-slate-500 truncate">Bloqueado</div>
                     </div>
                   ))}
+
                   {/* Appointments */}
-                  {dayApts.map(appt => (
-                    <div key={appt.id}
-                      onClick={() => setSelectedAppt(appt)}
-                      className={`absolute left-1 right-1 rounded-md border-l-4 px-1.5 py-0.5 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden ${STATUS_COLORS[appt.status] ?? STATUS_COLORS.pending}`}
-                      style={{
-                        top:    getSlotTop(appt.starts_at),
-                        height: getSlotHeight(appt.starts_at, appt.ends_at),
-                      }}>
-                      <div className="text-xs font-bold leading-tight truncate">{appt.patient_name}</div>
-                      <div className="text-[10px] leading-tight opacity-70 truncate">{[appt.appointment_type, appt.professional_name].filter(Boolean).join(' · ')}</div>
-                    </div>
-                  ))}
+                  {dayApts.map(appt => {
+                    const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
+                    const blockH = getSlotHeight(appt.starts_at, appt.ends_at)
+                    const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
+                    return (
+                      <div key={appt.id}
+                        className={`group absolute left-0.5 right-0.5 rounded border-l-4 cursor-pointer hover:z-10 hover:brightness-95 transition-all overflow-visible ${cfg.border} ${cfg.bg}`}
+                        style={{ top: getSlotTop(appt.starts_at), height: blockH }}
+                        onClick={() => setSelectedAppt(appt)}
+                      >
+                        {/* Contenido del bloque */}
+                        <div className="px-1.5 py-0.5 overflow-hidden h-full">
+                          <div className={`text-[11px] font-bold leading-tight truncate ${cfg.textClass}`}>
+                            {appt.patient_name}
+                          </div>
+                          {blockH >= 34 && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot} ${appt.status === 'in_progress' ? 'animate-pulse' : ''}`} />
+                              <span className={`text-[9px] truncate opacity-80 ${cfg.textClass}`}>
+                                {appt.appointment_type ?? cfg.label}
+                              </span>
+                              {appt.chief_complaint && (
+                                <AlertTriangle size={9} className="text-amber-400 flex-shrink-0" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Hover actions — aparecen debajo del bloque */}
+                        {!isDone && blockH >= 32 && (
+                          <div className="hidden group-hover:flex absolute left-0 right-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app rounded-b-lg shadow-xl mt-px">
+                            {appt.status === 'pending' && (
+                              <button
+                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'confirmed') }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white transition-all"
+                              >
+                                <UserCheck size={10} /> Confirmar
+                              </button>
+                            )}
+                            {(appt.status === 'pending' || appt.status === 'confirmed') && (
+                              <button
+                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'in_progress') }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white transition-all"
+                              >
+                                <Play size={10} /> Iniciar
+                              </button>
+                            )}
+                            {appt.status === 'in_progress' && (
+                              <button
+                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'completed') }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-[#00C4BC] text-white hover:bg-[#00aaa3] transition-all"
+                              >
+                                <CheckCircle size={10} /> Atendido
+                              </button>
+                            )}
+                            <button
+                              onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'absent') }}
+                              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-surface2 text-app3 hover:bg-red-400/10 hover:text-red-400 transition-all"
+                            >
+                              <XCircle size={10} /> No vino
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}
@@ -590,7 +722,7 @@ export default function AgendaPage() {
       {/* FABs */}
       <button
         onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setShowNewAppt(true) }}
-        className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-emerald-500 hover:bg-emerald-600 rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
+        className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-[#00C4BC] hover:bg-[#00aaa3] rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
       >
         +
       </button>
@@ -610,8 +742,8 @@ export default function AgendaPage() {
         }}
         className={`md:hidden fixed bottom-24 right-40 w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all z-30 font-medium ${
           linkCopied
-            ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-            : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+            ? 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
+            : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
         }`}
         title="Copiar link de agenda"
       >
@@ -726,7 +858,7 @@ export default function AgendaPage() {
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Fecha</label>
                 <input type="date" id="edit-date"
                   defaultValue={new Date(editingAppt.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Hora</label>
@@ -735,13 +867,13 @@ export default function AgendaPage() {
                     const d = new Date(editingAppt.starts_at)
                     return d.toLocaleString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
                   })()}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Tipo de consulta</label>
                 <input type="text" id="edit-type"
                   defaultValue={editingAppt.appointment_type ?? ''}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
               <div className="flex gap-3 mt-5">
                 <button type="button" onClick={() => setEditingAppt(null)}
@@ -749,7 +881,7 @@ export default function AgendaPage() {
                   Cancelar
                 </button>
                 <button type="submit"
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
+                  className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
                   Guardar
                 </button>
               </div>
@@ -1011,15 +1143,15 @@ const DURACIONES = [
                     className="text-app3 hover:text-app text-sm">✕</button>
                 </div>
               ) : newPatientMode ? (
-                <div className="bg-surface2 rounded-xl p-3 border border-emerald-500/30">
+                <div className="bg-surface2 rounded-xl p-3 border border-[#00C4BC]/30">
                   <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-2">Nuevo paciente rápido</div>
                   <div className="grid grid-cols-2 gap-2 mb-2">
                     <input type="text" value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
                       placeholder="Nombre"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                     <input type="text" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)}
                       placeholder="Apellido"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setNewPatientMode(false)}
@@ -1028,7 +1160,7 @@ const DURACIONES = [
                     </button>
                     <button type="button" onClick={handleCreatePatient}
                       disabled={!newPatientName || creatingPatient}
-                      className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
+                      className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
                       {creatingPatient ? 'Creando...' : 'Crear y usar'}
                     </button>
                   </div>
@@ -1037,7 +1169,7 @@ const DURACIONES = [
                 <div>
                   <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Buscar por nombre o teléfono..."
-                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400 mb-2"
+                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2"
                     autoFocus />
                   {search && (
                     <div className="bg-surface2 border border-app rounded-xl overflow-hidden mb-2">
@@ -1063,12 +1195,12 @@ const DURACIONES = [
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha</label>
                 <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Hora</label>
                 <input type="time" value={form.time} onChange={e => set('time', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
             </div>
 
@@ -1078,7 +1210,7 @@ const DURACIONES = [
                 <select
                   value={professionalId}
                   onChange={e => setProfessionalId(e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400"
+                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
                 >
                   <option value="" disabled>Seleccionar profesional</option>
                   {professionals.map(p => (
@@ -1095,7 +1227,7 @@ const DURACIONES = [
                   <button key={d.value} type="button" onClick={() => set('duration_minutes', d.value)}
                     className={`py-2 rounded-xl text-sm font-semibold transition-colors ${
                       form.duration_minutes === d.value
-                        ? 'bg-emerald-500 text-white'
+                        ? 'bg-[#00C4BC] text-white'
                         : 'bg-surface2 border border-app text-app2'
                     }`}>
                     {d.label}
@@ -1107,7 +1239,7 @@ const DURACIONES = [
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Tipo de consulta</label>
               <select value={form.appointment_type} onChange={e => set('appointment_type', e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400">
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
                 {TIPOS.map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
@@ -1118,7 +1250,7 @@ const DURACIONES = [
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Motivo (opcional)</label>
               <input type="text" value={form.chief_complaint} onChange={e => set('chief_complaint', e.target.value)}
                 placeholder="Descripción..."
-                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400" />
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
             </div>
 
             {error && (
@@ -1131,7 +1263,7 @@ const DURACIONES = [
                 Cancelar
               </button>
               <button type="submit" disabled={loading}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
+                className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
                 {loading ? 'Agendando...' : 'Confirmar turno'}
               </button>
             </div>

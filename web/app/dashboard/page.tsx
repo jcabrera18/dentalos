@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays } from 'lucide-react'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
@@ -14,7 +15,11 @@ export default function DashboardPage() {
   const [showNotesModal, setShowNotesModal] = useState(false)
   const [pendingAppt, setPendingAppt] = useState<any>(null)
   const [clinicalNotes, setClinicalNotes] = useState('')
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [confirmLoading, setConfirmLoading] = useState(false)
+  const [attendedDone, setAttendedDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -71,12 +76,13 @@ export default function DashboardPage() {
             <div className="h-8 bg-surface2 rounded-lg w-64 mb-2" />
             <div className="h-4 bg-surface2 rounded w-40" />
           </div>
-          {/* Stats skeleton */}
+          {/* KPIs skeleton */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="bg-surface border border-app rounded-xl p-4">
                 <div className="h-3 bg-surface2 rounded w-20 mb-3" />
-                <div className="h-8 bg-surface2 rounded w-12" />
+                <div className="h-7 bg-surface2 rounded w-16 mb-2" />
+                <div className="h-3 bg-surface2 rounded w-24" />
               </div>
             ))}
           </div>
@@ -102,27 +108,91 @@ export default function DashboardPage() {
     weekday: 'long', day: 'numeric', month: 'long'
   })
 
+  // ── Alertas de acción computadas de la agenda ──
+  const now = new Date()
+
+  const nextAppt = agenda
+    .filter(a => !['completed', 'absent', 'cancelled'].includes(a.status) && new Date(a.starts_at) > now)
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0] ?? null
+
+  const minutesUntilNext = nextAppt
+    ? Math.round((new Date(nextAppt.starts_at).getTime() - now.getTime()) / 60000)
+    : null
+
+  const unconfirmedCount = agenda.filter(a => a.status === 'pending').length
+  const inProgressCount  = agenda.filter(a => a.status === 'in_progress').length
+
+  type ActionAlert = { key: string; label: string; urgency: 'ok' | 'warn' | 'alert'; onClick?: () => void }
+  const actionAlerts: ActionAlert[] = []
+
+  if (inProgressCount > 0) {
+    actionAlerts.push({
+      key: 'in_progress',
+      label: inProgressCount === 1 ? '1 paciente en atención ahora' : `${inProgressCount} pacientes en atención`,
+      urgency: 'ok',
+    })
+  }
+
+  if (nextAppt && minutesUntilNext !== null) {
+    const label = minutesUntilNext <= 0
+      ? `${nextAppt.patient_name} debería estar llegando`
+      : minutesUntilNext === 1
+        ? `${nextAppt.patient_name} en 1 min`
+        : `${nextAppt.patient_name} en ${minutesUntilNext} min`
+    actionAlerts.push({
+      key: 'next',
+      label,
+      urgency: minutesUntilNext <= 5 ? 'alert' : minutesUntilNext <= 15 ? 'warn' : 'ok',
+    })
+  }
+
+  if (unconfirmedCount > 0) {
+    actionAlerts.push({
+      key: 'unconfirmed',
+      label: unconfirmedCount === 1
+        ? '1 turno sin confirmar'
+        : `${unconfirmedCount} turnos sin confirmar`,
+      urgency: unconfirmedCount >= 3 ? 'alert' : 'warn',
+    })
+  }
+
   async function markStatus(id: string, status: string) {
+    setActionLoading(`${id}:${status}`)
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session) { setActionLoading(null); return }
     await apiFetch(`/appointments/${id}`, {
       method: 'PATCH',
       token: session.access_token,
       body: JSON.stringify({ status })
     })
-    // Recargar agenda y stats
     const [agendaData, statsData] = await Promise.all([
       apiFetch('/appointments/today', { token: session.access_token }),
       apiFetch('/appointments/stats/today', { token: session.access_token }),
     ])
     setAgenda(agendaData.data ?? [])
     setStats(statsData.data ?? {})
+    setActionLoading(null)
+  }
+
+  function formatDuration(min: number) {
+    if (!min) return ''
+    return min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}min` : ''}`
+  }
+
+  function closeNotesModal() {
+    setShowNotesModal(false)
+    setPendingAppt(null)
+    setClinicalNotes('')
+    setPaymentAmount('')
+    setPaymentMethod('cash')
+    setAttendedDone(false)
   }
 
   async function confirmAttended() {
     if (!pendingAppt) return
+    setConfirmLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session) { setConfirmLoading(false); return }
 
     await apiFetch(`/appointments/${pendingAppt.id}/complete`, {
       method: 'POST',
@@ -130,77 +200,268 @@ export default function DashboardPage() {
       body: JSON.stringify({ clinical_notes: clinicalNotes || undefined })
     })
 
+    const amount = parseFloat(paymentAmount)
+    if (!isNaN(amount) && amount > 0) {
+      await apiFetch('/payments', {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({
+          patient_id:     pendingAppt.patient_id,
+          appointment_id: pendingAppt.id,
+          amount,
+          method:         paymentMethod,
+        })
+      })
+    }
+
     const [agendaData, statsData] = await Promise.all([
       apiFetch('/appointments/today', { token: session.access_token }),
       apiFetch('/appointments/stats/today', { token: session.access_token }),
     ])
     setAgenda(agendaData.data ?? [])
     setStats(statsData.data ?? {})
-    setShowNotesModal(false)
-    setPendingAppt(null)
-    setClinicalNotes('')
+    setConfirmLoading(false)
+    setAttendedDone(true)
   }
+
+  // ── Helpers de status ──────────────────────
+  const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string; bg: string }> = {
+    pending:     { label: 'Sin confirmar', dot: 'bg-amber-400',      text: 'text-amber-400',      bg: 'bg-amber-400/10 border-amber-400/20' },
+    confirmed:   { label: 'Confirmado',    dot: 'bg-[#00C4BC]',      text: 'text-[#00C4BC]',      bg: 'bg-[#E6F8F1] border-[#00C4BC]/20' },
+    in_progress: { label: 'En atención',   dot: 'bg-violet-400 animate-pulse', text: 'text-violet-400', bg: 'bg-violet-400/10 border-violet-400/20' },
+    completed:   { label: 'Atendido',      dot: 'bg-app3',           text: 'text-app3',           bg: 'bg-surface2 border-app' },
+    absent:      { label: 'No vino',       dot: 'bg-red-400',        text: 'text-red-400',        bg: 'bg-red-400/10 border-red-400/20' },
+    cancelled:   { label: 'Cancelado',     dot: 'bg-app3',           text: 'text-app3',           bg: 'bg-surface2 border-app' },
+  }
+
+  const currentlyInProgress = agenda.filter(a => a.status === 'in_progress')
+  const restOfAgenda = agenda.filter(a => a.status !== 'in_progress')
 
   return (
     <div className="min-h-screen bg-app text-app">
+      <main className="p-6 max-w-4xl mx-auto">
 
-      <main className="p-6 max-w-6xl mx-auto">
         {/* Greeting */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold">
-            Buenos días, Od. {user?.first_name} 👋
-          </h2>
-          <p className="text-app2 mt-1 capitalize">{today}</p>
+        <div className="mb-5">
+          <h2 className="text-2xl font-bold">Buenos días, Od. {user?.first_name}</h2>
+          <p className="text-app2 mt-0.5 capitalize">{today}</p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Alertas de acción */}
+        {actionAlerts.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-5">
+            {actionAlerts.map(alert => (
+              <div
+                key={alert.key}
+                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-sm font-semibold border
+                  ${alert.urgency === 'alert' ? 'bg-red-500/10 border-red-400/30 text-red-400'
+                    : alert.urgency === 'warn'  ? 'bg-amber-500/10 border-amber-400/30 text-amber-400'
+                    : 'bg-[#E6F8F1] border-[#00C4BC]/30 text-[#00C4BC]'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  alert.urgency === 'alert' ? 'bg-red-400 animate-pulse'
+                  : alert.urgency === 'warn' ? 'bg-amber-400'
+                  : 'bg-[#00C4BC]'}`} />
+                {alert.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── HERO: paciente en atención ─────────────── */}
+        {currentlyInProgress.map(appt => (
+          <div key={appt.id} className="mb-5 bg-surface border-2 border-violet-400/30 rounded-2xl p-5 relative overflow-hidden">
+            <div className="absolute inset-0 bg-violet-400/5 pointer-events-none" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+                <span className="text-xs font-bold text-violet-400 uppercase tracking-wider">En atención ahora</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xl font-bold text-app">{appt.patient_name}</div>
+                  <div className="flex items-center gap-3 mt-1 text-sm text-app2">
+                    {appt.appointment_type && <span>{appt.appointment_type}</span>}
+                    {appt.duration_minutes && (
+                      <span className="flex items-center gap-1">
+                        <Clock size={13} />
+                        {formatDuration(appt.duration_minutes)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    disabled={actionLoading === `${appt.id}:completed`}
+                    onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
+                    className="flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all active:scale-95"
+                  >
+                    <CheckCircle size={15} />
+                    Atendido
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos hoy</div>
-            <div className="text-3xl font-bold text-emerald-400">{stats.total ?? 0}</div>
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Facturado hoy</div>
+            <div className="text-2xl font-bold text-[#00C4BC]">
+              {stats.revenue_today != null ? `$${stats.revenue_today.toLocaleString('es-AR')}` : '$0'}
+            </div>
+            <div className="text-xs text-app3 mt-1">{stats.completed ?? 0} cobrados</div>
           </div>
           <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Atendidos</div>
-            <div className="text-3xl font-bold text-emerald-400">{stats.completed ?? 0}</div>
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ausentismo</div>
+            <div className={`text-2xl font-bold ${(stats.absent_rate ?? 0) >= 20 ? 'text-red-400' : (stats.absent_rate ?? 0) >= 10 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
+              {stats.absent_rate ?? 0}%
+            </div>
+            <div className="text-xs text-app3 mt-1">{stats.absent ?? 0} de {stats.total ?? 0}</div>
           </div>
           <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Pendientes</div>
-            <div className="text-3xl font-bold text-amber-400">{stats.pending ?? 0}</div>
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ticket promedio</div>
+            <div className="text-2xl font-bold text-[#00C4BC]">
+              {stats.avg_ticket ? `$${stats.avg_ticket.toLocaleString('es-AR')}` : '—'}
+            </div>
+            <div className="text-xs text-app3 mt-1">por atendido</div>
           </div>
           <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ausentes</div>
-            <div className="text-3xl font-bold text-red-400">{stats.absent ?? 0}</div>
+            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ocupación</div>
+            <div className={`text-2xl font-bold ${(stats.occupancy_pct ?? 0) >= 80 ? 'text-[#00C4BC]' : (stats.occupancy_pct ?? 0) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+              {stats.occupancy_pct ?? 0}%
+            </div>
+            <div className="text-xs text-app3 mt-1">{stats.total ?? 0} turnos</div>
           </div>
+        </div>
+
+        {/* ── AGENDA ────────────────────────────────── */}
+        <div className="bg-surface border border-app rounded-xl overflow-visible mb-5">
+          <div className="px-5 py-4 border-b border-app flex items-center justify-between">
+            <h3 className="font-semibold">Agenda de hoy</h3>
+            <span className="text-sm text-app3">{agenda.length} turnos</span>
+          </div>
+
+          {agenda.length === 0 ? (
+            <div className="px-5 py-12 text-center text-app3 text-sm">No hay turnos para hoy</div>
+          ) : (
+            <div className="divide-y divide-app">
+              {restOfAgenda.map((appt: any) => {
+                const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
+                const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
+                return (
+                  <div
+                    key={appt.id}
+                    className={`px-5 py-4 flex items-center gap-4 transition-colors ${isDone ? 'opacity-60' : 'hover:bg-surface2/50'}`}
+                  >
+                    {/* Hora */}
+                    <div className="tabular-nums text-sm font-medium text-app2 w-10 flex-shrink-0 leading-tight">
+                      {new Date(appt.starts_at).toLocaleTimeString('es-AR', {
+                        hour: '2-digit', minute: '2-digit', hour12: false,
+                        timeZone: 'America/Argentina/Buenos_Aires'
+                      })}
+                    </div>
+
+                    {/* Info paciente */}
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-semibold truncate ${isDone ? '' : 'text-app'}`}>
+                        {appt.patient_name}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-app3">
+                        {appt.appointment_type && <span className="truncate">{appt.appointment_type}</span>}
+                        {appt.duration_minutes && (
+                          <span className="flex items-center gap-0.5 flex-shrink-0">
+                            <Clock size={11} />
+                            {formatDuration(appt.duration_minutes)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Badge + acciones */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* Badge de estado */}
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.bg} ${cfg.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                        {cfg.label}
+                      </span>
+
+                      {/* Quick actions contextuales */}
+                      {appt.status === 'pending' && (
+                        <>
+                          <button
+                            disabled={!!actionLoading}
+                            onClick={() => markStatus(appt.id, 'confirmed')}
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white disabled:opacity-40 transition-all active:scale-95"
+                          >
+                            <UserCheck size={13} /> Confirmar
+                          </button>
+                          <button
+                            disabled={!!actionLoading}
+                            onClick={() => markStatus(appt.id, 'absent')}
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app2 hover:bg-red-400/10 hover:text-red-400 disabled:opacity-40 transition-all active:scale-95"
+                          >
+                            <XCircle size={13} /> No vino
+                          </button>
+                        </>
+                      )}
+
+                      {appt.status === 'confirmed' && (
+                        <>
+                          <button
+                            disabled={!!actionLoading}
+                            onClick={() => markStatus(appt.id, 'in_progress')}
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white disabled:opacity-40 transition-all active:scale-95"
+                          >
+                            <Play size={13} /> Iniciar
+                          </button>
+                          <button
+                            disabled={!!actionLoading}
+                            onClick={() => markStatus(appt.id, 'absent')}
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app2 hover:bg-red-400/10 hover:text-red-400 disabled:opacity-40 transition-all active:scale-95"
+                          >
+                            <XCircle size={13} /> No vino
+                          </button>
+                        </>
+                      )}
+
+                      {appt.status === 'in_progress' && (
+                        <button
+                          disabled={!!actionLoading}
+                          onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#00C4BC] text-white hover:bg-[#00aaa3] disabled:opacity-40 transition-all active:scale-95"
+                        >
+                          <CheckCircle size={13} /> Atendido
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Pacientes inactivos */}
         {inactive.length > 0 && (
-          <div className="bg-amber-950/20 border border-amber-800/40 rounded-xl overflow-hidden mb-6">
-            <div className="px-6 py-4 border-b border-amber-800/30 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-amber-400">
-                  Pacientes sin turno hace +90 días
-                </h3>
-              </div>
-              <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-1 rounded-full">
-                {inactive.length}
-              </span>
+          <div className="bg-amber-950/20 border border-amber-800/40 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-amber-800/30 flex items-center justify-between">
+              <h3 className="font-semibold text-amber-400 text-sm">Sin turno hace +90 días</h3>
+              <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-1 rounded-full">{inactive.length}</span>
             </div>
             <div className="divide-y divide-amber-800/20">
               {inactive.slice(0, 5).map((p: any) => (
-                <div key={p.id} className="px-6 py-3 flex items-center gap-3 hover:bg-amber-900/10 transition-colors">
+                <div key={p.id} className="px-5 py-3 flex items-center gap-3 hover:bg-amber-900/10 transition-colors">
                   <div className="w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center text-amber-400 text-xs font-bold flex-shrink-0">
                     {p.first_name[0]}{p.last_name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {p.first_name} {p.last_name}
-                    </div>
+                    <div className="font-medium text-sm truncate">{p.first_name} {p.last_name}</div>
                     <div className="text-xs text-app3">
                       {p.last_appointment_at
-                        ? new Date(p.last_appointment_at).toLocaleDateString('es-AR', {
-                          day: 'numeric', month: 'short', year: 'numeric'
-                        })
+                        ? new Date(p.last_appointment_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
                         : 'Sin turnos previos'}
                     </div>
                   </div>
@@ -208,159 +469,132 @@ export default function DashboardPage() {
                     href={`https://wa.me/${p.phone.replace(/\D/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs bg-emerald-900/40 hover:bg-emerald-700/40 active:scale-95 text-emerald-400 px-3 py-1.5 rounded-lg transition-all font-semibold flex-shrink-0"
+                    className="text-xs bg-[#E6F8F1] hover:bg-[#00C4BC] hover:text-white active:scale-95 text-[#00C4BC] px-3 py-1.5 rounded-lg transition-all font-semibold flex-shrink-0"
                   >
                     WhatsApp
                   </a>
                 </div>
               ))}
               {inactive.length > 5 && (
-                <div className="px-6 py-3 text-center text-sm text-app3">
-                  +{inactive.length - 5} pacientes más
-                </div>
+                <div className="px-5 py-3 text-center text-sm text-app3">+{inactive.length - 5} pacientes más</div>
               )}
             </div>
           </div>
         )}
 
-        {/* Agenda del día */}
-        <div className="bg-surface border border-app rounded-xl overflow-visible">
-          <div className="px-6 py-4 border-b border-app flex items-center justify-between">
-            <h3 className="font-semibold">Agenda de hoy</h3>
-            <span className="text-sm text-app3">{agenda.length} turnos</span>
-          </div>
+      </main>
 
-          {agenda.length === 0 ? (
-            <div className="px-6 py-12 text-center text-app3">
-              No hay turnos para hoy
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-800">
-              {agenda.map((appt: any) => (
-                <div key={appt.id} className="px-6 py-4 flex items-center gap-4 hover:bg-surface2/50 transition-colors">
-                  <div className="font-mono text-sm text-app2 w-16 flex-shrink-0">
-                    {new Date(appt.starts_at).toLocaleTimeString('es-AR', {
-                      hour: '2-digit', minute: '2-digit',
-                      timeZone: 'America/Argentina/Buenos_Aires'
-                    })}
-                  </div>
-                  <div
-                    className="w-1 h-10 rounded-full flex-shrink-0"
-                    style={{ background: appt.professional_color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{appt.patient_name}</div>
-                    <div className="text-sm text-app2 truncate">{[appt.appointment_type, appt.professional_name].filter(Boolean).join(' · ')}</div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {appt.status === 'completed' || appt.status === 'absent' || appt.status === 'cancelled' ? (
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${appt.status === 'completed' ? 'bg-emerald-900/40 text-emerald-400' :
-                        appt.status === 'absent' ? 'bg-red-900/40 text-red-400' :
-                          'bg-surface2 text-app3'
-                        }`}>
-                        {appt.status === 'completed' ? 'Atendido' :
-                          appt.status === 'absent' ? 'Ausente' : 'Cancelado'}
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <div className="relative">
-                          <button
-                            onClick={() => setOpenDropdown(openDropdown === appt.id ? null : appt.id)}
-                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all 
-    ${appt.status === 'confirmed' ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-600 dark:text-emerald-400 dark:border-emerald-700 dark:bg-emerald-900/40' :
-                                appt.status === 'in_progress' ? 'bg-purple-500/15 border-purple-400/30 text-purple-600 dark:text-purple-400 dark:border-purple-700 dark:bg-purple-900/40' :
-                                  'bg-amber-500/15 border-amber-400/30 text-amber-600 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-900/40'
-                              }`}>
-                            {appt.status === 'confirmed' ? 'Confirmado' :
-                              appt.status === 'in_progress' ? 'En curso' : 'Pendiente'}
-                            <span className="opacity-60">▾</span>
-                          </button>
+      {/* Modal — Confirmar atención */}
+      {showNotesModal && pendingAppt && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => !confirmLoading && closeNotesModal()}
+        >
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
 
-                          {openDropdown === appt.id && (
-                            <>
-                              {/* Overlay para cerrar al hacer click afuera */}
-                              <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                              <div className="absolute right-0 top-full mt-1 bg-surface border border-app rounded-xl shadow-xl z-20 overflow-hidden min-w-[140px]">
-                                {[
-                                  { value: 'confirmed', label: 'Confirmado', color: 'text-emerald-600 dark:text-emerald-400' },
-                                  { value: 'in_progress', label: 'En curso', color: 'text-purple-600 dark:text-purple-400' },
-                                  { value: 'completed', label: 'Atendido', color: 'text-emerald-600 dark:text-emerald-400' },
-                                  { value: 'absent', label: 'Ausente', color: 'text-red-600 dark:text-red-400' },
-                                  { value: 'cancelled', label: 'Cancelado', color: 'text-gray-500' },
-                                ].map(({ value, label, color }) => (
-                                  <button
-                                    key={value}
-                                    onClick={async () => {
-                                      setOpenDropdown(null)
-                                      if (value === 'completed') {
-                                        setPendingAppt(appt)
-                                        setShowNotesModal(true)
-                                      } else {
-                                        await markStatus(appt.id, value)
-                                      }
-                                    }}
-                                    className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-surface2 transition-colors ${color} ${appt.status === value ? 'bg-surface2' : ''
-                                      }`}
-                                  >
-                                    {label}
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
+            {attendedDone ? (
+              /* ── Paso 2: atendido confirmado ── */
+              <div className="px-6 py-8 text-center">
+                <div className="w-12 h-12 rounded-full bg-[#E6F8F1] flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle size={24} className="text-[#00C4BC]" />
+                </div>
+                <div className="font-bold text-lg text-app mb-1">{pendingAppt.patient_name}</div>
+                <div className="text-app3 text-sm mb-6">Turno registrado correctamente</div>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => router.push('/dashboard/agenda')}
+                    className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2"
+                  >
+                    <CalendarDays size={16} />
+                    Coordinar próximo turno
+                  </button>
+                  <button
+                    onClick={closeNotesModal}
+                    className="w-full bg-surface2 hover:bg-surface3 text-app2 font-semibold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ── Paso 1: notas + cobro ── */
+              <>
+                <div className="px-6 pt-6 pb-4">
+                  <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
+                  <div className="font-bold text-lg">{pendingAppt.patient_name}</div>
+                  <div className="text-app2 text-sm">{pendingAppt.appointment_type}</div>
+                </div>
+
+                <div className="px-6 pb-4 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
+                      Notas de la consulta (opcional)
+                    </label>
+                    <textarea
+                      value={clinicalNotes}
+                      onChange={e => setClinicalNotes(e.target.value)}
+                      rows={3}
+                      placeholder="Procedimiento realizado, observaciones, indicaciones..."
+                      className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC] resize-none"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="bg-surface2 border border-app rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CreditCard size={14} className="text-[#00C4BC]" />
+                      <span className="text-xs font-semibold text-app2 uppercase tracking-wider">Registrar cobro (opcional)</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 text-sm font-medium">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={paymentAmount}
+                          onChange={e => setPaymentAmount(e.target.value)}
+                          placeholder="0"
+                          className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                        />
                       </div>
-                    )}
+                      <select
+                        value={paymentMethod}
+                        onChange={e => setPaymentMethod(e.target.value)}
+                        className="bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                      >
+                        <option value="cash">Efectivo</option>
+                        <option value="debit_card">Débito</option>
+                        <option value="credit_card">Crédito</option>
+                        <option value="bank_transfer">Transferencia</option>
+                        <option value="qr">QR</option>
+                        <option value="insurance">Obra social</option>
+                        <option value="other">Otro</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Modal notas clínicas */}
-        {showNotesModal && pendingAppt && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-            onClick={() => setShowNotesModal(false)}>
-            <div className="bg-surface border border-app rounded-2xl w-full max-w-md p-6"
-              onClick={e => e.stopPropagation()}>
-              <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
-              <div className="mb-4">
-                <div className="font-bold text-lg">{pendingAppt.patient_name}</div>
-                <div className="text-app2 text-sm">{pendingAppt.appointment_type}</div>
-              </div>
-              <div className="mb-4">
-                <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
-                  Notas de la consulta (opcional)
-                </label>
-                <textarea
-                  value={clinicalNotes}
-                  onChange={e => setClinicalNotes(e.target.value)}
-                  rows={4}
-                  placeholder="Procedimiento realizado, observaciones, indicaciones..."
-                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-emerald-400 resize-none"
-                  autoFocus
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowNotesModal(false)}
-                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmAttended}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all"
-                >
-                  Confirmar
-                </button>
-              </div>
-            </div>
+                <div className="px-6 pb-6 flex gap-2">
+                  <button
+                    onClick={closeNotesModal}
+                    disabled={confirmLoading}
+                    className="flex-1 bg-surface2 hover:bg-surface3 disabled:opacity-50 text-app font-semibold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmAttended}
+                    disabled={confirmLoading}
+                    className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all text-sm"
+                  >
+                    {confirmLoading ? 'Guardando...' : 'Confirmar'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        )}
-
-      </main>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,12 +5,29 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useAppTheme } from '../providers'
 import { useState, useEffect } from 'react'
+import { Plus_Jakarta_Sans } from 'next/font/google'
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Users,
+  CreditCard,
+  UserPlus,
+  Sun,
+  Moon,
+  LogOut,
+} from 'lucide-react'
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+})
 
 const NAV_ITEMS = [
-  { href: '/dashboard', icon: '📊', label: 'Inicio' },
-  { href: '/dashboard/agenda', icon: '📅', label: 'Agenda' },
-  { href: '/dashboard/patients', icon: '👥', label: 'Pacientes' },
-  { href: '/dashboard/payments', icon: '💰', label: 'Finanzas' },
+  { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
+  { href: '/dashboard/agenda', icon: CalendarDays, label: 'Agenda' },
+  { href: '/dashboard/patients', icon: Users, label: 'Pacientes' },
+  { href: '/dashboard/payments', icon: CreditCard, label: 'Finanzas' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -78,117 +95,142 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push('/')
   }
 
-  // Determinar ítem activo
   function isActive(href: string) {
     if (href === '/dashboard') return pathname === '/dashboard'
     return pathname.startsWith(href)
   }
 
   return (
-    <div className="min-h-screen bg-app flex flex-col">
+    <div className={`${jakarta.className} min-h-screen bg-app flex`}>
 
-      {/* TOP BAR — desktop */}
-      <header className="hidden md:flex border-b border-app bg-app px-6 py-0 items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-1">
-          <div className="text-xl font-bold text-app mr-6 py-4">
-            Dental<span className="text-emerald-400">OS</span>
-          </div>
-          {NAV_ITEMS.map(item => (
-            <button
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`flex items-center gap-2 px-4 py-4 text-sm font-medium border-b-2 transition-colors ${isActive(item.href)
-                ? 'border-emerald-400 text-emerald-400'
-                : 'border-transparent text-app2 hover:text-app'
+      {/* ── SIDEBAR — desktop ───────────────────────────────────── */}
+      <aside className="hidden md:flex flex-col w-56 flex-shrink-0 bg-surface border-r border-app sticky top-0 h-screen">
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-app">
+          <span className="text-xl font-extrabold tracking-tight text-app">
+            Dental<span className="text-[#00C4BC]">OS</span>
+          </span>
+        </div>
+
+        {/* Nav items */}
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {NAV_ITEMS.map(item => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+            return (
+              <button
+                key={item.href}
+                onClick={() => router.push(item.href)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  active
+                    ? 'bg-[#E6F8F1] text-[#00C4BC]'
+                    : 'text-app2 hover:bg-surface2 hover:text-app'
                 }`}
-            >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
+              >
+                <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
+                {item.label}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Bottom actions */}
+        <div className="px-3 py-4 border-t border-app space-y-1">
+          <button
+            onClick={handleCopyInviteLink}
+            disabled={copyState === 'loading'}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-surface2 hover:text-app disabled:opacity-50 transition-all"
+          >
+            <UserPlus size={18} strokeWidth={1.8} />
+            {copyState === 'loading' ? 'Generando...' : 'Invitar profesional'}
+          </button>
+
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-surface2 hover:text-app transition-all"
+          >
+            {mounted
+              ? theme === 'dark'
+                ? <Sun size={18} strokeWidth={1.8} />
+                : <Moon size={18} strokeWidth={1.8} />
+              : <Sun size={18} strokeWidth={1.8} />
+            }
+            {mounted ? (theme === 'dark' ? 'Modo claro' : 'Modo oscuro') : 'Modo claro'}
+          </button>
+
+          <button
+            onClick={() => setShowLogoutModal(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-surface2 hover:text-app transition-all"
+          >
+            <LogOut size={18} strokeWidth={1.8} />
+            Cerrar sesión
+          </button>
         </div>
+      </aside>
+
+      {/* ── MOBILE TOP BAR ──────────────────────────────────────── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex border-b border-app bg-surface px-4 py-3 items-center justify-between">
+        <span className="text-lg font-extrabold tracking-tight text-app">
+          Dental<span className="text-[#00C4BC]">OS</span>
+        </span>
         <div className="flex items-center gap-3">
           <button
             onClick={handleCopyInviteLink}
             disabled={copyState === 'loading'}
-            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] disabled:opacity-50 transition-colors"
           >
-            {copyState === 'loading' && 'Generando...'}
-            {copyState === 'copied'  && '¡Link copiado!'}
-            {copyState === 'error'   && 'Error, reintentá'}
-            {copyState === 'idle'    && '🔗 Invitar profesional'}
+            <UserPlus size={14} strokeWidth={1.8} />
+            {copyState === 'loading' ? '...' : copyState === 'copied' ? '¡Copiado!' : ''}
           </button>
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="text-sm text-app3 hover:text-app transition-colors"
+            className="text-app3 hover:text-app transition-colors"
           >
-            {mounted ? (theme === 'dark' ? '☀️' : '🌙') : '☀️'}
+            {mounted
+              ? theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />
+              : <Sun size={18} />
+            }
           </button>
           <button
             onClick={() => setShowLogoutModal(true)}
-            className="text-sm text-app3 hover:text-app transition-colors"
+            className="text-app3 hover:text-app transition-colors"
           >
-            Salir
+            <LogOut size={18} />
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* MOBILE TOP BAR */}
-      <header className="md:hidden flex border-b border-app bg-app px-4 py-3 items-center justify-between sticky top-0 z-40">
-        <div className="text-lg font-bold text-app">
-          Dental<span className="text-emerald-400">OS</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCopyInviteLink}
-            disabled={copyState === 'loading'}
-            className="text-xs font-medium px-2 py-1.5 rounded-lg border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
-          >
-            {copyState === 'copied' ? '¡Copiado!' : copyState === 'error' ? 'Error' : '🔗'}
-          </button>
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="text-sm text-app3 hover:text-app transition-colors"
-          >
-            {mounted ? (theme === 'dark' ? '☀️' : '🌙') : '☀️'}
-          </button>
-          <button
-            onClick={() => setShowLogoutModal(true)}
-            className="text-sm text-app3 hover:text-app transition-colors"
-          >
-            Salir
-          </button>
-        </div>
-      </header>
-
-      {/* CONTENIDO */}
-      <main className="flex-1 pb-20 md:pb-0">
+      {/* ── CONTENIDO ───────────────────────────────────────────── */}
+      <main className="flex-1 min-w-0 pb-20 md:pb-0 pt-14 md:pt-0">
         {children}
       </main>
 
-      {/* BOTTOM NAV — mobile */}
+      {/* ── BOTTOM NAV — mobile ─────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-app z-40">
         <div className="grid grid-cols-4">
-          {NAV_ITEMS.map(item => (
-            <button
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${isActive(item.href)
-                ? 'text-emerald-400'
-                : 'text-app3'
+          {NAV_ITEMS.map(item => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+            return (
+              <button
+                key={item.href}
+                onClick={() => router.push(item.href)}
+                className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                  active ? 'text-[#00C4BC]' : 'text-app3'
                 }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
+              >
+                <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </div>
       </nav>
 
       {showInviteSuccess && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 rounded-full bg-[#E6F8F1] flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl">🔗</span>
             </div>
             <h3 className="font-bold text-lg text-app mb-2">
@@ -198,9 +240,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Compartí este link con el profesional que querés invitar. Una vez que se una a tu clínica, podrá:
             </p>
             <ul className="text-left text-sm text-app3 space-y-2 mb-4">
-              <li className="flex items-center gap-2"><span className="text-emerald-400">📅</span> Ver y gestionar la agenda</li>
-              <li className="flex items-center gap-2"><span className="text-emerald-400">👥</span> Compartir y acceder a los pacientes</li>
-              <li className="flex items-center gap-2"><span className="text-emerald-400">💰</span> Ver las finanzas de la clínica</li>
+              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">📅</span> Ver y gestionar la agenda</li>
+              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">👥</span> Compartir y acceder a los pacientes</li>
+              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">💰</span> Ver las finanzas de la clínica</li>
             </ul>
             {inviteLink && (
               <div className="mb-4">
@@ -217,7 +259,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
             <button
               onClick={() => { setShowInviteSuccess(false); setInviteLink(null); setLinkCopied(false) }}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
+              className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
             >
               Entendido
             </button>
