@@ -493,14 +493,6 @@ export default function PatientDetailPage() {
               </div>
             )}
 
-            {/* Acciones */}
-            <button
-              onClick={() => router.push(`/dashboard/patients/${params.id}/appointment`)}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-app font-semibold py-3 rounded-xl transition-colors"
-            >
-              📅 Nuevo turno
-            </button>
-
             <button
               onClick={openAccountModal}
               className="w-full bg-surface2 hover:bg-surface3 border border-app text-app2 hover:text-app text-sm font-semibold py-2.5 rounded-xl transition-all active:scale-95"

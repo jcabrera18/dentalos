@@ -7,7 +7,8 @@ import { useRouter, useParams } from 'next/navigation'
 
 export default function NewAppointmentPage() {
   const [patient, setPatient] = useState<any>(null)
-  const [professional, setProfessional] = useState<any>(null)
+  const [professionals, setProfessionals] = useState<any[]>([])
+  const [professionalId, setProfessionalId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -40,13 +41,20 @@ export default function NewAppointmentPage() {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
 
-      const [patientData, meData] = await Promise.all([
+      const [patientData, meData, professionalsData] = await Promise.all([
         apiFetch(`/patients/${params.id}`, { token: session.access_token }),
         apiFetch('/auth/me', { token: session.access_token }),
+        apiFetch('/professionals', { token: session.access_token }),
       ])
 
       setPatient(patientData.data)
-      setProfessional(meData.data)
+      const professionalList = professionalsData.data ?? []
+      setProfessionals(professionalList)
+      setProfessionalId(
+        professionalList.find((p: any) => p.id === meData.data.id)?.id ??
+        professionalList[0]?.id ??
+        ''
+      )
       setLoading(false)
     }
     load()
@@ -54,6 +62,10 @@ export default function NewAppointmentPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!professionalId) {
+      setError('Seleccioná un profesional')
+      return
+    }
     setSaving(true)
     setError('')
 
@@ -66,7 +78,7 @@ export default function NewAppointmentPage() {
         token,
         body: JSON.stringify({
           patient_id: params.id,
-          professional_id: professional.id,
+          professional_id: professionalId,
           starts_at: startsAt,
           duration_minutes: Number(form.duration_minutes),
           appointment_type: form.appointment_type || undefined,
@@ -163,6 +175,25 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
               />
             </div>
           </div>
+
+          {professionals.length > 1 && (
+            <div>
+              <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
+                Profesional
+              </label>
+              <select
+                value={professionalId}
+                onChange={e => setProfessionalId(e.target.value)}
+                className="w-full bg-surface border border-app rounded-xl px-4 py-3 text-app focus:outline-none focus:border-emerald-400"
+                required
+              >
+                <option value="" disabled>Seleccionar profesional</option>
+                {professionals.map(p => (
+                  <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Duración */}
           <div>

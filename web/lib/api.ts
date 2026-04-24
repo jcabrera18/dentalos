@@ -1,5 +1,16 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL!
 
+function getFriendlyApiError(message?: string, status?: number) {
+  if (
+    status === 409 &&
+    message === 'Professional has an overlapping appointment at that time'
+  ) {
+    return 'Ese profesional ya tiene un turno en ese horario. Elegí otro horario o seleccioná otro profesional.'
+  }
+
+  return message ?? 'API error'
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit & { token?: string } = {}
@@ -19,7 +30,7 @@ export async function apiFetch(
   const data = text ? JSON.parse(text) : {}
 
   if (!res.ok) {
-    throw new Error(data.error ?? 'API error')
+    throw new Error(getFriendlyApiError(data.error, res.status))
   }
 
   return data

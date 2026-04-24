@@ -57,6 +57,7 @@ export default function AgendaPage() {
   const [appointments, setAppointments] = useState<any[]>([])
   const [blocks, setBlocks]             = useState<any[]>([])
   const [loading, setLoading]           = useState(true)
+  const [refreshing, setRefreshing]     = useState(false)
   const [token, setToken]               = useState('')
   const [userId, setUserId]             = useState('')
   const [linkCopied, setLinkCopied]     = useState(false)
@@ -87,17 +88,33 @@ export default function AgendaPage() {
       setToken(session.access_token)
       const meData = await apiFetch('/auth/me', { token: session.access_token })
       setUserId(meData.data.id)
-      const [_, pData, profData] = await Promise.all([
-        fetchAll(session.access_token),
+      const [apptData, blockData, pData, profData] = await Promise.all([
+        apiFetch(`/appointments?from=${from}&to=${to}`, { token: session.access_token }),
+        apiFetch(`/schedule-blocks?from=${from}&to=${to}`, { token: session.access_token }),
         apiFetch('/patients?limit=100', { token: session.access_token }),
         apiFetch('/professionals', { token: session.access_token }),
       ])
+      setAppointments(apptData.data ?? [])
+      setBlocks(blockData.data ?? [])
       setPatients(pData.data ?? [])
       setProfessionals(profData.data ?? [])
       setLoading(false)
     }
     load()
   }, [weekOffset])
+
+  useEffect(() => {
+    if (!selectedAppt) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSelectedAppt(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedAppt])
 
   async function fetchAll(t: string) {
     setLoading(true)
@@ -110,8 +127,14 @@ export default function AgendaPage() {
     setLoading(false)
   }
 
-  async function fetchAppointments(t: string) {
-    return fetchAll(t)
+  async function handleRefresh() {
+    if (!token || refreshing) return
+    setRefreshing(true)
+    try {
+      await fetchAll(token)
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   async function updateStatus(id: string, status: string) {
@@ -185,6 +208,11 @@ export default function AgendaPage() {
         <div className="mb-5">
           <div className="font-bold text-lg text-app">{selectedAppt.patient_name}</div>
           <div className="text-app2 text-sm">{selectedAppt.appointment_type ?? 'Consulta'}</div>
+          {selectedAppt.professional_name && (
+            <div className="text-app3 text-sm mt-1">
+              Atiende: {selectedAppt.professional_name}
+            </div>
+          )}
           <div className="text-app3 text-sm mt-1">
             {new Date(selectedAppt.starts_at).toLocaleString('es-AR', {
               weekday: 'short', day: 'numeric', month: 'short',
@@ -231,10 +259,6 @@ export default function AgendaPage() {
           <button onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}`)}
             className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
             Ver ficha del paciente →
-          </button>
-          <button onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}/appointment`)}
-            className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 active:scale-95 text-emerald-600 dark:text-emerald-400 py-2.5 rounded-xl text-sm font-medium transition-all">
-            Nuevo turno para este paciente
           </button>
           {selectedAppt.status !== 'cancelled' && selectedAppt.status !== 'completed' && (
             <button onClick={() => { setEditingAppt(selectedAppt); setSelectedAppt(null) }}
@@ -308,6 +332,16 @@ export default function AgendaPage() {
               {weekDates[0].toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
             </span>
             <WeekNav />
+          </div>
+          <div className="mb-2">
+            <button
+              onClick={handleRefresh}
+              disabled={!token || refreshing}
+              className="w-full flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 disabled:opacity-60 border border-app rounded-xl px-3 py-2 text-app text-sm font-medium transition-colors"
+            >
+              <span className={`${refreshing ? 'animate-spin' : ''}`}>↻</span>
+              {refreshing ? 'Actualizando...' : 'Actualizar agenda'}
+            </button>
           </div>
           {professionals.length > 1 && (
             <div className="mb-2">
@@ -432,6 +466,14 @@ export default function AgendaPage() {
                 ))}
               </select>
             )}
+            <button
+              onClick={handleRefresh}
+              disabled={!token || refreshing}
+              className="flex items-center gap-1.5 bg-surface2 hover:bg-surface3 disabled:opacity-60 border border-app px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <span className={`${refreshing ? 'animate-spin' : ''}`}>↻</span>
+              {refreshing ? 'Actualizando...' : 'Actualizar'}
+            </button>
             <button
               onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
               className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
@@ -582,9 +624,17 @@ export default function AgendaPage() {
           date={newApptSlot.date}
           time={newApptSlot.time}
           patients={patients}
+          professionals={professionals}
+          defaultProfessionalId={
+            selectedProfId ||
+            professionals.find(p => p.id === userId)?.id ||
+            professionals[0]?.id ||
+            ''
+          }
           onClose={() => setShowNewAppt(false)}
-          onCreated={async () => {
+          onCreated={async (professionalId) => {
             setShowNewAppt(false)
+            setSelectedProfId(prev => prev && prev !== professionalId ? professionalId : prev)
             await fetchAll(token)
           }}
           onPatientCreated={(patient) => {
@@ -850,17 +900,20 @@ function BlockModal({ token, defaultDate, onClose, onCreated }: {
   )
 }
 
-function NewAppointmentModal({ token, date, time, patients, onClose, onCreated, onPatientCreated }: {
+function NewAppointmentModal({ token, date, time, patients, professionals, defaultProfessionalId, onClose, onCreated, onPatientCreated }: {
   token: string
   date: string
   time: string
   patients: any[]
+  professionals: any[]
+  defaultProfessionalId: string
   onClose: () => void
-  onCreated: () => void
+  onCreated: (professionalId: string) => void
   onPatientCreated: (patient: any) => void
 }) {
   const [search, setSearch]               = useState('')
   const [patientId, setPatientId]         = useState('')
+  const [professionalId, setProfessionalId] = useState(defaultProfessionalId)
   const [newPatientMode, setNewPatientMode] = useState(false)
   const [newPatientName, setNewPatientName] = useState('')
   const [newPatientLastName, setNewPatientLastName] = useState('')
@@ -892,23 +945,23 @@ const DURACIONES = [
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!patientId) { setError('Seleccioná un paciente'); return }
+    if (!professionalId) { setError('Seleccioná un profesional'); return }
     setLoading(true)
     setError('')
     try {
-      const me = await apiFetch('/auth/me', { token })
       const startsAt = `${form.date}T${form.time}:00-03:00`
       await apiFetch('/appointments', {
         method: 'POST', token,
         body: JSON.stringify({
           patient_id:       patientId,
-          professional_id:  me.data.id,
+          professional_id:  professionalId,
           starts_at:        startsAt,
           duration_minutes: Number(form.duration_minutes),
           appointment_type: form.appointment_type || undefined,
           chief_complaint:  form.chief_complaint  || undefined,
         })
       })
-      onCreated()
+      onCreated(professionalId)
     } catch (err: any) {
       setError(err.message)
       setLoading(false)
@@ -1018,6 +1071,22 @@ const DURACIONES = [
                   className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400" />
               </div>
             </div>
+
+            {professionals.length > 1 && (
+              <div>
+                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Profesional</label>
+                <select
+                  value={professionalId}
+                  onChange={e => setProfessionalId(e.target.value)}
+                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-emerald-400"
+                >
+                  <option value="" disabled>Seleccionar profesional</option>
+                  {professionals.map(p => (
+                    <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Duración</label>
