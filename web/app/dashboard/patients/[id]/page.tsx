@@ -1715,14 +1715,19 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
           )}
         </div>
 
-        {prevSnapshot && !saving && (
-          <button
-            onClick={() => handleUndoRef.current()}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface2 border border-gray-600 text-app2 hover:border-gray-500 hover:text-app transition-all active:scale-95 shrink-0"
-          >
-            ↩ Deshacer
-          </button>
-        )}
+        <button
+          onClick={() => !saving && prevSnapshot && handleUndoRef.current()}
+          disabled={saving || !prevSnapshot}
+          className={`text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface2 border transition-all active:scale-95 shrink-0 ${
+            saving
+              ? 'border-gray-700 text-app3 cursor-default'
+              : prevSnapshot
+              ? 'border-gray-600 text-app2 hover:border-gray-500 hover:text-app'
+              : 'invisible'
+          }`}
+        >
+          {saving ? 'Guardando...' : '↩ Deshacer'}
+        </button>
       </div>
 
       {/* Grid cuadrantes */}
@@ -1773,7 +1778,6 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <div className="text-xs text-app2 uppercase tracking-wider">Notas</div>
-                  {saving && <span className="text-[10px] text-app3">Guardando...</span>}
                 </div>
                 <textarea
                   value={getState(selectedTooth).note ?? ''}

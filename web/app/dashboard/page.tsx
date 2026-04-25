@@ -305,37 +305,61 @@ export default function DashboardPage() {
           </div>
         ))}
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Facturado hoy</div>
-            <div className="text-2xl font-bold text-[#00C4BC]">
-              {stats.revenue_today != null ? `$${stats.revenue_today.toLocaleString('es-AR')}` : '$0'}
+        {/* KPIs operativos */}
+        {(() => {
+          const pendingCount   = agenda.filter(a => a.status === 'pending').length
+          const confirmedCount = agenda.filter(a => a.status === 'confirmed').length
+          const byConfirm      = pendingCount + confirmedCount
+
+          const nextLabel = minutesUntilNext === null
+            ? '—'
+            : minutesUntilNext <= 0
+              ? 'Ahora'
+              : minutesUntilNext === 1
+                ? '1 min'
+                : `${minutesUntilNext} min`
+
+          const nextColor = minutesUntilNext === null
+            ? 'text-app3'
+            : minutesUntilNext <= 5
+              ? 'text-red-400'
+              : minutesUntilNext <= 15
+                ? 'text-amber-400'
+                : 'text-[#00C4BC]'
+
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <div className="bg-surface border border-app rounded-xl p-4">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos hoy</div>
+                <div className="text-2xl font-bold text-[#00C4BC]">{stats.total ?? agenda.length}</div>
+                <div className="text-xs text-app3 mt-1">agendados</div>
+              </div>
+              <div className="bg-surface border border-app rounded-xl p-4">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Atendidos</div>
+                <div className="text-2xl font-bold text-[#00C4BC]">{stats.completed ?? 0}</div>
+                <div className="text-xs text-app3 mt-1">
+                  {(stats.total ?? 0) > 0 ? `de ${stats.total}` : 'hoy'}
+                </div>
+              </div>
+              <div className="bg-surface border border-app rounded-xl p-4">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Por confirmar</div>
+                <div className={`text-2xl font-bold ${byConfirm > 0 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
+                  {byConfirm}
+                </div>
+                <div className="text-xs text-app3 mt-1">
+                  {pendingCount > 0 ? `${pendingCount} sin confirmar` : confirmedCount > 0 ? `${confirmedCount} confirmados` : 'al día'}
+                </div>
+              </div>
+              <div className="bg-surface border border-app rounded-xl p-4">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Próximo turno</div>
+                <div className={`text-2xl font-bold ${nextColor}`}>{nextLabel}</div>
+                <div className="text-xs text-app3 mt-1 truncate">
+                  {nextAppt ? nextAppt.patient_name : 'Sin turnos pendientes'}
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-app3 mt-1">{stats.completed ?? 0} cobrados</div>
-          </div>
-          <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ausentismo</div>
-            <div className={`text-2xl font-bold ${(stats.absent_rate ?? 0) >= 20 ? 'text-red-400' : (stats.absent_rate ?? 0) >= 10 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
-              {stats.absent_rate ?? 0}%
-            </div>
-            <div className="text-xs text-app3 mt-1">{stats.absent ?? 0} de {stats.total ?? 0}</div>
-          </div>
-          <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ticket promedio</div>
-            <div className="text-2xl font-bold text-[#00C4BC]">
-              {stats.avg_ticket ? `$${stats.avg_ticket.toLocaleString('es-AR')}` : '—'}
-            </div>
-            <div className="text-xs text-app3 mt-1">por atendido</div>
-          </div>
-          <div className="bg-surface border border-app rounded-xl p-4">
-            <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ocupación</div>
-            <div className={`text-2xl font-bold ${(stats.occupancy_pct ?? 0) >= 80 ? 'text-[#00C4BC]' : (stats.occupancy_pct ?? 0) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-              {stats.occupancy_pct ?? 0}%
-            </div>
-            <div className="text-xs text-app3 mt-1">{stats.total ?? 0} turnos</div>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* ── AGENDA ────────────────────────────────── */}
         <div className="bg-surface border border-app rounded-xl overflow-visible mb-5">
