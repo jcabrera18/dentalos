@@ -23,6 +23,18 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const [annualBilling, setAnnualBilling] = useState(false)
+
+  const PRICES = {
+    starter: { monthly: 38000, annual: Math.round(38000 * 0.8) },
+    growth:  { monthly: 58000, annual: Math.round(58000 * 0.8) },
+    scale:   { monthly: 95000, annual: Math.round(95000 * 0.8) },
+  }
+
+  function price(plan: keyof typeof PRICES) {
+    const p = PRICES[plan]
+    return (annualBilling ? p.annual : p.monthly).toLocaleString('es-AR')
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -43,8 +55,8 @@ export default function HomePage() {
       a: 'No. DentalOS funciona 100% en el navegador y en el celular. Entrás con tu email y listo.',
     },
     {
-      q: '¿Qué pasa después de los 10 días gratis?',
-      a: 'Te avisamos antes de que termine el período. Si querés seguir, elegís el plan pago ($38.000 por usuario por mes). Si no, no te cobramos nada. Sin preguntas.',
+      q: '¿Qué pasa después de los 14 días gratis?',
+      a: 'Te avisamos con anticipación antes de que termine el período. Si querés seguir, elegís el plan que mejor se adapta a tu consultorio. Si no, no te cobramos nada. Sin preguntas.',
     },
     {
       q: '¿Mis datos están seguros?',
@@ -132,7 +144,7 @@ export default function HomePage() {
               href="/register"
               className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-9 py-4 rounded-xl transition-all text-center text-base shadow-lg shadow-[#00C4BC]/20"
             >
-              Empezar 10 días gratis
+              Empezar 14 días gratis
             </Link>
             <a
               href="#como-funciona"
@@ -183,7 +195,7 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { num: '10 días', label: 'Prueba completamente gratis' },
+              { num: '14 días', label: 'Prueba completamente gratis' },
               { num: '5 min', label: 'Para tener todo listo' },
               { num: '1 lugar', label: 'Toda la gestión centralizada' },
               { num: '24/7', label: 'Acceso desde cualquier dispositivo' },
@@ -472,50 +484,202 @@ export default function HomePage() {
 
       {/* ── PRICING ────────────────────────────────────────────── */}
       <section id="pricing" className="bg-[#F3F4F6] py-24">
-        <div className="max-w-lg mx-auto px-6 text-center">
-          <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-4">
-            Precios
-          </span>
-          <h2 className="text-4xl font-extrabold text-[#0F1720] mb-3">Un precio. Todo incluido.</h2>
-          <p className="text-[#6B7280] mb-10">
-            Probá 10 días completos sin pagar nada. Sin tarjeta. Sin sorpresas.
-          </p>
+        <div className="max-w-6xl mx-auto px-6">
 
-          <div className="bg-white border-2 border-[#00C4BC]/25 rounded-3xl p-10 shadow-xl shadow-[#00C4BC]/8">
-            <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-4">Plan todo incluido</p>
-            <div className="mb-2">
-              <span className="text-6xl font-extrabold text-[#0F1720]">$38.000</span>
+          {/* Ancla de valor — bloque clave */}
+          <div className="text-center mb-14">
+            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-5">
+              Precios
+            </span>
+            <h2 className="text-4xl font-extrabold text-[#0F1720] mb-4">El plan que se adapta a tu consultorio</h2>
+            <div className="inline-block bg-[#00C4BC]/10 border border-[#00C4BC]/25 rounded-2xl px-7 py-3 mb-4">
+              <p className="text-[#0F1720] font-bold text-lg">
+                Con solo 1 paciente recuperado por mes, DentalOS se paga solo.
+              </p>
             </div>
-            <p className="text-[#6B7280] text-sm mb-8">
-              ARS por usuario / mes ·{' '}
-              <strong className="text-[#00C4BC]">Primeros 10 días gratis</strong>
+            <p className="text-[#6B7280] text-sm">
+              Probá 14 días completos sin pagar nada. Sin tarjeta. Sin sorpresas.
             </p>
 
-            <div className="bg-[#F3F4F6] rounded-xl p-6 mb-8 text-left space-y-3">
-              {[
-                'Agenda online con recordatorios automáticos',
-                'Historia clínica con odontograma digital',
-                'Control de finanzas y cobros pendientes',
-                'Gestión de pacientes ilimitados',
-                'Multi-usuario con permisos personalizables',
-                'Acceso desde celular, tablet o computadora',
-                'Soporte en español incluido',
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-[#00C4BC] font-bold flex-shrink-0">✓</span>
-                  <span className="text-[#0F1720] text-sm">{item}</span>
+            {/* Toggle mensual / anual */}
+            <div className="flex items-center justify-center gap-3 mt-8">
+              <span className={`text-sm font-semibold transition-colors ${!annualBilling ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
+                Mensual
+              </span>
+              <div
+                role="switch"
+                aria-checked={annualBilling}
+                tabIndex={0}
+                onClick={() => setAnnualBilling(b => !b)}
+                onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setAnnualBilling(b => !b)}
+                className={`relative w-12 h-6 rounded-full cursor-pointer flex-shrink-0 transition-colors duration-200 ${annualBilling ? 'bg-[#00C4BC]' : 'bg-[#D1D5DB]'}`}
+              >
+                <span
+                  className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transition-transform duration-200 ${annualBilling ? 'translate-x-6' : 'translate-x-0'}`}
+                />
+              </div>
+              <span className={`text-sm font-semibold transition-colors ${annualBilling ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
+                Anual
+              </span>
+              <span className="bg-[#00C4BC] text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                20% OFF
+              </span>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 items-start">
+
+            {/* Starter */}
+            <div className="bg-white border border-[#E5E7EB] rounded-3xl p-8 flex flex-col">
+              <div className="mb-6">
+                <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">Starter</p>
+                <p className="text-sm text-[#6B7280]">Ordená tu consultorio desde el día 1</p>
+              </div>
+              <div className="mb-1">
+                <span className="text-5xl font-extrabold text-[#0F1720]">${price('starter')}</span>
+              </div>
+              <p className="text-[#6B7280] text-xs mb-7">
+                ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
+              </p>
+
+              <div className="space-y-3 mb-5 flex-1">
+                {[
+                  'Agenda y turnos online',
+                  'Historia clínica con odontograma',
+                  'Hasta 100 pacientes activos',
+                  '1 profesional',
+                  'Soporte en español',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="text-[#00C4BC] font-bold flex-shrink-0 text-sm mt-px">✓</span>
+                    <span className="text-[#0F1720] text-sm">{item}</span>
+                  </div>
+                ))}
+                <div className="flex items-start gap-3 opacity-40 pt-1">
+                  <span className="font-bold flex-shrink-0 text-sm mt-px">✗</span>
+                  <span className="text-[#0F1720] text-sm line-through">Recordatorios automáticos</span>
                 </div>
-              ))}
+              </div>
+
+              <p className="text-xs text-[#6B7280] italic mb-6">Ideal para dejar el Excel y empezar a ordenar</p>
+
+              <Link
+                href="/register"
+                className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
+              >
+                Probar gratis 14 días
+              </Link>
             </div>
 
-            <Link
-              href="/register"
-              className="block w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-4 rounded-xl transition-all text-center text-base shadow-lg shadow-[#00C4BC]/20 mb-3"
-            >
-              Empezar 10 días gratis
-            </Link>
-            <p className="text-xs text-[#6B7280]">Sin tarjeta · Cancelás cuando querés · Sin preguntas</p>
+            {/* Growth — destacado */}
+            <div className="bg-white border-2 border-[#00C4BC] rounded-3xl p-8 shadow-xl shadow-[#00C4BC]/10 relative flex flex-col">
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                <span className="bg-[#00C4BC] text-white text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wider">
+                  Más elegido
+                </span>
+              </div>
+              <div className="mb-6">
+                <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-1">Growth</p>
+                <p className="text-sm text-[#6B7280]">Dejá de perder pacientes y llená tu agenda</p>
+              </div>
+              <div className="mb-1">
+                <span className="text-5xl font-extrabold text-[#0F1720]">${price('growth')}</span>
+              </div>
+              <p className="text-[#6B7280] text-xs mb-7">
+                ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
+              </p>
+
+              <div className="space-y-3 mb-5 flex-1">
+                {[
+                  'Todo lo del plan Starter',
+                  'Pacientes ilimitados',
+                  'Hasta 3 profesionales',
+                  'Recordatorios automáticos por WhatsApp (500/mes)',
+                  'Confirmación automática de turnos',
+                  'Soporte prioritario',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="text-[#00C4BC] font-bold flex-shrink-0 text-sm mt-px">✓</span>
+                    <span className="text-[#0F1720] text-sm">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-[#E6F8F1] rounded-xl px-4 py-3 mb-6">
+                <p className="text-xs text-[#00C4BC] font-semibold">Reducí ausencias y recuperá pacientes automáticamente. Este es el plan que se paga solo.</p>
+              </div>
+
+              <Link
+                href="/register"
+                className="block w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-3.5 rounded-xl transition-all text-center text-sm shadow-lg shadow-[#00C4BC]/20"
+              >
+                Empezar a automatizar
+              </Link>
+            </div>
+
+            {/* Scale */}
+            <div className="bg-white border border-[#E5E7EB] rounded-3xl p-8 flex flex-col">
+              <div className="mb-6">
+                <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">Scale</p>
+                <p className="text-sm text-[#6B7280]">Gestioná tu clínica como una empresa</p>
+              </div>
+              <div className="mb-1">
+                <span className="text-5xl font-extrabold text-[#0F1720]">${price('scale')}</span>
+              </div>
+              <p className="text-[#6B7280] text-xs mb-7">
+                ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
+              </p>
+
+              <div className="space-y-3 mb-5 flex-1">
+                {[
+                  'Todo lo del plan Growth',
+                  'Hasta 10 profesionales',
+                  '2.000 recordatorios WhatsApp/mes',
+                  'Reportes avanzados (ocupación, cancelaciones, rendimiento)',
+                  'Onboarding personalizado',
+                  'Soporte dedicado',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="text-[#00C4BC] font-bold flex-shrink-0 text-sm mt-px">✓</span>
+                    <span className="text-[#0F1720] text-sm">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-xs text-[#6B7280] italic mb-6">Tomá decisiones con datos, no con intuición</p>
+
+              <Link
+                href="/register"
+                className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
+              >
+                Escalar mi clínica
+              </Link>
+            </div>
+
           </div>
+
+          {/* Packs WhatsApp adicionales */}
+          <div className="mt-10 bg-white border border-[#E5E7EB] rounded-2xl px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div>
+              <p className="text-sm font-bold text-[#0F1720] mb-1">¿Necesitás más recordatorios WhatsApp?</p>
+              <p className="text-xs text-[#6B7280]">Sumá mensajes sin cambiar de plan. Te avisamos antes de llegar al límite.</p>
+            </div>
+            <div className="flex items-center gap-6 flex-shrink-0">
+              <div className="text-center">
+                <p className="text-xs text-[#6B7280] mb-0.5">Pack 100 mensajes</p>
+                <p className="text-lg font-extrabold text-[#0F1720]">$5.000</p>
+              </div>
+              <div className="w-px h-10 bg-[#E5E7EB]" />
+              <div className="text-center">
+                <p className="text-xs text-[#6B7280] mb-0.5">Pack 500 mensajes</p>
+                <div className="flex items-baseline gap-1.5 justify-center">
+                  <p className="text-lg font-extrabold text-[#0F1720]">$18.000</p>
+                  <span className="text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-1.5 py-0.5 rounded-md">mejor precio</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -562,7 +726,7 @@ export default function HomePage() {
             Tu consultorio más ordenado<br />empieza hoy.
           </h2>
           <p className="text-[#6B7280] text-lg mb-8">
-            Probá DentalOS 10 días gratis. Sin tarjeta, sin instalación, sin burocracia.
+            Probá DentalOS 14 días gratis. Sin tarjeta, sin instalación, sin burocracia.
           </p>
           <Link
             href="/register"
