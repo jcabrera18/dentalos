@@ -88,7 +88,7 @@ export default function NewAppointmentPage() {
       })
 
       // Redirigir a la ficha del paciente
-      router.push(`/dashboard/patients/${params.id}`)
+      router.push(`/patients/${params.id}`)
     } catch (err: any) {
       setError(err.message)
       setSaving(false)
@@ -282,7 +282,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
           <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={() => router.push(`/dashboard/patients/${params.id}`)}
+              onClick={() => router.push(`/patients/${params.id}`)}
               className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3.5 rounded-xl transition-colors active:scale-95"
             >
               Cancelar

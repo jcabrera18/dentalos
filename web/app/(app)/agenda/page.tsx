@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
@@ -85,32 +85,46 @@ export default function AgendaPage() {
   const [selectedBlock, setSelectedBlock] = useState<any>(null)
   const router   = useRouter()
   const supabase = createClient()
+  const auxiliaryDataStartedRef = useRef(false)
 
   const weekDates = getWeekDates(weekOffset)
   const from = formatDate(weekDates[0])
   const to   = formatDate(weekDates[6])
 
   useEffect(() => {
-    async function load() {
+    async function loadSession() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
-      const meData = await apiFetch('/auth/me', { token: session.access_token })
-      setUserId(meData.data.id)
-      const [apptData, blockData, pData, profData] = await Promise.all([
-        apiFetch(`/appointments?from=${from}&to=${to}`, { token: session.access_token }),
-        apiFetch(`/schedule-blocks?from=${from}&to=${to}`, { token: session.access_token }),
-        apiFetch('/patients?limit=100', { token: session.access_token }),
-        apiFetch('/professionals', { token: session.access_token }),
-      ])
-      setAppointments(apptData.data ?? [])
-      setBlocks(blockData.data ?? [])
-      setPatients(pData.data ?? [])
-      setProfessionals(profData.data ?? [])
-      setLoading(false)
     }
-    load()
-  }, [weekOffset])
+    void loadSession()
+  }, [router, supabase])
+
+  useEffect(() => {
+    if (!token) return
+
+    setLoading(true)
+    void fetchCalendarData(token).finally(() => {
+      setLoading(false)
+    })
+  }, [from, to, token])
+
+  useEffect(() => {
+    if (!token || auxiliaryDataStartedRef.current) return
+
+    auxiliaryDataStartedRef.current = true
+
+    const timeoutId = window.setTimeout(() => {
+      void loadAuxiliaryData(token)
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [token])
+
+  useEffect(() => {
+    if (!showNewAppt || !token || patients.length > 0) return
+    void loadPatients(token)
+  }, [patients.length, showNewAppt, token])
 
   useEffect(() => {
     if (!selectedAppt) return
@@ -125,22 +139,35 @@ export default function AgendaPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedAppt])
 
-  async function fetchAll(t: string) {
-    setLoading(true)
+  async function fetchCalendarData(t: string) {
     const [apptData, blockData] = await Promise.all([
       apiFetch(`/appointments?from=${from}&to=${to}`, { token: t }),
       apiFetch(`/schedule-blocks?from=${from}&to=${to}`, { token: t }),
     ])
     setAppointments(apptData.data ?? [])
     setBlocks(blockData.data ?? [])
-    setLoading(false)
+  }
+
+  async function loadAuxiliaryData(t: string) {
+    const [meData, profData] = await Promise.all([
+      apiFetch('/auth/me', { token: t }),
+      apiFetch('/professionals', { token: t }),
+    ])
+
+    setUserId(meData.data.id)
+    setProfessionals(profData.data ?? [])
+  }
+
+  async function loadPatients(t: string) {
+    const pData = await apiFetch('/patients?limit=100', { token: t })
+    setPatients(pData.data ?? [])
   }
 
   async function handleRefresh() {
     if (!token || refreshing) return
     setRefreshing(true)
     try {
-      await fetchAll(token)
+      await fetchCalendarData(token)
     } finally {
       setRefreshing(false)
     }
@@ -151,7 +178,7 @@ export default function AgendaPage() {
       method: 'PATCH', token,
       body: JSON.stringify({ status })
     })
-    await fetchAll(token)
+    await fetchCalendarData(token)
     setSelectedAppt(null)
   }
 
@@ -291,7 +318,7 @@ export default function AgendaPage() {
 
           {/* Secondary actions */}
           <div className="px-5 pb-5 pt-0 space-y-2 border-t border-app pt-4">
-            <button onClick={() => router.push(`/dashboard/patients/${selectedAppt.patient_id}`)}
+            <button onClick={() => router.push(`/patients/${selectedAppt.patient_id}`)}
               className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
               Ver ficha del paciente →
             </button>
@@ -563,11 +590,12 @@ export default function AgendaPage() {
                 setLinkCopied(true)
                 setTimeout(() => setLinkCopied(false), 2000)
               }}
+              disabled={!userId}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 linkCopied
                   ? 'bg-[#E6F8F1] border border-[#00C4BC]/50 text-[#00C4BC]'
                   : 'bg-[#E6F8F1] hover:bg-[#00C4BC]/20 border border-[#00C4BC]/30 text-[#00C4BC]'
-              }`}>
+              } disabled:opacity-60 disabled:hover:bg-[#E6F8F1]`}>
               {linkCopied ? '✓ Copiado' : '📋 Link de agenda'}
             </button>
             <WeekNav />
@@ -740,11 +768,12 @@ export default function AgendaPage() {
           setLinkCopied(true)
           setTimeout(() => setLinkCopied(false), 2000)
         }}
+        disabled={!userId}
         className={`md:hidden fixed bottom-24 right-40 w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all z-30 font-medium ${
           linkCopied
             ? 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
             : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
-        }`}
+        } disabled:opacity-60`}
         title="Copiar link de agenda"
       >
         {linkCopied ? '✓' : '📋'}
@@ -767,7 +796,7 @@ export default function AgendaPage() {
           onCreated={async (professionalId) => {
             setShowNewAppt(false)
             setSelectedProfId(prev => prev && prev !== professionalId ? professionalId : prev)
-            await fetchAll(token)
+            await fetchCalendarData(token)
           }}
           onPatientCreated={(patient) => {
             setPatients((prev: any[]) => [patient, ...prev])
@@ -782,7 +811,7 @@ export default function AgendaPage() {
           onClose={() => setShowNewBlock(false)}
           onCreated={async () => {
             setShowNewBlock(false)
-            await fetchAll(token)
+            await fetchCalendarData(token)
           }}
         />
       )}
@@ -849,7 +878,7 @@ export default function AgendaPage() {
                   method: 'PATCH', token,
                   body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, appointment_type: type || undefined })
                 })
-                await fetchAll(token)
+                await fetchCalendarData(token)
                 setEditingAppt(null)
               }}
               className="space-y-3"
@@ -1061,6 +1090,11 @@ function NewAppointmentModal({ token, date, time, patients, professionals, defau
     setForm(f => ({ ...f, [field]: value }))
   }
 
+  useEffect(() => {
+    if (professionalId || !defaultProfessionalId) return
+    setProfessionalId(defaultProfessionalId)
+  }, [defaultProfessionalId, professionalId])
+
   const selectedPatient = patients.find(p => p.id === patientId)
   const filtered = patients.filter(p =>
     `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
@@ -1176,6 +1210,11 @@ const DURACIONES = [
                     placeholder="Buscar por nombre o teléfono..."
                     className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2"
                     autoFocus />
+                  {patients.length === 0 && (
+                    <div className="mb-2 rounded-xl border border-app bg-surface2 px-4 py-3 text-sm text-app3">
+                      Cargando pacientes...
+                    </div>
+                  )}
                   {search && (
                     <div className="bg-surface2 border border-app rounded-xl overflow-hidden mb-2">
                       {filtered.map(p => (
@@ -1225,6 +1264,12 @@ const DURACIONES = [
               </div>
             )}
 
+            {professionals.length === 0 && (
+              <div className="rounded-xl border border-app bg-surface2 px-4 py-3 text-sm text-app3">
+                Cargando profesionales...
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Duración</label>
               <div className="grid grid-cols-4 gap-2">
@@ -1267,7 +1312,7 @@ const DURACIONES = [
                 className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors">
                 Cancelar
               </button>
-              <button type="submit" disabled={loading}
+              <button type="submit" disabled={loading || professionals.length === 0}
                 className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
                 {loading ? 'Agendando...' : 'Confirmar turno'}
               </button>

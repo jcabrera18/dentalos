@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [pendingAppt, setPendingAppt] = useState<any>(null)
   const [clinicalNotes, setClinicalNotes] = useState('')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [paymentTotal, setPaymentTotal] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [confirmLoading, setConfirmLoading] = useState(false)
@@ -183,6 +184,7 @@ export default function DashboardPage() {
     setShowNotesModal(false)
     setPendingAppt(null)
     setClinicalNotes('')
+    setPaymentTotal('')
     setPaymentAmount('')
     setPaymentMethod('cash')
     setAttendedDone(false)
@@ -201,6 +203,7 @@ export default function DashboardPage() {
     })
 
     const amount = parseFloat(paymentAmount)
+    const total = parseFloat(paymentTotal)
     if (!isNaN(amount) && amount > 0) {
       await apiFetch('/payments', {
         method: 'POST',
@@ -210,6 +213,20 @@ export default function DashboardPage() {
           appointment_id: pendingAppt.id,
           amount,
           method:         paymentMethod,
+          ...(!isNaN(total) && total > 0 ? { total_amount: total } : {}),
+        })
+      })
+    } else if (!isNaN(total) && total > 0) {
+      // Registra deuda sin pago inicial
+      await apiFetch('/payments', {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({
+          patient_id:     pendingAppt.patient_id,
+          appointment_id: pendingAppt.id,
+          amount:         0,
+          method:         paymentMethod,
+          total_amount:   total,
         })
       })
     }
@@ -526,7 +543,7 @@ export default function DashboardPage() {
                 <div className="text-app3 text-sm mb-6">Turno registrado correctamente</div>
                 <div className="space-y-2">
                   <button
-                    onClick={() => router.push('/dashboard/agenda')}
+                    onClick={() => router.push('/agenda')}
                     className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2"
                   >
                     <CalendarDays size={16} />
@@ -569,32 +586,66 @@ export default function DashboardPage() {
                       <CreditCard size={14} className="text-[#00C4BC]" />
                       <span className="text-xs font-semibold text-app2 uppercase tracking-wider">Registrar cobro (opcional)</span>
                     </div>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 text-sm font-medium">$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={paymentAmount}
-                          onChange={e => setPaymentAmount(e.target.value)}
-                          placeholder="0"
-                          className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
-                        />
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div>
+                        <label className="block text-xs text-app3 mb-1">Total tratamiento</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 text-sm font-medium">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={paymentTotal}
+                            onChange={e => setPaymentTotal(e.target.value)}
+                            placeholder="0"
+                            className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                          />
+                        </div>
                       </div>
-                      <select
-                        value={paymentMethod}
-                        onChange={e => setPaymentMethod(e.target.value)}
-                        className="bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
-                      >
-                        <option value="cash">Efectivo</option>
-                        <option value="debit_card">Débito</option>
-                        <option value="credit_card">Crédito</option>
-                        <option value="bank_transfer">Transferencia</option>
-                        <option value="qr">QR</option>
-                        <option value="insurance">Obra social</option>
-                        <option value="other">Otro</option>
-                      </select>
+                      <div>
+                        <label className="block text-xs text-app3 mb-1">Entregado</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 text-sm font-medium">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={paymentAmount}
+                            onChange={e => setPaymentAmount(e.target.value)}
+                            placeholder="0"
+                            className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                          />
+                        </div>
+                      </div>
                     </div>
+                    <select
+                      value={paymentMethod}
+                      onChange={e => setPaymentMethod(e.target.value)}
+                      className="w-full bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                    >
+                      <option value="cash">Efectivo</option>
+                      <option value="debit_card">Débito</option>
+                      <option value="credit_card">Crédito</option>
+                      <option value="bank_transfer">Transferencia</option>
+                      <option value="qr">QR</option>
+                      <option value="insurance">Obra social</option>
+                      <option value="other">Otro</option>
+                    </select>
+                    {(() => {
+                      const total = parseFloat(paymentTotal)
+                      const paid = parseFloat(paymentAmount)
+                      const remaining = !isNaN(total) && total > 0 && !isNaN(paid) ? total - paid : 0
+                      if (remaining > 0) return (
+                        <div className="flex items-center gap-2 mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+                          <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">Queda debiendo</span>
+                          <span className="text-sm font-bold text-amber-500">${remaining.toLocaleString('es-AR')}</span>
+                        </div>
+                      )
+                      if (!isNaN(total) && total > 0 && !isNaN(paid) && paid >= total) return (
+                        <div className="mt-2 bg-[#E6F8F1] border border-[#00C4BC]/30 rounded-lg px-3 py-2">
+                          <span className="text-xs text-[#00C4BC] font-semibold">✓ Pago completo</span>
+                        </div>
+                      )
+                      return null
+                    })()}
                   </div>
                 </div>
 

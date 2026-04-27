@@ -28,9 +28,9 @@ const jakarta = Plus_Jakarta_Sans({
 
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
-  { href: '/dashboard/agenda', icon: CalendarDays, label: 'Agenda' },
-  { href: '/dashboard/patients', icon: Users, label: 'Pacientes' },
-  { href: '/dashboard/payments', icon: CreditCard, label: 'Estadísticas' },
+  { href: '/agenda', icon: CalendarDays, label: 'Agenda' },
+  { href: '/patients', icon: Users, label: 'Pacientes' },
+  { href: '/payments', icon: CreditCard, label: 'Estadísticas' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
