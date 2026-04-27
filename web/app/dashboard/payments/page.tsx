@@ -151,6 +151,7 @@ export default function StatisticsPage() {
 
   // Modales
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentSuccess, setPaymentSuccess] = useState<{ patientName: string; amount: number; remaining: number } | null>(null)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [editingPayment, setEditingPayment] = useState<any>(null)
   const [paymentToDelete, setPaymentToDelete] = useState<any>(null)
@@ -1000,12 +1001,54 @@ export default function StatisticsPage() {
           payment={editingPayment}
           preselectedPatientId={preselectedPatientId}
           onClose={() => { setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null) }}
-          onSaved={async () => {
+          onSaved={async (success) => {
             setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null)
             await fetchFinancialData(period, token)
             if (period === 'month') await fetchChartData(token)
+            if (success) setPaymentSuccess(success)
           }}
         />
+      )}
+
+      {paymentSuccess && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setPaymentSuccess(null)}
+        >
+          <div
+            className="bg-surface border border-app rounded-2xl w-full max-w-sm overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 pt-6 pb-5 text-center">
+              <div className="w-14 h-14 rounded-full bg-[#E6F8F1] text-[#00C4BC] text-2xl font-bold flex items-center justify-center mx-auto mb-4">
+                ✓
+              </div>
+              <h2 className="text-lg font-bold text-app">Cobro registrado</h2>
+              <p className="text-sm text-app3 mt-2">
+                {paymentSuccess.patientName} abonó {formatARS(paymentSuccess.amount)}.
+              </p>
+              {paymentSuccess.remaining > 0 && (
+                <div className="mt-4 rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3 text-left">
+                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                    Saldo pendiente
+                  </div>
+                  <div className="text-base font-bold text-amber-500 mt-1">
+                    {formatARS(paymentSuccess.remaining)}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-6 pb-6">
+              <button
+                type="button"
+                onClick={() => setPaymentSuccess(null)}
+                className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-semibold py-2.5 rounded-xl transition-colors"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {paymentToDelete && (
@@ -1123,7 +1166,7 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
   payment?: any | null
   preselectedPatientId?: string | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (success?: { patientName: string; amount: number; remaining: number }) => void
 }) {
   const isEditing = Boolean(payment)
   const [form, setForm] = useState(() => ({
@@ -1206,7 +1249,11 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
         method: isEditing ? 'PATCH' : 'POST', token,
         body: JSON.stringify({ ...(isEditing ? {} : { patient_id: form.patient_id || undefined }), ...payload })
       })
-      onSaved()
+      onSaved(isEditing ? undefined : {
+        patientName: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Paciente',
+        amount: paidAmount,
+        remaining: Math.max(0, remaining),
+      })
     } catch (err: any) {
       setError(err.message)
       setLoading(false)
@@ -1338,7 +1385,7 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
                   <input type="number" value={form.total_amount} onChange={e => set('total_amount', e.target.value)}
                     placeholder="0"
                     className="w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
-                    min="1" />
+                    min="0" />
                 </div>
               </div>
               <div>

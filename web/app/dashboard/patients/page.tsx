@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
+const SEARCH_MIN_LENGTH = 3
+const SEARCH_DEBOUNCE_MS = 300
+
 export default function PatientsPage() {
   const [patients, setPatients]   = useState<any[]>([])
   const [search, setSearch]       = useState('')
@@ -12,6 +15,7 @@ export default function PatientsPage() {
   const [token, setToken]         = useState('')
   const [showModal, setShowModal] = useState(false)
   const [page, setPage]           = useState(1)
+  const [initialized, setInitialized] = useState(false)
   const PATIENTS_PER_PAGE         = 10
   const router   = useRouter()
   const supabase = createClient()
@@ -22,21 +26,51 @@ export default function PatientsPage() {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
       await fetchPatients(session.access_token, '')
+      setInitialized(true)
       setLoading(false)
     }
     load()
   }, [])
 
   async function fetchPatients(t: string, q: string) {
-    const url = q.length >= 2 ? `/patients?q=${encodeURIComponent(q)}` : '/patients'
+    const normalizedQuery = q.trim()
+
+    if (normalizedQuery.length > 0 && normalizedQuery.length < SEARCH_MIN_LENGTH) {
+      return
+    }
+
+    const url = normalizedQuery
+      ? `/patients?q=${encodeURIComponent(normalizedQuery)}`
+      : '/patients'
+
     const data = await apiFetch(url, { token: t })
     setPatients(data.data ?? [])
   }
 
-  async function handleSearch(q: string) {
+  useEffect(() => {
+    if (!initialized || !token) return
+
+    const normalizedSearch = search.trim()
+
+    if (normalizedSearch.length === 0) {
+      void fetchPatients(token, '')
+      return
+    }
+
+    if (normalizedSearch.length < SEARCH_MIN_LENGTH) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchPatients(token, normalizedSearch)
+    }, SEARCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [initialized, search, token])
+
+  function handleSearch(q: string) {
     setSearch(q)
     setPage(1)
-    if (token) await fetchPatients(token, q)
   }
 
   if (loading) {

@@ -1049,6 +1049,7 @@ function NewAppointmentModal({ token, date, time, patients, professionals, defau
   const [newPatientMode, setNewPatientMode] = useState(false)
   const [newPatientName, setNewPatientName] = useState('')
   const [newPatientLastName, setNewPatientLastName] = useState('')
+  const [newPatientPhone, setNewPatientPhone] = useState('')
   const [creatingPatient, setCreatingPatient] = useState(false)
   const [form, setForm] = useState({
     date, time, duration_minutes: '45', appointment_type: '', chief_complaint: ''
@@ -1101,7 +1102,7 @@ const DURACIONES = [
   }
 
   async function handleCreatePatient() {
-    if (!newPatientName) return
+    if (!newPatientName || !newPatientPhone.trim()) return
     setCreatingPatient(true)
     try {
       const data = await apiFetch('/patients', {
@@ -1109,7 +1110,7 @@ const DURACIONES = [
         body: JSON.stringify({
           first_name: newPatientName,
           last_name:  newPatientLastName || '.',
-          phone:      'Sin teléfono',
+          phone:      newPatientPhone.trim(),
         })
       })
       onPatientCreated(data.data)
@@ -1117,6 +1118,7 @@ const DURACIONES = [
       setNewPatientMode(false)
       setNewPatientName('')
       setNewPatientLastName('')
+      setNewPatientPhone('')
     } catch (err: any) {
       console.error(err)
     } finally {
@@ -1153,13 +1155,16 @@ const DURACIONES = [
                       placeholder="Apellido"
                       className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                   </div>
+                  <input type="tel" value={newPatientPhone} onChange={e => setNewPatientPhone(e.target.value)}
+                    placeholder="Teléfono"
+                    className="w-full bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2" />
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setNewPatientMode(false)}
+                    <button type="button" onClick={() => { setNewPatientMode(false); setNewPatientPhone('') }}
                       className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors">
                       Cancelar
                     </button>
                     <button type="button" onClick={handleCreatePatient}
-                      disabled={!newPatientName || creatingPatient}
+                      disabled={!newPatientName || !newPatientPhone.trim() || creatingPatient}
                       className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
                       {creatingPatient ? 'Creando...' : 'Crear y usar'}
                     </button>
