@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
 import { useAppTheme } from '../providers'
 import { useState, useEffect } from 'react'
@@ -92,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     setMounted(true)
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       // Solo redirigir si la sesión realmente terminó (no durante hidratación)
       if (event === 'SIGNED_OUT' && !session) {
         setTimeout(() => router.push('/'), 100)
