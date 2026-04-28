@@ -91,12 +91,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setMounted(true)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        router.push('/')
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Solo redirigir si la sesión realmente terminó (no durante hidratación)
+      if (event === 'SIGNED_OUT' && !session) {
+        setTimeout(() => router.push('/'), 100)
       }
     })
-    return () => subscription.unsubscribe()
+
+    // Refrescar token cuando el usuario vuelve de suspensión/background
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getUser()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   async function handleCopyInviteLink() {

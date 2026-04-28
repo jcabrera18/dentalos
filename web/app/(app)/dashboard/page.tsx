@@ -27,14 +27,19 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      // Verificar sesión
+      // Verificar sesión con fallback a refresh para evitar falsos logouts
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      let activeSession = session
+      if (!activeSession) {
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+        activeSession = refreshed
+      }
+      if (!activeSession) {
         router.push('/')
         return
       }
 
-      const token = session.access_token
+      const token = activeSession.access_token
 
       // Cargar perfil + agenda + stats en paralelo
       const [meData, agendaData, statsData, inactiveData] = await Promise.all([

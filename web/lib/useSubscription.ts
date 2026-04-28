@@ -80,14 +80,20 @@ export function useSubscription(): UseSubscriptionResult {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
 
-      if (!session) {
+      let activeSession = session
+      if (!activeSession) {
+        const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+        activeSession = refreshed
+      }
+
+      if (!activeSession) {
         setError('No session')
         setLoading(false)
         return
       }
 
       const res = await apiFetch('/subscription/status', {
-        token: session.access_token,
+        token: activeSession.access_token,
       })
 
       // Ignore stale responses if refetch was called again
