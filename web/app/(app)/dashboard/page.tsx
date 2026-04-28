@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal } from 'lucide-react'
+import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText } from 'lucide-react'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
@@ -309,6 +309,13 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => router.push(`/patients/${appt.patient_id}`)}
+                    className="flex items-center gap-1.5 bg-surface2 hover:bg-surface3 text-app2 text-sm font-semibold px-3 py-2 rounded-xl transition-all active:scale-95"
+                  >
+                    <FileText size={15} />
+                    Ver ficha
+                  </button>
                   <button
                     disabled={actionLoading === `${appt.id}:completed`}
                     onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
