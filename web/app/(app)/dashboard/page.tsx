@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays } from 'lucide-react'
+import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal } from 'lucide-react'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [attendedDone, setAttendedDone] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -255,7 +256,7 @@ export default function DashboardPage() {
   const restOfAgenda = agenda.filter(a => a.status !== 'in_progress')
 
   return (
-    <div className="min-h-screen bg-app text-app">
+    <div className="min-h-screen bg-app text-app" onClick={() => openDropdown && setOpenDropdown(null)}>
       <main className="p-6 max-w-4xl mx-auto">
 
         {/* Greeting */}
@@ -429,9 +430,71 @@ export default function DashboardPage() {
                         {cfg.label}
                       </span>
 
-                      {/* Quick actions contextuales */}
+                      {/* Mobile: dropdown de acciones */}
+                      {!isDone && (appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'in_progress') && (
+                        <div className="relative sm:hidden">
+                          <button
+                            disabled={!!actionLoading}
+                            onClick={() => setOpenDropdown(openDropdown === appt.id ? null : appt.id)}
+                            className="p-1.5 rounded-lg bg-surface2 text-app2 hover:bg-surface3 disabled:opacity-40 transition-colors"
+                          >
+                            <MoreHorizontal size={15} />
+                          </button>
+                          {openDropdown === appt.id && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-app rounded-xl shadow-lg overflow-hidden min-w-[140px]">
+                              {appt.status === 'pending' && (
+                                <>
+                                  <button
+                                    disabled={!!actionLoading}
+                                    onClick={() => { markStatus(appt.id, 'confirmed'); setOpenDropdown(null) }}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[#00C4BC] hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                  >
+                                    <UserCheck size={14} /> Confirmar
+                                  </button>
+                                  <button
+                                    disabled={!!actionLoading}
+                                    onClick={() => { markStatus(appt.id, 'absent'); setOpenDropdown(null) }}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                  >
+                                    <XCircle size={14} /> No vino
+                                  </button>
+                                </>
+                              )}
+                              {appt.status === 'confirmed' && (
+                                <>
+                                  <button
+                                    disabled={!!actionLoading}
+                                    onClick={() => { markStatus(appt.id, 'in_progress'); setOpenDropdown(null) }}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-violet-400 hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                  >
+                                    <Play size={14} /> Iniciar
+                                  </button>
+                                  <button
+                                    disabled={!!actionLoading}
+                                    onClick={() => { markStatus(appt.id, 'absent'); setOpenDropdown(null) }}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                  >
+                                    <XCircle size={14} /> No vino
+                                  </button>
+                                </>
+                              )}
+                              {appt.status === 'in_progress' && (
+                                <button
+                                  disabled={!!actionLoading}
+                                  onClick={() => { setPendingAppt(appt); setShowNotesModal(true); setOpenDropdown(null) }}
+                                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[#00C4BC] hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                >
+                                  <CheckCircle size={14} /> Atendido
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Desktop: botones directos */}
                       {appt.status === 'pending' && (
-                        <>
+                        <div className="hidden sm:flex items-center gap-2">
                           <button
                             disabled={!!actionLoading}
                             onClick={() => markStatus(appt.id, 'confirmed')}
@@ -446,11 +509,11 @@ export default function DashboardPage() {
                           >
                             <XCircle size={13} /> No vino
                           </button>
-                        </>
+                        </div>
                       )}
 
                       {appt.status === 'confirmed' && (
-                        <>
+                        <div className="hidden sm:flex items-center gap-2">
                           <button
                             disabled={!!actionLoading}
                             onClick={() => markStatus(appt.id, 'in_progress')}
@@ -465,14 +528,14 @@ export default function DashboardPage() {
                           >
                             <XCircle size={13} /> No vino
                           </button>
-                        </>
+                        </div>
                       )}
 
                       {appt.status === 'in_progress' && (
                         <button
                           disabled={!!actionLoading}
                           onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#00C4BC] text-white hover:bg-[#00aaa3] disabled:opacity-40 transition-all active:scale-95"
+                          className="hidden sm:flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#00C4BC] text-white hover:bg-[#00aaa3] disabled:opacity-40 transition-all active:scale-95"
                         >
                           <CheckCircle size={13} /> Atendido
                         </button>
