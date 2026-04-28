@@ -1503,7 +1503,7 @@ export default function PatientDetailPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Obra social</label>
                     <input value={editForm.insurance_name} onChange={e => setEditForm((f: any) => ({ ...f, insurance_name: e.target.value }))}
@@ -1513,6 +1513,12 @@ export default function PatientDetailPage() {
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Plan</label>
                     <input value={editForm.insurance_plan} onChange={e => setEditForm((f: any) => ({ ...f, insurance_plan: e.target.value }))}
+                      className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Nro afiliado</label>
+                    <input value={editForm.insurance_number} onChange={e => setEditForm((f: any) => ({ ...f, insurance_number: e.target.value }))}
+                      placeholder="12345678"
                       className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                   </div>
                 </div>

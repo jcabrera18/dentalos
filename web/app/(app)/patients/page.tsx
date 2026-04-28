@@ -320,7 +320,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
     first_name: '', last_name: '', phone: '',
     document_number: '', date_of_birth: '',
     gender: '',
-    email: '', insurance_name: '', allergies: '',
+    email: '', insurance_name: '', insurance_plan: '', insurance_number: '', allergies: '',
     current_medications: ''
   })
   const [loading, setLoading] = useState(false)
@@ -432,11 +432,25 @@ function NewPatientModal({ token, onClose, onCreated }: {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Obra social</label>
-              <input value={form.insurance_name} onChange={e => set('insurance_name', e.target.value)}
-                placeholder="OSDE, PAMI, Swiss Medical..."
-                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Obra social</label>
+                <input value={form.insurance_name} onChange={e => set('insurance_name', e.target.value)}
+                  placeholder="OSDE, PAMI..."
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Plan</label>
+                <input value={form.insurance_plan} onChange={e => set('insurance_plan', e.target.value)}
+                  placeholder="410, Bronce..."
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Nro afiliado</label>
+                <input value={form.insurance_number} onChange={e => set('insurance_number', e.target.value)}
+                  placeholder="12345678"
+                  className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
