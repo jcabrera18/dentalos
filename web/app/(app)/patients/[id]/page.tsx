@@ -359,7 +359,7 @@ export default function PatientDetailPage() {
     const paths = fileList.map((f) => `${params.id}/${f.name}`)
     const { data } = await sb.storage.from('patient-files').createSignedUrls(paths, 3600)
     const urls: Record<string, string> = {}
-    data?.forEach((item) => {
+    data?.forEach((item: { path?: string; signedUrl: string }) => {
       const name = item.path?.split('/').pop()
       if (name && item.signedUrl) urls[name] = item.signedUrl
     })
