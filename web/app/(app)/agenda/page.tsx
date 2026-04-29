@@ -92,12 +92,11 @@ export default function AgendaPage() {
   const to   = formatDate(weekDates[6])
 
   useEffect(() => {
-    async function loadSession() {
-      const { data: { session } } = await supabase.auth.getSession()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
-    }
-    void loadSession()
+    })
+    return () => subscription.unsubscribe()
   }, [router, supabase])
 
   useEffect(() => {
@@ -704,7 +703,7 @@ export default function AgendaPage() {
 
                         {/* Hover actions — aparecen debajo del bloque */}
                         {!isDone && blockH >= 32 && (
-                          <div className="hidden group-hover:flex absolute left-0 right-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app rounded-b-lg shadow-xl mt-px">
+                          <div className="hidden group-hover:flex absolute left-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app rounded-b-lg shadow-xl mt-px w-max">
                             {appt.status === 'pending' && (
                               <button
                                 onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'confirmed') }}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
@@ -160,6 +161,11 @@ export default function StatisticsPage() {
   const [patients, setPatients] = useState<any[]>([])
   const [professionals, setProfessionals] = useState<any[]>([])
   const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
+
+  const [masked, setMasked] = useState(false)
+  function maskedAmt(n: number) {
+    return masked ? '••••••' : formatARS(n)
+  }
 
   const router = useRouter()
   const supabase = createClient()
@@ -477,17 +483,26 @@ export default function StatisticsPage() {
           </div>
           <div className={`flex items-center gap-2 transition-all ${subview === 'financieras' ? 'visible' : 'invisible pointer-events-none'}`}>
             <button
-              onClick={() => { setEditingPayment(null); setPreselectedPatientId(null); setShowPaymentModal(true) }}
-              className="flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
+              onClick={() => setMasked(m => !m)}
+              title={masked ? 'Mostrar cifras' : 'Ocultar cifras'}
+              className="flex items-center justify-center w-9 h-9 rounded-lg bg-surface2 hover:bg-surface3 border border-app text-app3 hover:text-app transition-all active:scale-95"
             >
-              + Cobro
+              {masked ? <Eye size={16} /> : <EyeOff size={16} />}
             </button>
-            <button
-              onClick={() => setShowExpenseModal(true)}
-              className="flex items-center gap-1.5 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
-            >
-              + Gasto
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setEditingPayment(null); setPreselectedPatientId(null); setShowPaymentModal(true) }}
+                className="flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] text-white text-sm font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
+              >
+                + Cobro
+              </button>
+              <button
+                onClick={() => setShowExpenseModal(true)}
+                className="flex items-center gap-1.5 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold px-3 py-2 rounded-lg transition-all active:scale-95"
+              >
+                + Gasto
+              </button>
+            </div>
           </div>
         </div>
 
@@ -557,16 +572,16 @@ export default function StatisticsPage() {
                   {/* Ingresos */}
                   <div className="bg-surface border border-app rounded-xl p-5">
                     <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ingresos</div>
-                    <div className="text-2xl font-bold text-[#00C4BC] dark:text-emerald-400">{formatARS(income)}</div>
-                    <DeltaBadge d={deltaIncome} label={prevLabel} positiveIsGood />
+                    <div className="text-2xl font-bold text-[#00C4BC] dark:text-emerald-400">{maskedAmt(income)}</div>
+                    {!masked && <DeltaBadge d={deltaIncome} label={prevLabel} positiveIsGood />}
                     <div className="text-xs text-app3 mt-1">{payments.length} cobros</div>
                   </div>
 
                   {/* Gastos */}
                   <div className="bg-surface border border-app rounded-xl p-5">
                     <div className="text-xs text-app3 uppercase tracking-wider mb-1">Gastos</div>
-                    <div className="text-2xl font-bold text-red-500 dark:text-red-400">{formatARS(expense)}</div>
-                    <DeltaBadge d={deltaExpense} label={prevLabel} positiveIsGood={false} />
+                    <div className="text-2xl font-bold text-red-500 dark:text-red-400">{maskedAmt(expense)}</div>
+                    {!masked && <DeltaBadge d={deltaExpense} label={prevLabel} positiveIsGood={false} />}
                     <div className="text-xs text-app3 mt-1">{expenses.length} registros</div>
                   </div>
 
@@ -574,9 +589,9 @@ export default function StatisticsPage() {
                   <div className="bg-surface border border-app rounded-xl p-5">
                     <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ticket promedio</div>
                     <div className="text-2xl font-bold text-[#00C4BC]">
-                      {avgTicket > 0 ? formatARS(avgTicket) : '—'}
+                      {avgTicket > 0 ? maskedAmt(avgTicket) : '—'}
                     </div>
-                    <DeltaBadge d={deltaAvgTicket} label={prevLabel} positiveIsGood />
+                    {!masked && <DeltaBadge d={deltaAvgTicket} label={prevLabel} positiveIsGood />}
                     <div className="text-xs text-app3 mt-1">por cobro</div>
                   </div>
 
@@ -584,7 +599,7 @@ export default function StatisticsPage() {
                   <div className={`bg-surface border rounded-xl p-5 ${pendingCashflow > 0 ? 'border-amber-500/40' : 'border-app'}`}>
                     <div className="text-xs text-app3 uppercase tracking-wider mb-1">Cobros pendientes</div>
                     <div className={`text-2xl font-bold ${pendingCashflow > 0 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
-                      {pendingCashflow > 0 ? formatARS(pendingCashflow) : '—'}
+                      {pendingCashflow > 0 ? maskedAmt(pendingCashflow) : '—'}
                     </div>
                     <div className="text-xs text-app3 mt-1">
                       {pendingCashflow > 0 ? 'por cobrar' : 'al día'}
@@ -593,7 +608,7 @@ export default function StatisticsPage() {
 
                 </div>
 
-                {income > 0 && (
+                {income > 0 && !masked && (
                   <div className="mt-3 bg-surface border border-app rounded-xl px-5 py-4">
                     <div className="flex justify-between text-xs text-app3 mb-2">
                       <span>Gastos vs ingresos</span>
@@ -626,7 +641,7 @@ export default function StatisticsPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-bold text-emerald-500">{formatARS(chartData.reduce((s, d) => s + d.total, 0))}</div>
+                    <div className="text-lg font-bold text-emerald-500">{maskedAmt(chartData.reduce((s, d) => s + d.total, 0))}</div>
                     <div className="text-xs text-app3">{chartData.filter(d => d.total > 0).length} días con cobros</div>
                   </div>
                 </div>
@@ -636,11 +651,13 @@ export default function StatisticsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                       <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} interval={Math.floor(chartData.length / 6)} />
                       <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} width={36} />
-                      <Tooltip
-                        contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', color: 'var(--text)' }}
-                        formatter={(val: any) => [formatARS(Number(val)), 'Ingresos']}
-                        cursor={{ stroke: 'var(--border)' }}
-                      />
+                      {!masked && (
+                        <Tooltip
+                          contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', color: 'var(--text)' }}
+                          formatter={(val: any) => [formatARS(Number(val)), 'Ingresos']}
+                          cursor={{ stroke: 'var(--border)' }}
+                        />
+                      )}
                       <Line type="monotone" dataKey="total" stroke="#00C4BC" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#00C4BC' }} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -665,7 +682,7 @@ export default function StatisticsPage() {
                       {byMethod.map(m => (
                         <div key={m.method} className="flex justify-between text-sm">
                           <span className="text-app2">{METODOS.find(x => x.value === m.method)?.label ?? m.method}</span>
-                          <span className="font-semibold">{formatARS(m.total)}</span>
+                          <span className="font-semibold">{maskedAmt(m.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -682,7 +699,7 @@ export default function StatisticsPage() {
                       {byCategory.map(c => (
                         <div key={c.category} className="flex justify-between text-sm">
                           <span className="text-app2">{c.category}</span>
-                          <span className="font-semibold">{formatARS(c.total)}</span>
+                          <span className="font-semibold">{maskedAmt(c.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -700,13 +717,15 @@ export default function StatisticsPage() {
                         <Pie data={byProfessional} dataKey="total" nameKey="name" cx="50%" cy="50%" innerRadius={28} outerRadius={48} paddingAngle={2}>
                           {byProfessional.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                         </Pie>
-                        <Tooltip
-                          contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '11px', color: 'var(--text)' }}
-                          formatter={(val: any, _: any, entry: any) => [
-                            `${formatARS(Number(val))} (${income > 0 ? Math.round((Number(val) / income) * 100) : 0}%)`,
-                            entry.name,
-                          ]}
-                        />
+                        {!masked && (
+                          <Tooltip
+                            contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '11px', color: 'var(--text)' }}
+                            formatter={(val: any, _: any, entry: any) => [
+                              `${formatARS(Number(val))} (${income > 0 ? Math.round((Number(val) / income) * 100) : 0}%)`,
+                              entry.name,
+                            ]}
+                          />
+                        )}
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="space-y-1.5 mt-2">
@@ -717,7 +736,7 @@ export default function StatisticsPage() {
                             {p.name}
                           </span>
                           <span className="font-semibold text-app flex-shrink-0">
-                            {formatARS(p.total)} <span className="text-app3 font-normal">({income > 0 ? Math.round((p.total / income) * 100) : 0}%)</span>
+                            {maskedAmt(p.total)} {!masked && <span className="text-app3 font-normal">({income > 0 ? Math.round((p.total / income) * 100) : 0}%)</span>}
                           </span>
                         </div>
                       ))}
@@ -947,7 +966,7 @@ export default function StatisticsPage() {
                         </div>
                         <div className="text-right flex-shrink-0">
                           <div className={`font-bold text-sm ${item._type === 'ingreso' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                            {item._type === 'ingreso' ? '+' : '-'}{formatARS(Number(item.amount))}
+                            {masked ? '••••••' : `${item._type === 'ingreso' ? '+' : '-'}${formatARS(Number(item.amount))}`}
                           </div>
                           <div className="text-xs text-app3">{formatDateAR(item._date)}</div>
                         </div>
