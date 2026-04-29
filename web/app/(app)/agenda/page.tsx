@@ -92,7 +92,7 @@ export default function AgendaPage() {
   const to   = formatDate(weekDates[6])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
     })
