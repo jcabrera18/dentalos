@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import type { AuthChangeEvent } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle } from 'lucide-react'
@@ -93,7 +93,7 @@ export default function AgendaPage() {
   const to   = formatDate(weekDates[6])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
     })
