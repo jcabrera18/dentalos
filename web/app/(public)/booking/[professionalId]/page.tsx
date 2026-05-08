@@ -2,8 +2,35 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
+
+type DayHours = { enabled: boolean; start: string; end: string }
+type WorkingHours = Record<number, DayHours>
+
+/** Filtra slots según el horario laboral del profesional */
+function filterSlotsByWorkingHours(slots: string[], date: string, wh: WorkingHours | null): string[] {
+  if (!wh) return slots
+  const jsDay = new Date(date + 'T12:00:00').getDay() // 0=Dom
+  const dayKey = jsDay === 0 ? 6 : jsDay - 1          // 0=Lun … 6=Dom
+  const day = wh[dayKey]
+  if (!day || !day.enabled) return []
+
+  const [startH, startM] = day.start.split(':').map(Number)
+  const [endH,   endM]   = day.end.split(':').map(Number)
+  const startTotal = startH * 60 + startM
+  const endTotal   = endH   * 60 + endM
+
+  return slots.filter(slot => {
+    const d = new Date(slot)
+    const slotTotal = d.toLocaleString('en-CA', {
+      hour: '2-digit', minute: '2-digit', hour12: false,
+      timeZone: 'America/Argentina/Buenos_Aires',
+    }).split(':').map(Number).reduce((h, m) => h * 60 + m)
+    return slotTotal >= startTotal && slotTotal < endTotal
+  })
+}
 
 const APPOINTMENT_TYPES = [
   'Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia',
@@ -62,8 +89,10 @@ export default function BookingPage() {
   const { professionalId } = useParams<{ professionalId: string }>()
 
   const [professional, setProfessional] = useState<Professional | null>(null)
+  const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const supabase = createClient()
 
   const [step, setStep] = useState<Step>('date')
 
@@ -90,24 +119,34 @@ export default function BookingPage() {
 
   // ── Load professional info ──────────────────────────
   useEffect(() => {
-    fetch(`${API_URL}/public/booking/${professionalId}`)
-      .then(r => r.json())
-      .then(res => {
+    Promise.all([
+      fetch(`${API_URL}/public/booking/${professionalId}`).then(r => r.json()),
+      supabase
+        .from('professionals')
+        .select('schedule_config')
+        .eq('id', professionalId)
+        .single(),
+    ])
+      .then(([res, { data: profRow }]) => {
         if (res.data) setProfessional(res.data)
         else setNotFound(true)
+        if (profRow?.schedule_config?.working_hours) {
+          setWorkingHours(profRow.schedule_config.working_hours)
+        }
       })
       .catch(() => setNotFound(true))
       .finally(() => setPageLoading(false))
   }, [professionalId])
 
   // ── Fetch available slots for a date ───────────────
-  const fetchSlots = useCallback(async (date: string) => {
+  const fetchSlots = useCallback(async (date: string, wh: WorkingHours | null) => {
     setSlotsLoading(true)
     setSlots([])
     try {
       const res = await fetch(`${API_URL}/public/booking/${professionalId}/slots?date=${date}`)
       const json = await res.json()
-      setSlots(json.data ?? [])
+      const raw: string[] = json.data ?? []
+      setSlots(filterSlotsByWorkingHours(raw, date, wh))
     } catch {
       setSlots([])
     } finally {
@@ -138,7 +177,7 @@ export default function BookingPage() {
     if (isDayDisabled(day)) return
     const dateStr = toDateStr(new Date(year, month, day))
     setSelectedDate(dateStr)
-    fetchSlots(dateStr)
+    fetchSlots(dateStr, workingHours)
     setStep('time')
   }
 

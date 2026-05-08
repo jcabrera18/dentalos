@@ -10,6 +10,42 @@ import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle } from 'luc
 const HOURS = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const SLOT_H = 48 // px por hora — alta densidad
+const GRID_START_H = 6  // primera hora visible (06:00)
+const GRID_END_H   = 24 // hora de fin del grid (exclusive)
+
+type WorkingDayHours = { enabled: boolean; start: string; end: string }
+type WorkingHours = Record<number, WorkingDayHours>
+
+/** Convierte una fecha a índice 0=Lun … 6=Dom */
+function weekdayIndex(dateStr: string): number {
+  const jsDay = new Date(dateStr + 'T12:00:00').getDay() // 0=Dom
+  return jsDay === 0 ? 6 : jsDay - 1
+}
+
+/** Bloques (top/height en px) que deben aparecer grises por fuera del horario laboral */
+function nonWorkingBlocks(dateStr: string, wh: WorkingHours | null): { top: number; height: number }[] {
+  if (!wh) return []
+  const idx = weekdayIndex(dateStr)
+  const day = wh[idx]
+  if (!day) return []
+
+  if (!day.enabled) {
+    return [{ top: 0, height: (GRID_END_H - GRID_START_H) * SLOT_H }]
+  }
+
+  const [sh, sm] = day.start.split(':').map(Number)
+  const [eh, em] = day.end.split(':').map(Number)
+  const blocks: { top: number; height: number }[] = []
+
+  const beforeH = (sh - GRID_START_H + sm / 60) * SLOT_H
+  if (beforeH > 0) blocks.push({ top: 0, height: beforeH })
+
+  const afterTop = (eh - GRID_START_H + em / 60) * SLOT_H
+  const afterH = (GRID_END_H - GRID_START_H) * SLOT_H - afterTop
+  if (afterH > 0) blocks.push({ top: afterTop, height: afterH })
+
+  return blocks
+}
 
 function getWeekDates(offset = 0) {
   const now = new Date()
@@ -79,6 +115,7 @@ export default function AgendaPage() {
 
   const [professionals, setProfessionals] = useState<any[]>([])
   const [selectedProfId, setSelectedProfId] = useState('')
+  const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [editingAppt, setEditingAppt]   = useState<any>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showNewBlock, setShowNewBlock] = useState(false)
@@ -150,8 +187,14 @@ export default function AgendaPage() {
       apiFetch('/professionals', { token: t }),
     ])
 
-    setUserId(meData.data.id)
-    setProfessionals(profData.data ?? [])
+    const myId = meData.data.id
+    const profs: any[] = profData.data ?? []
+    setUserId(myId)
+    setProfessionals(profs)
+
+    if (meData.data?.schedule_config?.working_hours) {
+      setWorkingHours(meData.data.schedule_config.working_hours)
+    }
   }
 
 
@@ -402,7 +445,12 @@ export default function AgendaPage() {
             <div className="mb-2">
               <select
                 value={selectedProfId}
-                onChange={e => setSelectedProfId(e.target.value)}
+                onChange={e => {
+                  const id = e.target.value
+                  setSelectedProfId(id)
+                  const prof = professionals.find(p => p.id === id)
+                  setWorkingHours(id ? (prof?.schedule_config?.working_hours ?? null) : null)
+                }}
                 className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
@@ -440,6 +488,18 @@ export default function AgendaPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+          {/* Banner de día no laboral en mobile */}
+          {(() => {
+            const nwBlocks = nonWorkingBlocks(selectedDay, workingHours)
+            const isFullDayOff = nwBlocks.length === 1 && nwBlocks[0].top === 0
+            if (!isFullDayOff) return null
+            return (
+              <div className="mb-3 rounded-xl border border-slate-400/30 bg-slate-400/10 px-4 py-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <span className="text-base">🚫</span>
+                <span>Día no laboral — el profesional no atiende este día.</span>
+              </div>
+            )
+          })()}
           {dayBlocks.length === 0 && dayAppts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="text-4xl mb-3">📅</div>
@@ -553,7 +613,12 @@ export default function AgendaPage() {
             {professionals.length > 1 && (
               <select
                 value={selectedProfId}
-                onChange={e => setSelectedProfId(e.target.value)}
+                onChange={e => {
+                  const id = e.target.value
+                  setSelectedProfId(id)
+                  const prof = professionals.find(p => p.id === id)
+                  setWorkingHours(id ? (prof?.schedule_config?.working_hours ?? null) : null)
+                }}
                 className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
@@ -649,6 +714,21 @@ export default function AgendaPage() {
                   {HOURS.map((_, i) => (
                     <div key={i} className="absolute w-full border-t border-app/20"
                       style={{ top: i * SLOT_H }} />
+                  ))}
+
+                  {/* Horarios no laborales — bloquean clicks */}
+                  {nonWorkingBlocks(dateStr, workingHours).map((block, i) => (
+                    <div
+                      key={`nw-${i}`}
+                      className="absolute left-0 right-0 z-[2] cursor-not-allowed"
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        top: block.top,
+                        height: block.height,
+                        background: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(120,120,120,0.06) 4px, rgba(120,120,120,0.06) 8px)',
+                        backgroundColor: 'rgba(120,120,120,0.07)',
+                      }}
+                    />
                   ))}
 
                   {/* Schedule blocks */}

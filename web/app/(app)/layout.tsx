@@ -18,6 +18,7 @@ import {
   LogOut,
   AlertTriangle,
   Clock,
+  Settings,
 } from 'lucide-react'
 import { useSubscription } from '@/lib/useSubscription'
 
@@ -197,6 +198,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Bottom actions */}
         <div className="px-3 py-4 border-t border-app space-y-1">
+          <button
+            onClick={() => router.push('/settings')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              isActive('/settings') ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app2 hover:bg-surface2 hover:text-app'
+            }`}
+          >
+            <Settings size={18} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
+            Configuración
+          </button>
+
           <button
             onClick={handleCopyInviteLink}
             disabled={copyState === 'loading'}
