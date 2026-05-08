@@ -766,34 +766,34 @@ export default function StatisticsPage() {
 
               // Ingresos vs período anterior
               if (deltaIncome && prevLabel && deltaIncome.pct >= 5) {
-                if (deltaIncome.up) {
-                  insights.push({ icon: '📈', text: `Tus ingresos crecieron ${deltaIncome.pct}% ${prevLabel}`, type: 'good' })
-                } else {
-                  insights.push({ icon: '📉', text: `Tus ingresos bajaron ${deltaIncome.pct}% ${prevLabel} — revisá la agenda`, type: 'bad' })
-                }
+                insights.push({
+                  icon: deltaIncome.up ? '📈' : '📉',
+                  text: `Ingresos ${deltaIncome.up ? '+' : '-'}${deltaIncome.pct}% ${prevLabel}`,
+                  type: deltaIncome.up ? 'good' : 'bad',
+                })
               }
 
               // Ticket promedio vs período anterior
               if (deltaAvgTicket && prevLabel && deltaAvgTicket.pct >= 5) {
-                if (deltaAvgTicket.up) {
-                  insights.push({ icon: '💰', text: `El ticket promedio subió ${deltaAvgTicket.pct}% ${prevLabel}`, type: 'good' })
-                } else {
-                  insights.push({ icon: '💸', text: `El ticket promedio bajó ${deltaAvgTicket.pct}% ${prevLabel}`, type: 'bad' })
-                }
+                insights.push({
+                  icon: deltaAvgTicket.up ? '💰' : '💸',
+                  text: `Ticket promedio ${deltaAvgTicket.up ? '+' : '-'}${deltaAvgTicket.pct}% ${prevLabel}`,
+                  type: deltaAvgTicket.up ? 'good' : 'bad',
+                })
               }
 
-              // Deudores con más de 30 días sin pagar
+              // Deudores antiguos
               const oldDebtors = allDebtorsByPatient.filter((d: any) => daysSince(d.lastPayment) > 30)
               if (oldDebtors.length > 0) {
                 insights.push({
                   icon: '⏳',
-                  text: `${oldDebtors.length} paciente${oldDebtors.length > 1 ? 's' : ''} con saldo pendiente hace más de 30 días — considerá contactarlos`,
+                  text: `${oldDebtors.length} paciente${oldDebtors.length > 1 ? 's' : ''} deben hace +30 días`,
                   type: 'bad',
                 })
               } else if (allDebtorsByPatient.length > 0) {
                 insights.push({
                   icon: '⏳',
-                  text: `Tenés ${allDebtorsByPatient.length} paciente${allDebtorsByPatient.length > 1 ? 's' : ''} con saldo pendiente`,
+                  text: `${allDebtorsByPatient.length} paciente${allDebtorsByPatient.length > 1 ? 's' : ''} con saldo pendiente`,
                   type: 'neutral',
                 })
               }
@@ -804,13 +804,13 @@ export default function StatisticsPage() {
                 const pct = Math.round((top.total / income) * 100)
                 if (pct >= 40) {
                   const label = METODOS.find(x => x.value === top.method)?.label ?? top.method
-                  insights.push({ icon: '💳', text: `${label} representa el ${pct}% de tus cobros este período`, type: 'neutral' })
+                  insights.push({ icon: '💳', text: `${label} representa ${pct}% de cobros`, type: 'neutral' })
                 }
               }
 
               // Mejor día de la semana
               if (payments.length >= 5) {
-                const DIAS = ['Domingos', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábados']
+                const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
                 const byWeekday: Record<number, number> = {}
                 payments.forEach(p => {
                   const dow = new Date(p.paid_at).getDay()
@@ -818,36 +818,36 @@ export default function StatisticsPage() {
                 })
                 const topDay = Object.entries(byWeekday).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
                 if (topDay) {
-                  insights.push({ icon: '📅', text: `Los ${DIAS[Number(topDay[0])]} son tu día más rentable en este período`, type: 'neutral' })
+                  insights.push({ icon: '📅', text: `${DIAS[Number(topDay[0])]} es tu día más rentable`, type: 'neutral' })
                 }
               }
 
               // Ratio egresos/ingresos muy alto
               if (income > 0 && expense > 0 && expense / income > 0.8) {
-                insights.push({ icon: '⚠️', text: `Tus egresos son el ${Math.round((expense / income) * 100)}% de tus ingresos — margen muy ajustado`, type: 'bad' })
+                insights.push({ icon: '⚠️', text: `Egresos al ${Math.round((expense / income) * 100)}% de ingresos`, type: 'bad' })
               }
 
               if (insights.length === 0) return null
 
               return (
                 <div>
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Resumen inteligente</span>
                     <div className="h-px flex-1 bg-[var(--border)]" />
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {insights.map((ins, i) => (
                       <div
                         key={i}
-                        className={`flex items-start gap-3 flex-1 rounded-xl px-4 py-3 border text-sm font-medium ${
+                        className={`flex items-center gap-2 flex-shrink-0 rounded-lg px-3 py-2 border text-xs font-semibold whitespace-nowrap ${
                           ins.type === 'good'
                             ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                             : ins.type === 'bad'
                               ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
-                              : 'bg-surface border-app text-app2'
+                              : 'bg-surface2 border-app text-app2'
                         }`}
                       >
-                        <span className="text-base leading-none mt-0.5 flex-shrink-0">{ins.icon}</span>
+                        <span>{ins.icon}</span>
                         <span>{ins.text}</span>
                       </div>
                     ))}
