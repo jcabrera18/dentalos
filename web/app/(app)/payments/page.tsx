@@ -31,14 +31,14 @@ const CATEGORIAS_GASTO = [
 ]
 
 const PERIOD_OPTIONS = [
-  { value: 'day', label: 'Hoy' },
-  { value: 'week', label: 'Semana' },
-  { value: 'month', label: 'Mes' },
-  { value: 'year', label: 'Año' },
-  { value: 'all', label: 'Histórico' },
+  { value: '7d', label: 'Últimos 7 días' },
+  { value: '30d', label: 'Últimos 30 días' },
+  { value: 'month', label: 'Este mes' },
+  { value: 'year', label: 'Este año' },
+  { value: 'custom', label: 'Personalizado' },
 ] as const
 
-type Period = 'day' | 'week' | 'month' | 'year' | 'all'
+type Period = '7d' | '30d' | 'month' | 'year' | 'custom'
 
 const PIE_COLORS = ['#00C4BC', '#6366f1', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 const BAR_COLORS = ['#00C4BC', '#6366f1', '#3b82f6', '#8b5cf6', '#a78bfa', '#c4b5fd']
@@ -59,17 +59,36 @@ function formatDateAR(iso: string) {
     timeZone: 'America/Argentina/Buenos_Aires',
   })
 }
-function getPrevPeriodRange(period: Period): { from: string; to: string } | null {
-  if (period === 'all') return null
-  if (period === 'day') {
-    const d = new Date()
-    d.setDate(d.getDate() - 1)
-    const s = d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    return { from: s, to: s }
+
+function periodToDateRange(period: Period, customFrom = '', customTo = '') {
+  const to = todayAR()
+  if (period === '7d') {
+    const d = new Date(); d.setDate(d.getDate() - 6)
+    return { from: d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }), to }
   }
-  if (period === 'week') {
+  if (period === '30d') {
+    const d = new Date(); d.setDate(d.getDate() - 29)
+    return { from: d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }), to }
+  }
+  if (period === 'month') return { from: firstOfMonthAR(), to }
+  if (period === 'year') return { from: `${todayAR().slice(0, 4)}-01-01`, to }
+  if (period === 'custom') return { from: customFrom || todayAR(), to: customTo || todayAR() }
+  return { from: firstOfMonthAR(), to }
+}
+
+function getPrevPeriodRange(period: Period): { from: string; to: string } | null {
+  if (period === 'custom') return null
+  if (period === '7d') {
     const end = new Date(); end.setDate(end.getDate() - 7)
     const start = new Date(); start.setDate(start.getDate() - 13)
+    return {
+      from: start.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }),
+      to: end.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }),
+    }
+  }
+  if (period === '30d') {
+    const end = new Date(); end.setDate(end.getDate() - 30)
+    const start = new Date(); start.setDate(start.getDate() - 59)
     return {
       from: start.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }),
       to: end.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }),
@@ -93,29 +112,20 @@ function getPrevPeriodRange(period: Period): { from: string; to: string } | null
 }
 
 const PREV_LABEL: Record<Period, string | null> = {
-  day: 'vs ayer',
-  week: 'vs sem. anterior',
+  '7d': 'vs 7 días ant.',
+  '30d': 'vs 30 días ant.',
   month: 'vs mes anterior',
   year: 'vs año anterior',
-  all: null,
+  custom: null,
 }
 
-function periodToDateRange(period: Period) {
-  const to = todayAR()
-  let from: string
-  if (period === 'day') {
-    from = to
-  } else if (period === 'week') {
-    const d = new Date(); d.setDate(d.getDate() - 6)
-    from = d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-  } else if (period === 'month') {
-    from = firstOfMonthAR()
-  } else if (period === 'year') {
-    from = `${todayAR().slice(0, 4)}-01-01`
-  } else {
-    from = '2025-01-01'
-  }
-  return { from, to }
+function periodChartLabel(p: Period, customFrom: string, customTo: string): string {
+  if (p === '7d') return 'Últimos 7 días'
+  if (p === '30d') return 'Últimos 30 días'
+  if (p === 'month') return new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
+  if (p === 'year') return String(new Date().getFullYear())
+  if (customFrom && customTo) return `${formatDateAR(customFrom)} – ${formatDateAR(customTo)}`
+  return 'Período personalizado'
 }
 
 export default function StatisticsPage() {
@@ -126,13 +136,27 @@ export default function StatisticsPage() {
   // Subvista
   const [subview, setSubview] = useState<'financieras' | 'clinicas'>('financieras')
 
-  // Período y datos financieros
+  // Período del análisis
   const [period, setPeriod] = useState<Period>('month')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+
+  // Datos del período seleccionado (para análisis)
   const [payments, setPayments] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
   const [chartData, setChartData] = useState<{ day: string; total: number }[]>([])
 
-  // Métricas clínicas (últimos 90 días, cargadas una vez — para gráficos)
+  // Período anterior (para comparación)
+  const [prevPayments, setPrevPayments] = useState<any[]>([])
+  const [prevExpenses, setPrevExpenses] = useState<any[]>([])
+
+  // KPIs persistentes (no dependen del filtro temporal)
+  const [allPayments, setAllPayments] = useState<any[]>([])
+  const [allExpenses, setAllExpenses] = useState<any[]>([])
+  const [thisMonthPayments, setThisMonthPayments] = useState<any[]>([])
+  const [thisMonthExpenses, setThisMonthExpenses] = useState<any[]>([])
+
+  // Métricas clínicas (últimos 90 días)
   const [attendedByMonth, setAttendedByMonth] = useState<{ month: string; total: number }[]>([])
   const [topTypes, setTopTypes] = useState<{ type: string; count: number }[]>([])
   const [attendedByProfessional, setAttendedByProfessional] = useState<{ name: string; color: string; count: number }[]>([])
@@ -141,10 +165,6 @@ export default function StatisticsPage() {
   const [clinicalPeriod, setClinicalPeriod] = useState<Period>('month')
   const [clinicalAppts, setClinicalAppts] = useState<any[]>([])
   const [clinicalLoading, setClinicalLoading] = useState(false)
-
-  // Período anterior (para comparación)
-  const [prevPayments, setPrevPayments] = useState<any[]>([])
-  const [prevExpenses, setPrevExpenses] = useState<any[]>([])
 
   // Historial
   const [histFilter, setHistFilter] = useState<'all' | 'ingresos' | 'gastos'>('all')
@@ -180,7 +200,7 @@ export default function StatisticsPage() {
 
       await Promise.all([
         fetchFinancialData('month', t),
-        fetchChartData(t),
+        fetchPersistentData(t),
         fetchPatients(t),
         fetchProfessionals(t),
         fetchClinicalMetrics(t),
@@ -198,10 +218,38 @@ export default function StatisticsPage() {
 
   // ── Fetchers ──
 
-  async function fetchFinancialData(p: Period, t: string) {
+  async function fetchAllPages(path: string, t: string): Promise<any[]> {
+    const results: any[] = []
+    let offset = 0
+    const pageSize = 500
+    while (true) {
+      const sep = path.includes('?') ? '&' : '?'
+      const data = await apiFetch(`${path}${sep}limit=${pageSize}&offset=${offset}`, { token: t })
+      const page: any[] = data.data ?? []
+      results.push(...page)
+      if (page.length < pageSize) break
+      offset += pageSize
+    }
+    return results
+  }
+
+  async function fetchPersistentData(t: string) {
+    const [allP, allE, monthP, monthE] = await Promise.all([
+      fetchAllPages(`/payments?from=2020-01-01&to=${todayAR()}`, t),
+      fetchAllPages(`/expenses?from=2020-01-01&to=${todayAR()}`, t),
+      apiFetch(`/payments?from=${firstOfMonthAR()}&to=${todayAR()}&limit=500`, { token: t }),
+      apiFetch(`/expenses?from=${firstOfMonthAR()}&to=${todayAR()}&limit=500`, { token: t }),
+    ])
+    setAllPayments(allP)
+    setAllExpenses(allE)
+    setThisMonthPayments(monthP.data ?? [])
+    setThisMonthExpenses(monthE.data ?? [])
+  }
+
+  async function fetchFinancialData(p: Period, t: string, cFrom = '', cTo = '') {
     setDataLoading(true)
     try {
-      const { from, to } = periodToDateRange(p)
+      const { from, to } = periodToDateRange(p, cFrom, cTo)
       const prevRange = getPrevPeriodRange(p)
 
       const fetches: Promise<any>[] = [
@@ -214,39 +262,33 @@ export default function StatisticsPage() {
       }
 
       const [pData, eData, prevPData, prevEData] = await Promise.all(fetches)
-      setPayments(pData.data ?? [])
+      const paymentsList: any[] = pData.data ?? []
+      setPayments(paymentsList)
       setExpenses(eData.data ?? [])
       setPrevPayments(prevPData?.data ?? [])
       setPrevExpenses(prevEData?.data ?? [])
       setHistPage(1)
+
+      // Calcular chartData a partir de los pagos ya traídos
+      const byDay: Record<string, number> = {}
+      paymentsList.forEach(pay => {
+        const day = new Date(pay.paid_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+        byDay[day] = (byDay[day] ?? 0) + Number(pay.amount)
+      })
+      const result: { day: string; total: number }[] = []
+      const start = new Date(`${from}T12:00:00-03:00`)
+      const end = new Date(`${to}T12:00:00-03:00`)
+      const cur = new Date(start)
+      while (cur <= end) {
+        const key = cur.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+        const label = cur.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires' })
+        result.push({ day: label, total: byDay[key] ?? 0 })
+        cur.setDate(cur.getDate() + 1)
+      }
+      setChartData(result)
     } finally {
       setDataLoading(false)
     }
-  }
-
-  async function fetchChartData(t: string) {
-    const from = firstOfMonthAR()
-    const to = todayAR()
-    const data = await apiFetch(`/payments?from=${from}&to=${to}&limit=500`, { token: t })
-    const list: any[] = data.data ?? []
-
-    const byDay: Record<string, number> = {}
-    list.forEach(p => {
-      const day = new Date(p.paid_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-      byDay[day] = (byDay[day] ?? 0) + Number(p.amount)
-    })
-
-    const result: { day: string; total: number }[] = []
-    const start = new Date(`${from}T12:00:00-03:00`)
-    const end = new Date(`${to}T12:00:00-03:00`)
-    const cur = new Date(start)
-    while (cur <= end) {
-      const key = cur.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-      const label = cur.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires' })
-      result.push({ day: label, total: byDay[key] ?? 0 })
-      cur.setDate(cur.getDate() + 1)
-    }
-    setChartData(result)
   }
 
   async function fetchPatients(t: string) {
@@ -267,7 +309,6 @@ export default function StatisticsPage() {
     const data = await apiFetch(`/appointments?from=${from}&to=${to}`, { token: t })
     const appts: any[] = data.data ?? []
 
-    // Atendidos por mes
     const monthMap: Record<string, number> = {}
     appts.forEach(a => {
       if (a.status === 'cancelled') return
@@ -278,7 +319,6 @@ export default function StatisticsPage() {
     })
     setAttendedByMonth(Object.entries(monthMap).map(([month, total]) => ({ month, total })))
 
-    // Tipos más frecuentes
     const typeMap: Record<string, number> = {}
     appts.forEach(a => {
       if (a.status === 'cancelled') return
@@ -292,7 +332,6 @@ export default function StatisticsPage() {
         .map(([type, count]) => ({ type, count }))
     )
 
-    // Atendidos por profesional
     const profMap: Record<string, { name: string; color: string; count: number }> = {}
     appts.forEach(a => {
       if (a.status === 'cancelled') return
@@ -305,7 +344,6 @@ export default function StatisticsPage() {
       profMap[id].count++
     })
     setAttendedByProfessional(Object.values(profMap).sort((a, b) => b.count - a.count))
-
   }
 
   async function fetchClinicalPeriodData(p: Period, t: string) {
@@ -321,7 +359,14 @@ export default function StatisticsPage() {
 
   async function handleChangePeriod(p: Period) {
     setPeriod(p)
-    await fetchFinancialData(p, token)
+    if (p !== 'custom') {
+      await fetchFinancialData(p, token)
+    }
+  }
+
+  async function handleApplyCustomPeriod() {
+    if (!customFrom || !customTo) return
+    await fetchFinancialData('custom', token, customFrom, customTo)
   }
 
   async function handleChangeClinicalPeriod(p: Period) {
@@ -335,8 +380,10 @@ export default function StatisticsPage() {
     setDeletePaymentError('')
     try {
       await apiFetch(`/payments/${paymentToDelete.id}`, { method: 'DELETE', token })
-      await fetchFinancialData(period, token)
-      if (period === 'month') await fetchChartData(token)
+      await Promise.all([
+        fetchFinancialData(period, token, customFrom, customTo),
+        fetchPersistentData(token),
+      ])
       setPaymentToDelete(null)
     } catch (err) {
       setDeletePaymentError(err instanceof Error ? err.message : 'No se pudo eliminar el cobro')
@@ -347,21 +394,22 @@ export default function StatisticsPage() {
 
   async function deleteExpense(id: string) {
     await apiFetch(`/expenses/${id}`, { method: 'DELETE', token })
-    await fetchFinancialData(period, token)
+    await Promise.all([
+      fetchFinancialData(period, token, customFrom, customTo),
+      fetchPersistentData(token),
+    ])
   }
 
-  // ── Valores calculados ──
+  // ── KPIs persistentes (no afectados por el filtro temporal) ──
 
-  const income = payments.reduce((s, p) => s + Number(p.amount), 0)
-  const expense = expenses.reduce((s, e) => s + Number(e.amount), 0)
-  const net = income - expense
-  const avgTicket = payments.length > 0 ? Math.round(income / payments.length) : 0
+  const allIncome = allPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const allExpense = allExpenses.reduce((s, e) => s + Number(e.amount), 0)
+  const cajaDispo = allIncome - allExpense
 
-  const prevIncome = prevPayments.reduce((s, p) => s + Number(p.amount), 0)
-  const prevExpense = prevExpenses.reduce((s, e) => s + Number(e.amount), 0)
-  const prevAvgTicket = prevPayments.length > 0 ? Math.round(prevIncome / prevPayments.length) : 0
+  const cobradoEsteMes = thisMonthPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const egresosEsteMes = thisMonthExpenses.reduce((s, e) => s + Number(e.amount), 0)
 
-  const patientNetBalanceMap: Record<string, number> = payments.reduce((acc, p) => {
+  const patientNetBalanceMap: Record<string, number> = allPayments.reduce((acc, p) => {
     const id = p.patient_id
     if (!id) return acc
     const total = Number(p.total_amount) || 0
@@ -370,8 +418,8 @@ export default function StatisticsPage() {
     return acc
   }, {} as Record<string, number>)
 
-  const debtorsByPatient = (Object.values(
-    payments.reduce((acc, p) => {
+  const allDebtorsByPatient = (Object.values(
+    allPayments.reduce((acc, p) => {
       const id = p.patient_id ?? 'unknown'
       if (!id || id === 'unknown') return acc
       const total = Number(p.total_amount) || 0
@@ -387,9 +435,19 @@ export default function StatisticsPage() {
       if (new Date(p.paid_at) > new Date(acc[id].lastPayment)) acc[id].lastPayment = p.paid_at
       return acc
     }, {} as Record<string, any>)
-  ) as any[]).filter((d: any) => d.balance > 0).sort((a, b) => b.balance - a.balance)
+  ) as any[]).filter((d: any) => d.balance > 0).sort((a: any, b: any) => b.balance - a.balance)
 
-  const pendingCashflow = debtorsByPatient.reduce((s: number, d: any) => s + d.balance, 0)
+  const pendingTotal = allDebtorsByPatient.reduce((s: number, d: any) => s + d.balance, 0)
+
+  // ── KPIs del período seleccionado (para el bloque de análisis) ──
+
+  const income = payments.reduce((s, p) => s + Number(p.amount), 0)
+  const expense = expenses.reduce((s, e) => s + Number(e.amount), 0)
+  const avgTicket = payments.length > 0 ? Math.round(income / payments.length) : 0
+
+  const prevIncome = prevPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const prevExpense = prevExpenses.reduce((s, e) => s + Number(e.amount), 0)
+  const prevAvgTicket = prevPayments.length > 0 ? Math.round(prevIncome / prevPayments.length) : 0
 
   function delta(current: number, previous: number): { pct: number; up: boolean } | null {
     if (previous === 0 || !PREV_LABEL[period]) return null
@@ -439,7 +497,7 @@ export default function StatisticsPage() {
   const clinicalAbsenceRate = clinicalActive > 0 ? Math.round((clinicalAbsent / clinicalActive) * 100) : 0
   const clinicalOccupancyRate = clinicalTotal > 0 ? Math.round((clinicalAttended / clinicalTotal) * 100) : 0
 
-  // Historial combinado
+  // Historial combinado del período
   const combined = [
     ...payments.map(p => ({ ...p, _type: 'ingreso' as const, _date: p.paid_at })),
     ...expenses.map(e => ({ ...e, _type: 'gasto' as const, _date: e.paid_at })),
@@ -465,7 +523,7 @@ export default function StatisticsPage() {
             <div className="h-5 bg-surface2 rounded w-36" />
           </div>
           <div className="px-6 pb-3 flex gap-2 animate-pulse">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-8 bg-surface2 rounded-lg w-16" />)}
+            {[...Array(2)].map((_, i) => <div key={i} className="h-8 bg-surface2 rounded-lg w-20" />)}
           </div>
         </div>
         <main className="p-6 max-w-4xl mx-auto animate-pulse space-y-6">
@@ -551,61 +609,268 @@ export default function StatisticsPage() {
           ))}
         </div>
 
-        {/* Fila 3: selector de período */}
-        {(subview === 'financieras' || subview === 'clinicas') && (
+        {/* Fila 3: selector de período solo para Clínicas */}
+        {subview === 'clinicas' && (
           <div className="px-6 py-2.5 flex items-center gap-2 overflow-x-auto">
             <span className="text-xs text-app3 whitespace-nowrap flex-shrink-0">Período:</span>
-            {PERIOD_OPTIONS.map(opt => {
-              const active = subview === 'financieras' ? period : clinicalPeriod
-              const handler = subview === 'financieras' ? handleChangePeriod : handleChangeClinicalPeriod
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() => handler(opt.value)}
-                  className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${active === opt.value
-                      ? 'bg-[#E6F8F1] text-[#00C4BC]'
-                      : 'bg-surface2 text-app2 hover:text-app'
-                    }`}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
+            {PERIOD_OPTIONS.filter(o => o.value !== 'custom').map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => handleChangeClinicalPeriod(opt.value as Period)}
+                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${clinicalPeriod === opt.value
+                    ? 'bg-[#E6F8F1] text-[#00C4BC]'
+                    : 'bg-surface2 text-app2 hover:text-app'
+                  }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      <main className="p-6 max-w-4xl mx-auto space-y-6">
+      <main className="p-6 max-w-4xl mx-auto space-y-8">
 
         {/* ══════════════ FINANCIERAS ══════════════ */}
         {subview === 'financieras' && <>
 
-          {/* ── BLOQUE 1: Resumen financiero ── */}
-          <section>
+          {/* ── BLOQUE 1: Estado financiero (persistente) ── */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-1 h-5 bg-[#00C4BC] rounded-full flex-shrink-0" />
+              <h2 className="text-sm font-bold text-app uppercase tracking-widest">Resumen financiero actual</h2>
+              <div className="h-px flex-1 bg-[var(--border)]" />
+            </div>
 
-            {dataLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="bg-surface border border-app rounded-xl p-5 animate-pulse space-y-3">
-                    <div className="h-3 bg-surface2 rounded w-20" />
-                    <div className="h-7 bg-surface2 rounded w-24" />
-                  </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+              {/* Caja disponible */}
+              <div className="bg-surface border border-app rounded-xl p-5">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Caja disponible</div>
+                <div className={`text-2xl font-bold ${cajaDispo >= 0 ? 'text-[#00C4BC] dark:text-emerald-400' : 'text-red-500'}`}>
+                  {maskedAmt(cajaDispo)}
+                </div>
+                <div className="text-xs text-app3 mt-1">total cobrado − egresos</div>
+              </div>
+
+              {/* Pendiente por cobrar */}
+              <div
+                className={`bg-surface border rounded-xl p-5 transition-all ${pendingTotal > 0 ? 'border-amber-500/40 cursor-pointer hover:border-amber-500/70 hover:bg-amber-500/5 active:scale-[0.98]' : 'border-app'}`}
+                onClick={() => pendingTotal > 0 && setShowPendingModal(true)}
+              >
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Pendiente por cobrar</div>
+                <div className={`text-2xl font-bold ${pendingTotal > 0 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
+                  {pendingTotal > 0 ? maskedAmt(pendingTotal) : '—'}
+                </div>
+                <div className="text-xs text-app3 mt-1 flex items-center gap-1">
+                  {pendingTotal > 0 ? (
+                    <><span>{allDebtorsByPatient.length} pacientes · ver →</span></>
+                  ) : 'Todos al día'}
+                </div>
+              </div>
+
+              {/* Cobrado este mes */}
+              <div className="bg-surface border border-app rounded-xl p-5">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Cobrado este mes</div>
+                <div className="text-2xl font-bold text-[#00C4BC] dark:text-emerald-400">
+                  {maskedAmt(cobradoEsteMes)}
+                </div>
+                <div className="text-xs text-app3 mt-1">{thisMonthPayments.length} cobros</div>
+              </div>
+
+              {/* Egresos este mes */}
+              <div className="bg-surface border border-app rounded-xl p-5">
+                <div className="text-xs text-app3 uppercase tracking-wider mb-1">Egresos este mes</div>
+                <div className={`text-2xl font-bold ${egresosEsteMes > 0 ? 'text-red-500 dark:text-red-400' : 'text-app3'}`}>
+                  {egresosEsteMes > 0 ? maskedAmt(egresosEsteMes) : '—'}
+                </div>
+                <div className="text-xs text-app3 mt-1">{thisMonthExpenses.length} registros</div>
+              </div>
+
+            </div>
+
+            {/* Barra egresos vs cobrado este mes */}
+            {cobradoEsteMes > 0 && !masked && (
+              <div className="bg-surface border border-app rounded-xl px-5 py-4">
+                <div className="flex justify-between text-xs text-app3 mb-2">
+                  <span>Egresos vs cobrado este mes</span>
+                  <span>{Math.round((egresosEsteMes / cobradoEsteMes) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-surface2 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${egresosEsteMes / cobradoEsteMes > 0.8 ? 'bg-red-500'
+                        : egresosEsteMes / cobradoEsteMes > 0.5 ? 'bg-amber-500'
+                          : 'bg-[#00C4BC]'
+                      }`}
+                    style={{ width: `${Math.min(100, (egresosEsteMes / cobradoEsteMes) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* ── BLOQUE 2: Análisis del consultorio ── */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-1 h-5 bg-[#6366f1] rounded-full flex-shrink-0" />
+              <h2 className="text-sm font-bold text-app uppercase tracking-widest">Análisis del consultorio</h2>
+              <div className="h-px flex-1 bg-[var(--border)]" />
+            </div>
+
+            {/* Selector temporal */}
+            <div className="bg-surface border border-app rounded-xl p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-app3 whitespace-nowrap mr-1">Período:</span>
+                {PERIOD_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleChangePeriod(opt.value)}
+                    className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${period === opt.value
+                      ? 'bg-[#E6F8F1] text-[#00C4BC]'
+                      : 'bg-surface2 text-app2 hover:text-app'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
                 ))}
               </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Ingresos */}
+              {period === 'custom' && (
+                <div className="flex items-center gap-2 flex-wrap mt-3 pt-3 border-t border-app">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={e => setCustomFrom(e.target.value)}
+                    className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-sm text-app focus:outline-none focus:border-[#00C4BC]"
+                  />
+                  <span className="text-app3 text-sm">→</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={e => setCustomTo(e.target.value)}
+                    className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-sm text-app focus:outline-none focus:border-[#00C4BC]"
+                  />
+                  <button
+                    onClick={handleApplyCustomPeriod}
+                    disabled={!customFrom || !customTo}
+                    className="px-4 py-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-all active:scale-95"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Resumen inteligente del período */}
+            {!dataLoading && !masked && (() => {
+              const insights: { icon: string; text: string; type: 'good' | 'bad' | 'neutral' }[] = []
+
+              // Ingresos vs período anterior
+              if (deltaIncome && prevLabel && deltaIncome.pct >= 5) {
+                if (deltaIncome.up) {
+                  insights.push({ icon: '📈', text: `Tus ingresos crecieron ${deltaIncome.pct}% ${prevLabel}`, type: 'good' })
+                } else {
+                  insights.push({ icon: '📉', text: `Tus ingresos bajaron ${deltaIncome.pct}% ${prevLabel} — revisá la agenda`, type: 'bad' })
+                }
+              }
+
+              // Ticket promedio vs período anterior
+              if (deltaAvgTicket && prevLabel && deltaAvgTicket.pct >= 5) {
+                if (deltaAvgTicket.up) {
+                  insights.push({ icon: '💰', text: `El ticket promedio subió ${deltaAvgTicket.pct}% ${prevLabel}`, type: 'good' })
+                } else {
+                  insights.push({ icon: '💸', text: `El ticket promedio bajó ${deltaAvgTicket.pct}% ${prevLabel}`, type: 'bad' })
+                }
+              }
+
+              // Deudores con más de 30 días sin pagar
+              const oldDebtors = allDebtorsByPatient.filter((d: any) => daysSince(d.lastPayment) > 30)
+              if (oldDebtors.length > 0) {
+                insights.push({
+                  icon: '⏳',
+                  text: `${oldDebtors.length} paciente${oldDebtors.length > 1 ? 's' : ''} con saldo pendiente hace más de 30 días — considerá contactarlos`,
+                  type: 'bad',
+                })
+              } else if (allDebtorsByPatient.length > 0) {
+                insights.push({
+                  icon: '⏳',
+                  text: `Tenés ${allDebtorsByPatient.length} paciente${allDebtorsByPatient.length > 1 ? 's' : ''} con saldo pendiente`,
+                  type: 'neutral',
+                })
+              }
+
+              // Método de cobro dominante (≥40%)
+              if (byMethod.length > 0 && income > 0) {
+                const top = byMethod[0]
+                const pct = Math.round((top.total / income) * 100)
+                if (pct >= 40) {
+                  const label = METODOS.find(x => x.value === top.method)?.label ?? top.method
+                  insights.push({ icon: '💳', text: `${label} representa el ${pct}% de tus cobros este período`, type: 'neutral' })
+                }
+              }
+
+              // Mejor día de la semana
+              if (payments.length >= 5) {
+                const DIAS = ['Domingos', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábados']
+                const byWeekday: Record<number, number> = {}
+                payments.forEach(p => {
+                  const dow = new Date(p.paid_at).getDay()
+                  byWeekday[dow] = (byWeekday[dow] ?? 0) + Number(p.amount)
+                })
+                const topDay = Object.entries(byWeekday).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
+                if (topDay) {
+                  insights.push({ icon: '📅', text: `Los ${DIAS[Number(topDay[0])]} son tu día más rentable en este período`, type: 'neutral' })
+                }
+              }
+
+              // Ratio egresos/ingresos muy alto
+              if (income > 0 && expense > 0 && expense / income > 0.8) {
+                insights.push({ icon: '⚠️', text: `Tus egresos son el ${Math.round((expense / income) * 100)}% de tus ingresos — margen muy ajustado`, type: 'bad' })
+              }
+
+              if (insights.length === 0) return null
+
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Resumen inteligente</span>
+                    <div className="h-px flex-1 bg-[var(--border)]" />
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {insights.map((ins, i) => (
+                      <div
+                        key={i}
+                        className={`flex items-start gap-3 flex-1 rounded-xl px-4 py-3 border text-sm font-medium ${
+                          ins.type === 'good'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                            : ins.type === 'bad'
+                              ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                              : 'bg-surface border-app text-app2'
+                        }`}
+                      >
+                        <span className="text-base leading-none mt-0.5 flex-shrink-0">{ins.icon}</span>
+                        <span>{ins.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Métricas del período */}
+            <div className={`transition-opacity duration-150 ${dataLoading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+
+                  {/* Ingresos del período */}
                   <div className="bg-surface border border-app rounded-xl p-5">
-                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ingresos</div>
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ingresos del período</div>
                     <div className="text-2xl font-bold text-[#00C4BC] dark:text-emerald-400">{maskedAmt(income)}</div>
                     {!masked && <DeltaBadge d={deltaIncome} label={prevLabel} positiveIsGood />}
                     <div className="text-xs text-app3 mt-1">{payments.length} cobros</div>
                   </div>
 
-                  {/* Gastos */}
+                  {/* Egresos del período */}
                   <div className="bg-surface border border-app rounded-xl p-5">
-                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Egresos del consultorio</div>
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Egresos del período</div>
                     <div className="text-2xl font-bold text-red-500 dark:text-red-400">{maskedAmt(expense)}</div>
                     {!masked && <DeltaBadge d={deltaExpense} label={prevLabel} positiveIsGood={false} />}
                     <div className="text-xs text-app3 mt-1">{expenses.length} registros</div>
@@ -621,220 +886,236 @@ export default function StatisticsPage() {
                     <div className="text-xs text-app3 mt-1">por cobro</div>
                   </div>
 
-                  {/* Cobros pendientes */}
-                  <div
-                    className={`bg-surface border rounded-xl p-5 transition-all ${pendingCashflow > 0 ? 'border-amber-500/40 cursor-pointer hover:border-amber-500/70 hover:bg-amber-500/5 active:scale-[0.98]' : 'border-app'}`}
-                    onClick={() => pendingCashflow > 0 && setShowPendingModal(true)}
-                  >
-                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Pacientes con saldo pendiente</div>
-                    <div className={`text-2xl font-bold ${pendingCashflow > 0 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
-                      {pendingCashflow > 0 ? maskedAmt(pendingCashflow) : '—'}
-                    </div>
-                    <div className="text-xs text-app3 mt-1 flex items-center gap-1">
-                      {pendingCashflow > 0 ? (
-                        <><span>por cobrar</span><span className="text-amber-400/60">· ver detalle →</span></>
-                      ) : 'al día'}
-                    </div>
-                  </div>
-
                 </div>
 
-                {income > 0 && !masked && (
-                  <div className="mt-3 bg-surface border border-app rounded-xl px-5 py-4">
-                    <div className="flex justify-between text-xs text-app3 mb-2">
-                      <span>Egresos vs ingresos</span>
-                      <span>{Math.round((expense / income) * 100)}%</span>
-                    </div>
-                    <div className="h-2 bg-surface2 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${expense / income > 0.8 ? 'bg-red-500'
-                            : expense / income > 0.5 ? 'bg-amber-500'
-                              : 'bg-[#00C4BC]'
-                          }`}
-                        style={{ width: `${Math.min(100, (expense / income) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          {/* ── INSIGHTS AUTOMÁTICOS ── */}
-          {!dataLoading && !masked && (() => {
-            const insights: { icon: string; text: string; type: 'good' | 'bad' | 'neutral' }[] = []
-
-            if (deltaIncome && prevLabel) {
-              if (!deltaIncome.up && deltaIncome.pct > 0) {
-                insights.push({ icon: '📉', text: `Tus cobros bajaron ${deltaIncome.pct}% ${prevLabel}`, type: 'bad' })
-              } else if (deltaIncome.up && deltaIncome.pct > 0) {
-                insights.push({ icon: '📈', text: `Tus cobros subieron ${deltaIncome.pct}% ${prevLabel}`, type: 'good' })
-              }
-            }
-
-            if (debtorsByPatient.length > 0) {
-              insights.push({
-                icon: '⏳',
-                text: `Tenés ${debtorsByPatient.length} paciente${debtorsByPatient.length > 1 ? 's' : ''} con saldo pendiente`,
-                type: 'neutral',
-              })
-            }
-
-            if (byMethod.length > 0 && income > 0) {
-              const top = byMethod[0]
-              const pct = Math.round((top.total / income) * 100)
-              if (pct >= 30) {
-                const label = METODOS.find(x => x.value === top.method)?.label ?? top.method
-                insights.push({ icon: '💳', text: `${label} ya representa el ${pct}% de tus cobros`, type: 'neutral' })
-              }
-            }
-
-            if (insights.length === 0) return null
-
-            return (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Resumen inteligente</span>
-                  <div className="h-px flex-1 bg-[var(--border)]" />
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {insights.map((ins, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start gap-3 flex-1 rounded-xl px-4 py-3 border text-sm font-medium ${
-                        ins.type === 'good'
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                          : ins.type === 'bad'
-                            ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
-                            : 'bg-surface border-app text-app2'
-                      }`}
-                    >
-                      <span className="text-base leading-none mt-0.5 flex-shrink-0">{ins.icon}</span>
-                      <span>{ins.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )
-          })()}
-
-          {/* ── BLOQUE 2: Evolución del mes (solo period=month) ── */}
-          {period === 'month' && !dataLoading && (
-            <section>
-              <div className="bg-surface border border-app rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold text-app">Evolución del mes</h3>
-                    <div className="text-xs text-app3 mt-0.5">
-                      {new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-emerald-500">{maskedAmt(chartData.reduce((s, d) => s + d.total, 0))}</div>
-                    <div className="text-xs text-app3">{chartData.filter(d => d.total > 0).length} días con cobros</div>
-                  </div>
-                </div>
-                {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={180}>
-                    <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                      <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} interval={Math.floor(chartData.length / 6)} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} width={36} />
-                      {!masked && (
-                        <Tooltip
-                          contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', color: 'var(--text)' }}
-                          formatter={(val: any) => [formatARS(Number(val)), 'Ingresos']}
-                          cursor={{ stroke: 'var(--border)' }}
-                        />
-                      )}
-                      <Line type="monotone" dataKey="total" stroke="#00C4BC" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#00C4BC' }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-[180px] flex items-center justify-center text-app3 text-sm">Sin cobros este mes</div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* ── BLOQUE 3: Desglose ── */}
-          {!dataLoading && (income > 0 || expense > 0) && (
-            <section>
-              <SectionLabel>Desglose</SectionLabel>
-              <div className={`grid gap-4 ${byProfessional.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-
-                {/* Por método */}
-                <div className="bg-surface border border-app rounded-xl p-5">
-                  <div className="text-xs text-app3 uppercase tracking-wider mb-3">Por método de cobro</div>
-                  {byMethod.length > 0 ? (
-                    <div className="space-y-2">
-                      {byMethod.map(m => (
-                        <div key={m.method} className="flex justify-between text-sm">
-                          <span className="text-app2">{METODOS.find(x => x.value === m.method)?.label ?? m.method}</span>
-                          <span className="font-semibold">{maskedAmt(m.total)}</span>
+                {/* Evolución del período */}
+                {chartData.some(d => d.total > 0) && (
+                  <div className="bg-surface border border-app rounded-xl p-5 my-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-app">Evolución</h3>
+                        <div className="text-xs text-app3 mt-0.5">
+                          {periodChartLabel(period, customFrom, customTo)}
                         </div>
-                      ))}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-emerald-500">{maskedAmt(income)}</div>
+                        <div className="text-xs text-app3">{chartData.filter(d => d.total > 0).length} días con cobros</div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-xs text-app3">Sin ingresos</div>
-                  )}
-                </div>
-
-                {/* Por categoría */}
-                <div className="bg-surface border border-app rounded-xl p-5">
-                  <div className="text-xs text-app3 uppercase tracking-wider mb-3">Por categoría de gasto</div>
-                  {byCategory.length > 0 ? (
-                    <div className="space-y-2">
-                      {byCategory.map(c => (
-                        <div key={c.category} className="flex justify-between text-sm">
-                          <span className="text-app2">{c.category}</span>
-                          <span className="font-semibold">{maskedAmt(c.total)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-app3">Sin gastos</div>
-                  )}
-                </div>
-
-                {/* Por profesional (pie, solo si >1) */}
-                {byProfessional.length > 1 && (
-                  <div className="bg-surface border border-app rounded-xl p-5">
-                    <div className="text-xs text-app3 uppercase tracking-wider mb-3">Por profesional</div>
-                    <ResponsiveContainer width="100%" height={110}>
-                      <PieChart>
-                        <Pie data={byProfessional} dataKey="total" nameKey="name" cx="50%" cy="50%" innerRadius={28} outerRadius={48} paddingAngle={2}>
-                          {byProfessional.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                        </Pie>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                        <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} interval={Math.max(0, Math.floor(chartData.length / 6))} />
+                        <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} width={36} />
                         {!masked && (
                           <Tooltip
-                            contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '11px', color: 'var(--text)' }}
-                            formatter={(val: any, _: any, entry: any) => [
-                              `${formatARS(Number(val))} (${income > 0 ? Math.round((Number(val) / income) * 100) : 0}%)`,
-                              entry.name,
-                            ]}
+                            contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', color: 'var(--text)' }}
+                            formatter={(val: any) => [formatARS(Number(val)), 'Ingresos']}
+                            cursor={{ stroke: 'var(--border)' }}
                           />
                         )}
-                      </PieChart>
+                        <Line type="monotone" dataKey="total" stroke="#00C4BC" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#00C4BC' }} />
+                      </LineChart>
                     </ResponsiveContainer>
-                    <div className="space-y-1.5 mt-2">
-                      {byProfessional.map((p, i) => (
-                        <div key={p.name} className="flex items-center justify-between text-xs gap-2">
-                          <span className="flex items-center gap-1.5 text-app2 truncate">
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                            {p.name}
-                          </span>
-                          <span className="font-semibold text-app flex-shrink-0">
-                            {maskedAmt(p.total)} {!masked && <span className="text-app3 font-normal">({income > 0 ? Math.round((p.total / income) * 100) : 0}%)</span>}
-                          </span>
+                  </div>
+                )}
+
+                {/* Desglose del período */}
+                {(income > 0 || expense > 0) && (
+                  <div>
+                    <SectionLabel>Desglose del período</SectionLabel>
+                    <div className={`grid gap-4 ${byProfessional.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+
+                      {/* Por método */}
+                      <div className="bg-surface border border-app rounded-xl p-5">
+                        <div className="text-xs text-app3 uppercase tracking-wider mb-3">Por método de cobro</div>
+                        {byMethod.length > 0 ? (
+                          <div className="space-y-2">
+                            {byMethod.map(m => (
+                              <div key={m.method} className="flex justify-between text-sm">
+                                <span className="text-app2">{METODOS.find(x => x.value === m.method)?.label ?? m.method}</span>
+                                <span className="font-semibold">{maskedAmt(m.total)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-app3">Sin ingresos</div>
+                        )}
+                      </div>
+
+                      {/* Por categoría */}
+                      <div className="bg-surface border border-app rounded-xl p-5">
+                        <div className="text-xs text-app3 uppercase tracking-wider mb-3">Por categoría de gasto</div>
+                        {byCategory.length > 0 ? (
+                          <div className="space-y-2">
+                            {byCategory.map(c => (
+                              <div key={c.category} className="flex justify-between text-sm">
+                                <span className="text-app2">{c.category}</span>
+                                <span className="font-semibold">{maskedAmt(c.total)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-app3">Sin gastos</div>
+                        )}
+                      </div>
+
+                      {/* Por profesional (pie, solo si >1) */}
+                      {byProfessional.length > 1 && (
+                        <div className="bg-surface border border-app rounded-xl p-5">
+                          <div className="text-xs text-app3 uppercase tracking-wider mb-3">Por profesional</div>
+                          <ResponsiveContainer width="100%" height={110}>
+                            <PieChart>
+                              <Pie data={byProfessional} dataKey="total" nameKey="name" cx="50%" cy="50%" innerRadius={28} outerRadius={48} paddingAngle={2}>
+                                {byProfessional.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                              </Pie>
+                              {!masked && (
+                                <Tooltip
+                                  contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '11px', color: 'var(--text)' }}
+                                  formatter={(val: any, _: any, entry: any) => [
+                                    `${formatARS(Number(val))} (${income > 0 ? Math.round((Number(val) / income) * 100) : 0}%)`,
+                                    entry.name,
+                                  ]}
+                                />
+                              )}
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="space-y-1.5 mt-2">
+                            {byProfessional.map((p, i) => (
+                              <div key={p.name} className="flex items-center justify-between text-xs gap-2">
+                                <span className="flex items-center gap-1.5 text-app2 truncate">
+                                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                                  {p.name}
+                                </span>
+                                <span className="font-semibold text-app flex-shrink-0">
+                                  {maskedAmt(p.total)} {!masked && <span className="text-app3 font-normal">({income > 0 ? Math.round((p.total / income) * 100) : 0}%)</span>}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 )}
+            </div>
+          </section>
+
+          {/* ── BLOQUE 3: Historial de movimientos ── */}
+          <section>
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <SectionLabel>Actividad financiera</SectionLabel>
+              <div className="flex items-center gap-1 bg-surface2 rounded-lg p-1">
+                {([
+                  { key: 'all', label: 'Todos' },
+                  { key: 'ingresos', label: 'Cobros' },
+                  { key: 'gastos', label: 'Egresos' },
+                ] as const).map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => { setHistFilter(f.key); setHistPage(1) }}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${histFilter === f.key ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app3 hover:text-app'
+                      }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
-            </section>
-          )}
+            </div>
+
+            <div className={`bg-surface border border-app rounded-xl overflow-hidden transition-opacity duration-150 ${dataLoading ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className="px-5 py-3 border-b border-app flex items-center justify-between">
+                <span className="text-sm font-semibold">{filteredHist.length} movimientos</span>
+                {totalHistPages > 1 && (
+                  <span className="text-xs text-app3">Pág. {histPage}/{totalHistPages}</span>
+                )}
+              </div>
+
+              {!dataLoading && histItems.length === 0 ? (
+                <div className="px-5 py-12 text-center text-app3 text-sm">Sin movimientos en este período</div>
+              ) : (
+                <>
+                  <div className="divide-y divide-app">
+                    {histItems.map((item: any) => (
+                      <div key={`${item._type}-${item.id}`} className="px-5 py-3.5 flex items-center gap-4">
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${item._type === 'ingreso' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                          }`}>
+                          {item._type === 'ingreso' ? '💰' : '📦'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">
+                            {item._type === 'ingreso'
+                              ? (item.patients
+                                ? <span
+                                    onClick={() => router.push(`/patients/${item.patient_id}`)}
+                                    className="cursor-pointer hover:text-[#00C4BC] transition-colors"
+                                  >{item.patients.first_name} {item.patients.last_name}</span>
+                                : 'Sin paciente')
+                              : item.category}
+                          </div>
+                          <div className="text-xs text-app3 truncate">
+                            {item._type === 'ingreso'
+                              ? (METODOS.find(m => m.value === item.method)?.label ?? item.method)
+                              : (item.description || '')}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className={`font-bold text-sm ${item._type === 'ingreso' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                            {masked ? '••••••' : `${item._type === 'ingreso' ? '+' : '-'}${formatARS(Number(item.amount))}`}
+                          </div>
+                          {item._type === 'ingreso' && !masked && (() => {
+                            const netBalance = patientNetBalanceMap[item.patient_id] ?? 0
+                            if (netBalance > 0) return (
+                              <div className="text-xs text-amber-500 font-semibold">
+                                Debe {formatARS(netBalance)}
+                              </div>
+                            )
+                            if (netBalance < 0) return (
+                              <div className="text-xs text-[#00C4BC] font-semibold">
+                                A favor {formatARS(Math.abs(netBalance))}
+                              </div>
+                            )
+                            return null
+                          })()}
+                          <div className="text-xs text-app3">{formatDateAR(item._date)}</div>
+                        </div>
+                        {item._type === 'ingreso' ? (
+                          <div className="flex flex-col gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => { setEditingPayment(item); setPreselectedPatientId(null); setShowPaymentModal(true) }}
+                              className="text-xs font-semibold bg-surface2 hover:bg-surface3 border border-app text-app2 px-2.5 py-1.5 rounded-lg transition-all active:scale-95"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => setPaymentToDelete(item)}
+                              className="text-xs font-semibold bg-surface2 hover:bg-surface3 border border-app text-app2 px-2.5 py-1.5 rounded-lg transition-all active:scale-95"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => deleteExpense(item.id)}
+                            className="text-app3 hover:text-red-500 active:scale-90 transition-all flex-shrink-0 text-base"
+                          >
+                            🗑
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Pagination
+                    page={histPage}
+                    hasMore={histPage < totalHistPages}
+                    onPrev={() => setHistPage(p => Math.max(1, p - 1))}
+                    onNext={() => setHistPage(p => p + 1)}
+                  />
+                </>
+              )}
+            </div>
+          </section>
 
         </> /* fin financieras */}
 
@@ -857,14 +1138,12 @@ export default function StatisticsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                {/* Turnos agendados */}
                 <div className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos agendados</div>
                   <div className="text-3xl font-bold text-app">{clinicalActive}</div>
                   <div className="text-xs text-app3 mt-1">demanda bruta</div>
                 </div>
 
-                {/* Tasa de asistencia */}
                 <div className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">Asistencia</div>
                   <div className="text-3xl font-bold text-[#00C4BC]">
@@ -873,7 +1152,6 @@ export default function StatisticsPage() {
                   <div className="text-xs text-app3 mt-1">{clinicalAttended} asistieron</div>
                 </div>
 
-                {/* Ausentismo */}
                 <div className={`bg-surface border rounded-xl p-5 ${clinicalAbsenceRate > 20 ? 'border-red-500/40' : 'border-app'}`}>
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ausentismo</div>
                   <div className={`text-3xl font-bold ${clinicalAbsenceRate > 20 ? 'text-red-500' : clinicalAbsenceRate > 10 ? 'text-amber-500' : 'text-[#00C4BC]'}`}>
@@ -882,7 +1160,6 @@ export default function StatisticsPage() {
                   <div className="text-xs text-app3 mt-1">{clinicalAbsent} no vinieron</div>
                 </div>
 
-                {/* Tasa de ocupación */}
                 <div className={`bg-surface border rounded-xl p-5 ${clinicalOccupancyRate > 0 && clinicalOccupancyRate < 60 ? 'border-amber-500/40' : 'border-app'}`}>
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ocupación</div>
                   <div className={`text-3xl font-bold ${clinicalOccupancyRate >= 80 ? 'text-[#00C4BC]' : clinicalOccupancyRate >= 60 ? 'text-amber-500' : clinicalOccupancyRate > 0 ? 'text-red-500' : 'text-app3'}`}>
@@ -995,128 +1272,6 @@ export default function StatisticsPage() {
 
         </> /* fin clinicas */}
 
-        {/* ── Historial (solo Financieras) ── */}
-        {subview === 'financieras' && <section id="historial">
-
-          {/* ── BLOQUE 5: Historial de movimientos ── */}
-          <section>
-            <div className="flex items-center justify-between gap-4 mb-3">
-              <SectionLabel>Actividad financiera</SectionLabel>
-              <div className="flex items-center gap-1 bg-surface2 rounded-lg p-1">
-                {([
-                  { key: 'all', label: 'Todos' },
-                  { key: 'ingresos', label: 'Cobros' },
-                  { key: 'gastos', label: 'Egresos' },
-                ] as const).map(f => (
-                  <button
-                    key={f.key}
-                    onClick={() => { setHistFilter(f.key); setHistPage(1) }}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${histFilter === f.key ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app3 hover:text-app'
-                      }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-surface border border-app rounded-xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-app flex items-center justify-between">
-                <span className="text-sm font-semibold">{filteredHist.length} movimientos</span>
-                {totalHistPages > 1 && (
-                  <span className="text-xs text-app3">Pág. {histPage}/{totalHistPages}</span>
-                )}
-              </div>
-
-              {dataLoading ? (
-                <div className="px-5 py-12 text-center text-app3 animate-pulse">Cargando...</div>
-              ) : histItems.length === 0 ? (
-                <div className="px-5 py-12 text-center text-app3 text-sm">Sin movimientos en este período</div>
-              ) : (
-                <>
-                  <div className="divide-y divide-app">
-                    {histItems.map((item: any) => (
-                      <div key={`${item._type}-${item.id}`} className="px-5 py-3.5 flex items-center gap-4">
-                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${item._type === 'ingreso' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                          }`}>
-                          {item._type === 'ingreso' ? '💰' : '📦'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">
-                            {item._type === 'ingreso'
-                              ? (item.patients
-                                ? <span
-                                    onClick={() => router.push(`/patients/${item.patient_id}`)}
-                                    className="cursor-pointer hover:text-[#00C4BC] transition-colors"
-                                  >{item.patients.first_name} {item.patients.last_name}</span>
-                                : 'Sin paciente')
-                              : item.category}
-                          </div>
-                          <div className="text-xs text-app3 truncate">
-                            {item._type === 'ingreso'
-                              ? (METODOS.find(m => m.value === item.method)?.label ?? item.method)
-                              : (item.description || '')}
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`font-bold text-sm ${item._type === 'ingreso' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                            {masked ? '••••••' : `${item._type === 'ingreso' ? '+' : '-'}${formatARS(Number(item.amount))}`}
-                          </div>
-                          {item._type === 'ingreso' && !masked && (() => {
-                            const netBalance = patientNetBalanceMap[item.patient_id] ?? 0
-                            if (netBalance > 0) return (
-                              <div className="text-xs text-amber-500 font-semibold">
-                                Debe {formatARS(netBalance)}
-                              </div>
-                            )
-                            if (netBalance < 0) return (
-                              <div className="text-xs text-[#00C4BC] font-semibold">
-                                A favor {formatARS(Math.abs(netBalance))}
-                              </div>
-                            )
-                            return null
-                          })()}
-                          <div className="text-xs text-app3">{formatDateAR(item._date)}</div>
-                        </div>
-                        {item._type === 'ingreso' ? (
-                          <div className="flex flex-col gap-1 flex-shrink-0">
-                            <button
-                              onClick={() => { setEditingPayment(item); setPreselectedPatientId(null); setShowPaymentModal(true) }}
-                              className="text-xs font-semibold bg-surface2 hover:bg-surface3 border border-app text-app2 px-2.5 py-1.5 rounded-lg transition-all active:scale-95"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => setPaymentToDelete(item)}
-                              className="text-xs font-semibold bg-surface2 hover:bg-surface3 border border-app text-app2 px-2.5 py-1.5 rounded-lg transition-all active:scale-95"
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => deleteExpense(item.id)}
-                            className="text-app3 hover:text-red-500 active:scale-90 transition-all flex-shrink-0 text-base"
-                          >
-                            🗑
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <Pagination
-                    page={histPage}
-                    hasMore={histPage < totalHistPages}
-                    onPrev={() => setHistPage(p => Math.max(1, p - 1))}
-                    onNext={() => setHistPage(p => p + 1)}
-                  />
-                </>
-              )}
-            </div>
-          </section>
-
-        </section>}
-
       </main>
 
       {/* ── Modales ── */}
@@ -1130,8 +1285,10 @@ export default function StatisticsPage() {
           onClose={() => { setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null) }}
           onSaved={async (success) => {
             setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null)
-            await fetchFinancialData(period, token)
-            if (period === 'month') await fetchChartData(token)
+            await Promise.all([
+              fetchFinancialData(period, token, customFrom, customTo),
+              fetchPersistentData(token),
+            ])
             if (success) setPaymentSuccess(success)
           }}
         />
@@ -1228,14 +1385,17 @@ export default function StatisticsPage() {
           onClose={() => setShowExpenseModal(false)}
           onCreated={async () => {
             setShowExpenseModal(false)
-            await fetchFinancialData(period, token)
+            await Promise.all([
+              fetchFinancialData(period, token, customFrom, customTo),
+              fetchPersistentData(token),
+            ])
           }}
         />
       )}
 
       {showPendingModal && (
         <PendingDebtorsModal
-          debtors={debtorsByPatient}
+          debtors={allDebtorsByPatient}
           masked={masked}
           onClose={() => setShowPendingModal(false)}
           onRegisterPayment={(patientId) => {
@@ -1403,7 +1563,6 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
   const paidAmount = Number(form.amount) || 0
   const installments = form.method === 'credit_card' ? Number(form.installments) : 1
   const remaining = totalAmount > 0 ? totalAmount - paidAmount : 0
-  // Net balance after this transaction, considering existing patient balance
   const currentBalance = patientBalance ?? 0
   const netBalance = totalAmount > 0
     ? currentBalance + totalAmount - paidAmount
