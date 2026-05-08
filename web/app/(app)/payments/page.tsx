@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
@@ -835,7 +835,7 @@ export default function StatisticsPage() {
                     <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Resumen inteligente</span>
                     <div className="h-px flex-1 bg-[var(--border)]" />
                   </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <DragScroll>
                     {insights.map((ins, i) => (
                       <div
                         key={i}
@@ -851,7 +851,7 @@ export default function StatisticsPage() {
                         <span>{ins.text}</span>
                       </div>
                     ))}
-                  </div>
+                  </DragScroll>
                 </div>
               )
             })()}
@@ -1411,6 +1411,42 @@ export default function StatisticsPage() {
 }
 
 // ── Utilidades de UI ──
+
+function DragScroll({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+  const startX = useRef(0)
+  const scrollLeft = useRef(0)
+
+  function onMouseDown(e: React.MouseEvent) {
+    dragging.current = true
+    startX.current = e.pageX - (ref.current?.offsetLeft ?? 0)
+    scrollLeft.current = ref.current?.scrollLeft ?? 0
+  }
+  function onMouseUp() { dragging.current = false }
+  function onMouseLeave() { dragging.current = false }
+  function onMouseMove(e: React.MouseEvent) {
+    if (!dragging.current || !ref.current) return
+    e.preventDefault()
+    const x = e.pageX - ref.current.offsetLeft
+    ref.current.scrollLeft = scrollLeft.current - (x - startX.current)
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="flex gap-2 overflow-x-auto pb-1 select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      style={{ cursor: dragging.current ? 'grabbing' : 'grab' }}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
+      onMouseMove={onMouseMove}
+      onWheel={(e) => { e.preventDefault(); e.currentTarget.scrollLeft += e.deltaY }}
+    >
+      {children}
+    </div>
+  )
+}
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
