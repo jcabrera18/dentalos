@@ -105,6 +105,7 @@ export default function PatientDetailPage() {
   const [notes, setNotes] = useState('')
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [accountPayments, setAccountPayments] = useState<any[]>([])
+  const [accountPage, setAccountPage] = useState(0)
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
   const [odontogramActiveType, setOdontogramActiveType] = useState<'adult' | 'child'>('adult')
@@ -272,6 +273,7 @@ export default function PatientDetailPage() {
 
   async function openAccountModal() {
     setShowAccountModal(true)
+    setAccountPage(0)
     accountDataLoadedRef.current = true
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
@@ -1005,12 +1007,27 @@ export default function PatientDetailPage() {
                     <div className="text-xs text-app3 mb-1">Total cobrado</div>
                     <div className="text-base font-bold text-[#00C4BC]">${Number(accountSummary.total_collected).toLocaleString('es-AR')}</div>
                   </div>
-                  <div className={`rounded-xl p-3 text-center ${Number(accountSummary.balance_due) > 0 ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50' : 'bg-surface2'}`}>
-                    <div className={`text-xs mb-1 ${Number(accountSummary.balance_due) > 0 ? 'text-red-700 dark:text-red-400' : 'text-app3'}`}>Saldo pendiente</div>
-                    <div className={`text-base font-bold ${Number(accountSummary.balance_due) > 0 ? 'text-red-800 dark:text-red-400' : 'text-app3'}`}>
-                      ${Number(accountSummary.balance_due).toLocaleString('es-AR')}
-                    </div>
-                  </div>
+                  {(() => {
+                    const due = Number(accountSummary.balance_due)
+                    if (due < 0) {
+                      return (
+                        <div className="rounded-xl p-3 text-center bg-[#E6F8F1] border border-[#00C4BC]/30">
+                          <div className="text-xs mb-1 text-[#00C4BC]">Saldo a favor</div>
+                          <div className="text-base font-bold text-[#00C4BC]">
+                            ${Math.abs(due).toLocaleString('es-AR')}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className={`rounded-xl p-3 text-center ${due > 0 ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50' : 'bg-surface2'}`}>
+                        <div className={`text-xs mb-1 ${due > 0 ? 'text-red-700 dark:text-red-400' : 'text-app3'}`}>Saldo pendiente</div>
+                        <div className={`text-base font-bold ${due > 0 ? 'text-red-800 dark:text-red-400' : 'text-app3'}`}>
+                          ${due.toLocaleString('es-AR')}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -1020,10 +1037,17 @@ export default function PatientDetailPage() {
                   <div className="px-6 py-12 text-center text-app3 text-sm">Sin cobros registrados</div>
                 ) : (
                   <div className="divide-y divide-app">
-                    {[...accountPayments].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime()).map((p: any) => {
+                    {(() => {
+                      const PAGE_SIZE = 5
+                      const sorted = [...accountPayments].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+                      const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
+                      const paginated = sorted.slice(accountPage * PAGE_SIZE, (accountPage + 1) * PAGE_SIZE)
+                      return (<>
+                        {paginated.map((p: any) => {
                       const servicio = hasExplicitTotalAmount(p) ? Number(p.total_amount) : 0
                       const pagado = Number(p.amount)
-                      const debe = Math.max(servicio - pagado, 0)
+                      const debe = servicio > 0 ? Math.max(servicio - pagado, 0) : 0
+                      const aFavor = servicio > 0 && pagado > servicio ? pagado - servicio : 0
                       const METODOS: Record<string, string> = {
                         cash: '💵 Efectivo', bank_transfer: '📲 Transferencia',
                         debit_card: '💳 Débito', credit_card: '💳 Crédito',
@@ -1058,11 +1082,37 @@ export default function PatientDetailPage() {
                                   Debe: ${debe.toLocaleString('es-AR')}
                                 </div>
                               )}
+                              {aFavor > 0 && (
+                                <div className="text-xs font-semibold text-[#00C4BC]">
+                                  A favor: ${aFavor.toLocaleString('es-AR')}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
-                      )
-                    })}
+                        )
+                        })}
+                        {totalPages > 1 && (
+                          <div className="px-6 py-3 flex items-center justify-between">
+                            <button
+                              disabled={accountPage === 0}
+                              onClick={() => setAccountPage(p => p - 1)}
+                              className="text-sm text-app2 hover:text-app disabled:opacity-30 disabled:cursor-not-allowed px-2 py-1 rounded-lg hover:bg-surface2 transition-colors"
+                            >
+                              ← Anterior
+                            </button>
+                            <span className="text-xs text-app3">{accountPage + 1} / {totalPages}</span>
+                            <button
+                              disabled={accountPage >= totalPages - 1}
+                              onClick={() => setAccountPage(p => p + 1)}
+                              className="text-sm text-app2 hover:text-app disabled:opacity-30 disabled:cursor-not-allowed px-2 py-1 rounded-lg hover:bg-surface2 transition-colors"
+                            >
+                              Siguiente →
+                            </button>
+                          </div>
+                        )}
+                      </>)
+                    })()}
                   </div>
                 )}
               </div>

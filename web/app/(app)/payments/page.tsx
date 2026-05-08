@@ -42,7 +42,7 @@ type Period = 'day' | 'week' | 'month' | 'year' | 'all'
 
 const PIE_COLORS = ['#00C4BC', '#6366f1', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 const BAR_COLORS = ['#00C4BC', '#6366f1', '#3b82f6', '#8b5cf6', '#a78bfa', '#c4b5fd']
-const HIST_PAGE_SIZE = 20
+const HIST_PAGE_SIZE = 5
 
 function todayAR() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -151,6 +151,7 @@ export default function StatisticsPage() {
   const [histPage, setHistPage] = useState(1)
 
   // Modales
+  const [showPendingModal, setShowPendingModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState<{ patientName: string; amount: number; remaining: number } | null>(null)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
@@ -360,11 +361,35 @@ export default function StatisticsPage() {
   const prevExpense = prevExpenses.reduce((s, e) => s + Number(e.amount), 0)
   const prevAvgTicket = prevPayments.length > 0 ? Math.round(prevIncome / prevPayments.length) : 0
 
-  const pendingCashflow = payments.reduce((s, p) => {
+  const patientNetBalanceMap: Record<string, number> = payments.reduce((acc, p) => {
+    const id = p.patient_id
+    if (!id) return acc
     const total = Number(p.total_amount) || 0
     const paid = Number(p.amount) || 0
-    return s + Math.max(0, total - paid)
-  }, 0)
+    acc[id] = (acc[id] ?? 0) + (total - paid)
+    return acc
+  }, {} as Record<string, number>)
+
+  const debtorsByPatient = (Object.values(
+    payments.reduce((acc, p) => {
+      const id = p.patient_id ?? 'unknown'
+      if (!id || id === 'unknown') return acc
+      const total = Number(p.total_amount) || 0
+      const paid = Number(p.amount) || 0
+      if (!acc[id]) acc[id] = {
+        id,
+        name: p.patients ? `${p.patients.first_name} ${p.patients.last_name}` : 'Sin nombre',
+        phone: p.patients?.phone ?? '',
+        balance: 0,
+        lastPayment: p.paid_at,
+      }
+      acc[id].balance += total - paid
+      if (new Date(p.paid_at) > new Date(acc[id].lastPayment)) acc[id].lastPayment = p.paid_at
+      return acc
+    }, {} as Record<string, any>)
+  ) as any[]).filter((d: any) => d.balance > 0).sort((a, b) => b.balance - a.balance)
+
+  const pendingCashflow = debtorsByPatient.reduce((s: number, d: any) => s + d.balance, 0)
 
   function delta(current: number, previous: number): { pct: number; up: boolean } | null {
     if (previous === 0 || !PREV_LABEL[period]) return null
@@ -428,6 +453,7 @@ export default function StatisticsPage() {
 
   const totalHistPages = Math.ceil(filteredHist.length / HIST_PAGE_SIZE) || 1
   const histItems = filteredHist.slice((histPage - 1) * HIST_PAGE_SIZE, histPage * HIST_PAGE_SIZE)
+
 
   // ── Loading skeleton ──
   if (loading) {
@@ -579,7 +605,7 @@ export default function StatisticsPage() {
 
                   {/* Gastos */}
                   <div className="bg-surface border border-app rounded-xl p-5">
-                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Gastos</div>
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Egresos del consultorio</div>
                     <div className="text-2xl font-bold text-red-500 dark:text-red-400">{maskedAmt(expense)}</div>
                     {!masked && <DeltaBadge d={deltaExpense} label={prevLabel} positiveIsGood={false} />}
                     <div className="text-xs text-app3 mt-1">{expenses.length} registros</div>
@@ -596,13 +622,18 @@ export default function StatisticsPage() {
                   </div>
 
                   {/* Cobros pendientes */}
-                  <div className={`bg-surface border rounded-xl p-5 ${pendingCashflow > 0 ? 'border-amber-500/40' : 'border-app'}`}>
-                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Cobros pendientes</div>
+                  <div
+                    className={`bg-surface border rounded-xl p-5 transition-all ${pendingCashflow > 0 ? 'border-amber-500/40 cursor-pointer hover:border-amber-500/70 hover:bg-amber-500/5 active:scale-[0.98]' : 'border-app'}`}
+                    onClick={() => pendingCashflow > 0 && setShowPendingModal(true)}
+                  >
+                    <div className="text-xs text-app3 uppercase tracking-wider mb-1">Pacientes con saldo pendiente</div>
                     <div className={`text-2xl font-bold ${pendingCashflow > 0 ? 'text-amber-400' : 'text-[#00C4BC]'}`}>
                       {pendingCashflow > 0 ? maskedAmt(pendingCashflow) : '—'}
                     </div>
-                    <div className="text-xs text-app3 mt-1">
-                      {pendingCashflow > 0 ? 'por cobrar' : 'al día'}
+                    <div className="text-xs text-app3 mt-1 flex items-center gap-1">
+                      {pendingCashflow > 0 ? (
+                        <><span>por cobrar</span><span className="text-amber-400/60">· ver detalle →</span></>
+                      ) : 'al día'}
                     </div>
                   </div>
 
@@ -611,7 +642,7 @@ export default function StatisticsPage() {
                 {income > 0 && !masked && (
                   <div className="mt-3 bg-surface border border-app rounded-xl px-5 py-4">
                     <div className="flex justify-between text-xs text-app3 mb-2">
-                      <span>Gastos vs ingresos</span>
+                      <span>Egresos vs ingresos</span>
                       <span>{Math.round((expense / income) * 100)}%</span>
                     </div>
                     <div className="h-2 bg-surface2 rounded-full overflow-hidden">
@@ -628,6 +659,64 @@ export default function StatisticsPage() {
               </>
             )}
           </section>
+
+          {/* ── INSIGHTS AUTOMÁTICOS ── */}
+          {!dataLoading && !masked && (() => {
+            const insights: { icon: string; text: string; type: 'good' | 'bad' | 'neutral' }[] = []
+
+            if (deltaIncome && prevLabel) {
+              if (!deltaIncome.up && deltaIncome.pct > 0) {
+                insights.push({ icon: '📉', text: `Tus cobros bajaron ${deltaIncome.pct}% ${prevLabel}`, type: 'bad' })
+              } else if (deltaIncome.up && deltaIncome.pct > 0) {
+                insights.push({ icon: '📈', text: `Tus cobros subieron ${deltaIncome.pct}% ${prevLabel}`, type: 'good' })
+              }
+            }
+
+            if (debtorsByPatient.length > 0) {
+              insights.push({
+                icon: '⏳',
+                text: `Tenés ${debtorsByPatient.length} paciente${debtorsByPatient.length > 1 ? 's' : ''} con saldo pendiente`,
+                type: 'neutral',
+              })
+            }
+
+            if (byMethod.length > 0 && income > 0) {
+              const top = byMethod[0]
+              const pct = Math.round((top.total / income) * 100)
+              if (pct >= 30) {
+                const label = METODOS.find(x => x.value === top.method)?.label ?? top.method
+                insights.push({ icon: '💳', text: `${label} ya representa el ${pct}% de tus cobros`, type: 'neutral' })
+              }
+            }
+
+            if (insights.length === 0) return null
+
+            return (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Resumen inteligente</span>
+                  <div className="h-px flex-1 bg-[var(--border)]" />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {insights.map((ins, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-3 flex-1 rounded-xl px-4 py-3 border text-sm font-medium ${
+                        ins.type === 'good'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                          : ins.type === 'bad'
+                            ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+                            : 'bg-surface border-app text-app2'
+                      }`}
+                    >
+                      <span className="text-base leading-none mt-0.5 flex-shrink-0">{ins.icon}</span>
+                      <span>{ins.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )
+          })()}
 
           {/* ── BLOQUE 2: Evolución del mes (solo period=month) ── */}
           {period === 'month' && !dataLoading && (
@@ -912,12 +1001,12 @@ export default function StatisticsPage() {
           {/* ── BLOQUE 5: Historial de movimientos ── */}
           <section>
             <div className="flex items-center justify-between gap-4 mb-3">
-              <SectionLabel>Historial</SectionLabel>
+              <SectionLabel>Actividad financiera</SectionLabel>
               <div className="flex items-center gap-1 bg-surface2 rounded-lg p-1">
                 {([
                   { key: 'all', label: 'Todos' },
                   { key: 'ingresos', label: 'Cobros' },
-                  { key: 'gastos', label: 'Gastos' },
+                  { key: 'gastos', label: 'Egresos' },
                 ] as const).map(f => (
                   <button
                     key={f.key}
@@ -955,7 +1044,12 @@ export default function StatisticsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate">
                             {item._type === 'ingreso'
-                              ? (item.patients ? `${item.patients.first_name} ${item.patients.last_name}` : 'Sin paciente')
+                              ? (item.patients
+                                ? <span
+                                    onClick={() => router.push(`/patients/${item.patient_id}`)}
+                                    className="cursor-pointer hover:text-[#00C4BC] transition-colors"
+                                  >{item.patients.first_name} {item.patients.last_name}</span>
+                                : 'Sin paciente')
                               : item.category}
                           </div>
                           <div className="text-xs text-app3 truncate">
@@ -968,6 +1062,20 @@ export default function StatisticsPage() {
                           <div className={`font-bold text-sm ${item._type === 'ingreso' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
                             {masked ? '••••••' : `${item._type === 'ingreso' ? '+' : '-'}${formatARS(Number(item.amount))}`}
                           </div>
+                          {item._type === 'ingreso' && !masked && (() => {
+                            const netBalance = patientNetBalanceMap[item.patient_id] ?? 0
+                            if (netBalance > 0) return (
+                              <div className="text-xs text-amber-500 font-semibold">
+                                Debe {formatARS(netBalance)}
+                              </div>
+                            )
+                            if (netBalance < 0) return (
+                              <div className="text-xs text-[#00C4BC] font-semibold">
+                                A favor {formatARS(Math.abs(netBalance))}
+                              </div>
+                            )
+                            return null
+                          })()}
                           <div className="text-xs text-app3">{formatDateAR(item._date)}</div>
                         </div>
                         {item._type === 'ingreso' ? (
@@ -1056,6 +1164,16 @@ export default function StatisticsPage() {
                   </div>
                 </div>
               )}
+              {paymentSuccess.remaining < 0 && (
+                <div className="mt-4 rounded-xl bg-[#E6F8F1] border border-[#00C4BC]/25 px-4 py-3 text-left">
+                  <div className="text-xs font-semibold text-[#00C4BC] uppercase tracking-wider">
+                    Saldo a favor
+                  </div>
+                  <div className="text-base font-bold text-[#00C4BC] mt-1">
+                    {formatARS(Math.abs(paymentSuccess.remaining))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="px-6 pb-6">
               <button
@@ -1111,6 +1229,20 @@ export default function StatisticsPage() {
           onCreated={async () => {
             setShowExpenseModal(false)
             await fetchFinancialData(period, token)
+          }}
+        />
+      )}
+
+      {showPendingModal && (
+        <PendingDebtorsModal
+          debtors={debtorsByPatient}
+          masked={masked}
+          onClose={() => setShowPendingModal(false)}
+          onRegisterPayment={(patientId) => {
+            setShowPendingModal(false)
+            setPreselectedPatientId(patientId)
+            setEditingPayment(null)
+            setShowPaymentModal(true)
           }}
         />
       )}
@@ -1201,22 +1333,51 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [patients, setPatients] = useState(initialPatients)
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
+  const [selectedPatientData, setSelectedPatientData] = useState<any>(() => {
+    if (payment?.patients) return { id: payment.patient_id, ...payment.patients }
+    if (preselectedPatientId) return initialPatients.find((p: any) => p.id === preselectedPatientId) ?? null
+    return null
+  })
   const [showNewPatient, setShowNewPatient] = useState(false)
   const [newPatientName, setNewPatientName] = useState('')
   const [newPatientLastName, setNewPatientLastName] = useState('')
   const [creatingPatient, setCreatingPatient] = useState(false)
+  const [patientBalance, setPatientBalance] = useState<number | null>(null)
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
   }
 
-  const editingPatient = payment?.patients ? { id: payment.patient_id, ...payment.patients } : null
-  const filteredPatients = patients.filter(p =>
-    `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    (p.phone ?? '').includes(search)
-  )
-  const selectedPatient = patients.find(p => p.id === form.patient_id) ?? editingPatient
+  const selectedPatient = selectedPatientData
+
+  useEffect(() => {
+    if (!form.patient_id || isEditing) { setPatientBalance(null); return }
+    apiFetch(`/patients/${form.patient_id}/account-summary`, { token })
+      .then((data: any) => setPatientBalance(Number(data.data?.balance_due ?? 0)))
+      .catch(() => setPatientBalance(null))
+  }, [form.patient_id, token, isEditing])
+
+  useEffect(() => {
+    if (!preselectedPatientId || selectedPatientData) return
+    apiFetch(`/patients/${preselectedPatientId}`, { token })
+      .then((data: any) => {
+        const p = data.data ?? data
+        setSelectedPatientData(p)
+        set('patient_id', p.id)
+      })
+      .catch(() => {})
+  }, [preselectedPatientId, token])
+
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults([]); return }
+    setSearching(true)
+    apiFetch(`/patients?q=${encodeURIComponent(search.trim())}&limit=10`, { token })
+      .then((data: any) => setSearchResults(data.data ?? []))
+      .catch(() => setSearchResults([]))
+      .finally(() => setSearching(false))
+  }, [search, token])
 
   async function handleCreatePatient() {
     if (!newPatientName) return
@@ -1226,7 +1387,7 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
         method: 'POST', token,
         body: JSON.stringify({ first_name: newPatientName, last_name: newPatientLastName || '.', phone: 'Sin teléfono' })
       })
-      setPatients(prev => [data.data, ...prev])
+      setSelectedPatientData(data.data)
       set('patient_id', data.data.id)
       setShowNewPatient(false)
       setNewPatientName('')
@@ -1242,6 +1403,11 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
   const paidAmount = Number(form.amount) || 0
   const installments = form.method === 'credit_card' ? Number(form.installments) : 1
   const remaining = totalAmount > 0 ? totalAmount - paidAmount : 0
+  // Net balance after this transaction, considering existing patient balance
+  const currentBalance = patientBalance ?? 0
+  const netBalance = totalAmount > 0
+    ? currentBalance + totalAmount - paidAmount
+    : currentBalance - paidAmount
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -1251,7 +1417,6 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
       setError('Si no entrega nada, cargá el total del servicio para dejarlo en cuenta corriente')
       return
     }
-    if (totalAmount > 0 && paidAmount > totalAmount) { setError('El monto entregado no puede superar el total'); return }
     setLoading(true)
     setError('')
     try {
@@ -1271,7 +1436,7 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
       onSaved(isEditing ? undefined : {
         patientName: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Paciente',
         amount: paidAmount,
-        remaining: Math.max(0, remaining),
+        remaining: netBalance,
       })
     } catch (err: any) {
       setError(err.message)
@@ -1294,7 +1459,7 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
                 <div className="flex items-center justify-between bg-surface2 rounded-xl px-3 py-2.5">
                   <div className="font-medium text-app text-sm">{selectedPatient.first_name} {selectedPatient.last_name}</div>
                   {!isEditing && (
-                    <button type="button" onClick={() => { set('patient_id', ''); setShowNewPatient(false) }}
+                    <button type="button" onClick={() => { set('patient_id', ''); setSelectedPatientData(null); setShowNewPatient(false) }}
                       className="text-app3 hover:text-app text-sm ml-2">✕</button>
                   )}
                 </div>
@@ -1328,13 +1493,14 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
                     className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-1.5" />
                   {search && (
                     <div className="bg-surface2 border border-app rounded-xl overflow-hidden max-h-36 overflow-y-auto mb-1.5">
-                      {filteredPatients.slice(0, 5).map(p => (
-                        <div key={p.id} onClick={() => { set('patient_id', p.id); setSearch('') }}
+                      {searching && <div className="px-3 py-2.5 text-app3 text-sm">Buscando...</div>}
+                      {!searching && searchResults.map(p => (
+                        <div key={p.id} onClick={() => { set('patient_id', p.id); setSelectedPatientData(p); setSearch('') }}
                           className="px-3 py-2 hover:bg-surface3 cursor-pointer text-sm text-app">
                           {p.first_name} {p.last_name} · <span className="text-app2">{p.phone}</span>
                         </div>
                       ))}
-                      {filteredPatients.length === 0 && <div className="px-3 py-2.5 text-app3 text-sm">Sin resultados</div>}
+                      {!searching && searchResults.length === 0 && <div className="px-3 py-2.5 text-app3 text-sm">Sin resultados</div>}
                     </div>
                   )}
                   <button type="button" onClick={() => setShowNewPatient(true)}
@@ -1421,18 +1587,27 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
               </div>
             </div>
 
-            {remaining > 0 && (
-              <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
-                <span className="text-amber-500">⚠️</span>
-                <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">Queda debiendo </span>
-                <span className="text-sm font-bold text-amber-500">${remaining.toLocaleString('es-AR')}</span>
-              </div>
-            )}
-            {totalAmount > 0 && paidAmount >= totalAmount && (
-              <div className="flex items-center gap-2 bg-[#E6F8F1] border border-[#00C4BC]/30 rounded-xl px-3 py-2">
-                <span className="text-xs text-[#00C4BC] font-semibold">✓ Pago completo</span>
-              </div>
-            )}
+            {(totalAmount > 0 || (patientBalance !== null && patientBalance !== 0)) && (() => {
+              const showNet = patientBalance !== null && patientBalance !== 0
+              const valueToShow = showNet ? netBalance : remaining
+              if (valueToShow > 0) return (
+                <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+                  <span className="text-amber-500">⚠️</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">Queda debiendo </span>
+                  <span className="text-sm font-bold text-amber-500">${valueToShow.toLocaleString('es-AR')}</span>
+                </div>
+              )
+              if (valueToShow < 0) return (
+                <div className="flex items-center gap-2 bg-[#E6F8F1] border border-[#00C4BC]/30 rounded-xl px-3 py-2">
+                  <span className="text-xs text-[#00C4BC] font-semibold">✓ Saldo a favor: ${Math.abs(valueToShow).toLocaleString('es-AR')}</span>
+                </div>
+              )
+              return (
+                <div className="flex items-center gap-2 bg-[#E6F8F1] border border-[#00C4BC]/30 rounded-xl px-3 py-2">
+                  <span className="text-xs text-[#00C4BC] font-semibold">✓ {showNet ? 'Queda al día' : 'Pago completo'}</span>
+                </div>
+              )
+            })()}
 
             {/* Notas */}
             <div>
@@ -1456,6 +1631,202 @@ function PaymentModal({ token, patients: initialPatients, professionals, payment
             </div>
           </form>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const PENDING_PAGE_SIZE = 5
+
+type AgingBand = 'all' | '0-30' | '30-60' | '60+'
+
+function daysSince(dateStr: string): number {
+  const today = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const d = new Date(dateStr)
+  return Math.floor((today.getTime() - d.getTime()) / 86400000)
+}
+
+function PendingDebtorsModal({ debtors, masked, onClose, onRegisterPayment }: {
+  debtors: { id: string; name: string; phone: string; balance: number; lastPayment: string }[]
+  masked: boolean
+  onClose: () => void
+  onRegisterPayment: (patientId: string) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [agingBand, setAgingBand] = useState<AgingBand>('all')
+
+  const top5 = debtors.slice(0, 5)
+  const total = debtors.reduce((s, d) => s + d.balance, 0)
+
+  const agingFiltered = agingBand === 'all' ? debtors : debtors.filter(d => {
+    const days = daysSince(d.lastPayment)
+    if (agingBand === '0-30') return days <= 30
+    if (agingBand === '30-60') return days > 30 && days <= 60
+    return days > 60
+  })
+
+  const filtered = search.trim()
+    ? agingFiltered.filter(d => d.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : agingFiltered
+
+  const totalPages = Math.ceil(filtered.length / PENDING_PAGE_SIZE) || 1
+  const pageItems = filtered.slice((page - 1) * PENDING_PAGE_SIZE, page * PENDING_PAGE_SIZE)
+
+  function handleSearch(v: string) { setSearch(v); setPage(1) }
+  function handleBand(b: AgingBand) { setAgingBand(b); setSearch(''); setPage(1) }
+
+  const BANDS: { value: AgingBand; label: string }[] = [
+    { value: 'all', label: 'Todos' },
+    { value: '0-30', label: '0–30 días' },
+    { value: '30-60', label: '30–60 días' },
+    { value: '60+', label: '+60 días' },
+  ]
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface border border-app rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-app flex-shrink-0">
+          <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-4 sm:hidden" />
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-base font-bold text-app">Pacientes con saldo pendiente</h2>
+              <p className="text-xs text-app3 mt-0.5">
+                {debtors.length} {debtors.length === 1 ? 'paciente debe' : 'pacientes deben'} ·{' '}
+                <span className="text-amber-400 font-semibold">
+                  {masked ? '••••••' : '$' + total.toLocaleString('es-AR')}
+                </span>
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-app3 hover:text-app hover:bg-surface2 transition-all"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Top 5 deudores */}
+          {top5.length > 0 && (
+            <div className="mb-3 bg-surface2 rounded-xl p-3">
+              <div className="text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Top 5 deudores</div>
+              <div className="space-y-1.5">
+                {top5.map((d, i) => (
+                  <div key={d.id} className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-app3 w-4 text-right">{i + 1}.</span>
+                    <span className="text-xs text-app flex-1 truncate">{d.name}</span>
+                    <span className="text-xs font-bold text-amber-400">
+                      {masked ? '••••••' : '$' + d.balance.toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Aging filter pills */}
+          <div className="flex gap-1.5 mb-3">
+            {BANDS.map(b => (
+              <button
+                key={b.value}
+                onClick={() => handleBand(b.value)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  agingBand === b.value
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-surface2 text-app3 hover:text-app hover:bg-surface3'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Buscar paciente..."
+            className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+          />
+        </div>
+
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-6 py-10 text-center text-app3 text-sm">
+              {search || agingBand !== 'all' ? 'Sin resultados' : 'Sin cobros pendientes'}
+            </div>
+          ) : (
+            <div className="divide-y divide-app">
+              {pageItems.map(d => (
+                <div key={d.id} className="px-5 py-4 flex items-center gap-4">
+                  <div className="w-9 h-9 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm font-bold flex-shrink-0">
+                    {d.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm text-app truncate">{d.name}</div>
+                    <div className="text-xs text-app3 mt-0.5">
+                      Último pago:{' '}
+                      {new Date(d.lastPayment).toLocaleDateString('es-AR', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                        timeZone: 'America/Argentina/Buenos_Aires',
+                      })}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0 mr-2">
+                    <div className="text-sm font-bold text-amber-400">
+                      {masked ? '••••••' : '$' + d.balance.toLocaleString('es-AR')}
+                    </div>
+                    <div className="text-xs text-app3">{daysSince(d.lastPayment)}d atrás</div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => onRegisterPayment(d.id)}
+                      className="text-xs font-semibold bg-[#00C4BC] hover:bg-[#00aaa3] text-white px-2.5 py-1.5 rounded-lg transition-all active:scale-95 whitespace-nowrap"
+                    >
+                      Cobrar
+                    </button>
+                    <button
+                      title="Recordar por WhatsApp (próximamente)"
+                      disabled
+                      className="text-xs font-semibold bg-surface2 border border-app text-app3 px-2.5 py-1.5 rounded-lg opacity-50 cursor-not-allowed whitespace-nowrap flex items-center gap-1 justify-center"
+                    >
+                      <span>💬</span> WSP
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Paginado */}
+        {totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-app flex items-center justify-between flex-shrink-0">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1.5 text-xs font-semibold bg-surface2 border border-app rounded-lg disabled:opacity-40 hover:bg-surface3 transition-colors active:scale-95"
+            >
+              ← Anterior
+            </button>
+            <span className="text-xs text-app3">{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1.5 text-xs font-semibold bg-surface2 border border-app rounded-lg disabled:opacity-40 hover:bg-surface3 transition-colors active:scale-95"
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

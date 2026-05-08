@@ -76,7 +76,7 @@ export default function AgendaPage() {
   const [selectedAppt, setSelectedAppt] = useState<any>(null)
   const [showNewAppt, setShowNewAppt]   = useState(false)
   const [newApptSlot, setNewApptSlot]   = useState<{ date: string; time: string } | null>(null)
-  const [patients, setPatients]         = useState<any[]>([])
+
   const [professionals, setProfessionals] = useState<any[]>([])
   const [selectedProfId, setSelectedProfId] = useState('')
   const [editingAppt, setEditingAppt]   = useState<any>(null)
@@ -121,10 +121,6 @@ export default function AgendaPage() {
     return () => window.clearTimeout(timeoutId)
   }, [token])
 
-  useEffect(() => {
-    if (!showNewAppt || !token || patients.length > 0) return
-    void loadPatients(token)
-  }, [patients.length, showNewAppt, token])
 
   useEffect(() => {
     if (!selectedAppt) return
@@ -158,10 +154,6 @@ export default function AgendaPage() {
     setProfessionals(profData.data ?? [])
   }
 
-  async function loadPatients(t: string) {
-    const pData = await apiFetch('/patients?limit=100', { token: t })
-    setPatients(pData.data ?? [])
-  }
 
   async function handleRefresh() {
     if (!token || refreshing) return
@@ -784,7 +776,6 @@ export default function AgendaPage() {
           token={token}
           date={newApptSlot.date}
           time={newApptSlot.time}
-          patients={patients}
           professionals={professionals}
           defaultProfessionalId={
             selectedProfId ||
@@ -797,9 +788,6 @@ export default function AgendaPage() {
             setShowNewAppt(false)
             setSelectedProfId(prev => prev && prev !== professionalId ? professionalId : prev)
             await fetchCalendarData(token)
-          }}
-          onPatientCreated={(patient) => {
-            setPatients((prev: any[]) => [patient, ...prev])
           }}
         />
       )}
@@ -1061,18 +1049,19 @@ function BlockModal({ token, defaultDate, onClose, onCreated }: {
   )
 }
 
-function NewAppointmentModal({ token, date, time, patients, professionals, defaultProfessionalId, onClose, onCreated, onPatientCreated }: {
+function NewAppointmentModal({ token, date, time, professionals, defaultProfessionalId, onClose, onCreated }: {
   token: string
   date: string
   time: string
-  patients: any[]
   professionals: any[]
   defaultProfessionalId: string
   onClose: () => void
   onCreated: (professionalId: string) => void
-  onPatientCreated: (patient: any) => void
 }) {
   const [search, setSearch]               = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searching, setSearching]         = useState(false)
+  const [selectedPatientData, setSelectedPatientData] = useState<any>(null)
   const [patientId, setPatientId]         = useState('')
   const [professionalId, setProfessionalId] = useState(defaultProfessionalId)
   const [newPatientMode, setNewPatientMode] = useState(false)
@@ -1095,11 +1084,16 @@ function NewAppointmentModal({ token, date, time, patients, professionals, defau
     setProfessionalId(defaultProfessionalId)
   }, [defaultProfessionalId, professionalId])
 
-  const selectedPatient = patients.find(p => p.id === patientId)
-  const filtered = patients.filter(p =>
-    `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    (p.phone ?? '').includes(search)
-  ).slice(0, 5)
+  const selectedPatient = selectedPatientData
+
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults([]); return }
+    setSearching(true)
+    apiFetch(`/patients?q=${encodeURIComponent(search.trim())}&limit=10`, { token })
+      .then((data: any) => setSearchResults(data.data ?? []))
+      .catch(() => setSearchResults([]))
+      .finally(() => setSearching(false))
+  }, [search, token])
 
 const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
 const DURACIONES = [
@@ -1147,7 +1141,7 @@ const DURACIONES = [
           phone:      newPatientPhone.trim(),
         })
       })
-      onPatientCreated(data.data)
+      setSelectedPatientData(data.data)
       setPatientId(data.data.id)
       setNewPatientMode(false)
       setNewPatientName('')
@@ -1175,7 +1169,7 @@ const DURACIONES = [
               {selectedPatient ? (
                 <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
                   <div className="font-medium text-app">{selectedPatient.first_name} {selectedPatient.last_name}</div>
-                  <button type="button" onClick={() => { setPatientId(''); setNewPatientMode(false) }}
+                  <button type="button" onClick={() => { setPatientId(''); setSelectedPatientData(null); setNewPatientMode(false) }}
                     className="text-app3 hover:text-app text-sm">✕</button>
                 </div>
               ) : newPatientMode ? (
@@ -1210,21 +1204,17 @@ const DURACIONES = [
                     placeholder="Buscar por nombre o teléfono..."
                     className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2"
                     autoFocus />
-                  {patients.length === 0 && (
-                    <div className="mb-2 rounded-xl border border-app bg-surface2 px-4 py-3 text-sm text-app3">
-                      Cargando pacientes...
-                    </div>
-                  )}
                   {search && (
                     <div className="bg-surface2 border border-app rounded-xl overflow-hidden mb-2">
-                      {filtered.map(p => (
-                        <div key={p.id} onClick={() => { setPatientId(p.id); setSearch('') }}
+                      {searching && <div className="px-4 py-3 text-app3 text-sm">Buscando...</div>}
+                      {!searching && searchResults.map(p => (
+                        <div key={p.id} onClick={() => { setPatientId(p.id); setSelectedPatientData(p); setSearch('') }}
                           className="px-4 py-3 hover:bg-surface3 cursor-pointer text-sm border-b border-app last:border-0 text-app">
                           <span className="font-medium">{p.first_name} {p.last_name}</span>
                           <span className="text-app2 ml-2">{p.phone}</span>
                         </div>
                       ))}
-                      {filtered.length === 0 && <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>}
+                      {!searching && searchResults.length === 0 && <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>}
                     </div>
                   )}
                   <button type="button" onClick={() => setNewPatientMode(true)}

@@ -29,24 +29,20 @@ const SEARCH_DEBOUNCE_MS = 300
 const PATIENTS_LIMIT = 10
 
 export default function PatientsPage() {
-  const [patients, setPatients]     = useState<PatientSummary[]>([])
-  const [search, setSearch]         = useState('')
-  const [loading, setLoading]       = useState(true)
-  const [searching, setSearching]   = useState(false)
-  const [token, setToken]           = useState('')
-  const [showModal, setShowModal]   = useState(false)
+  const [patients, setPatients]   = useState<PatientSummary[]>([])
+  const [search, setSearch]       = useState('')
+  const [searching, setSearching] = useState(false)
+  const [token, setToken]         = useState('')
+  const [showModal, setShowModal] = useState(false)
   const router   = useRouter()
   const supabase = createClient()
-  const requestIdRef    = useRef(0)
-  const authCheckedRef  = useRef(false)
-  const initialLoadedRef = useRef(false)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
-      authCheckedRef.current = true
     }
     void load()
   }, [router, supabase])
@@ -54,11 +50,6 @@ export default function PatientsPage() {
   async function fetchPatients(t: string, q: string, options?: { force?: boolean }) {
     const normalizedQuery = q.trim()
     const force = options?.force ?? false
-
-    if (normalizedQuery.length > 0 && normalizedQuery.length < SEARCH_MIN_LENGTH) {
-      setPatients([])
-      return
-    }
 
     const requestId = ++requestIdRef.current
     const cachedPatients = !force ? getCachedPatients(t, normalizedQuery) : null
@@ -71,17 +62,9 @@ export default function PatientsPage() {
     const request =
       inFlightRequest ??
       (async () => {
-        const searchParams = new URLSearchParams({
-          limit: String(PATIENTS_LIMIT),
-        })
-
-        if (normalizedQuery) {
-          searchParams.set('q', normalizedQuery)
-        }
-
-        const url = `/patients?${searchParams.toString()}`
-
-        const data = await apiFetch(url, { token: t })
+        const searchParams = new URLSearchParams({ limit: String(PATIENTS_LIMIT) })
+        if (normalizedQuery) searchParams.set('q', normalizedQuery)
+        const data = await apiFetch(`/patients?${searchParams.toString()}`, { token: t })
         const nextPatients = data.data ?? []
         cachePatients(t, normalizedQuery, nextPatients)
         return nextPatients
@@ -93,7 +76,6 @@ export default function PatientsPage() {
 
     try {
       const nextPatients = await request
-
       if (requestId === requestIdRef.current) {
         setPatients(nextPatients)
       }
@@ -105,30 +87,12 @@ export default function PatientsPage() {
   }
 
   useEffect(() => {
-    if (!token) {
-      if (authCheckedRef.current) {
-        setLoading(false)
-      }
-      return
-    }
+    if (!token) return
 
     const normalizedSearch = search.trim()
 
-    if (normalizedSearch.length === 0) {
-      if (!initialLoadedRef.current) {
-        setLoading(true)
-      } else {
-        setSearching(true)
-      }
-      void fetchPatients(token, '').finally(() => {
-        setLoading(false)
-        setSearching(false)
-        initialLoadedRef.current = true
-      })
-      return
-    }
-
     if (normalizedSearch.length < SEARCH_MIN_LENGTH) {
+      setPatients([])
       setSearching(false)
       return
     }
@@ -144,38 +108,8 @@ export default function PatientsPage() {
     return () => window.clearTimeout(timeoutId)
   }, [search, token])
 
-  function handleSearch(q: string) {
-    setSearch(q)
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-app">
-        <main className="p-6 max-w-4xl mx-auto animate-pulse">
-          {/* Header skeleton */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="h-6 bg-surface2 rounded w-28" />
-            <div className="h-9 bg-surface2 rounded-lg w-36" />
-          </div>
-          {/* Search skeleton */}
-          <div className="mb-6 h-12 bg-surface2 rounded-xl" />
-          {/* List skeleton */}
-          <div className="space-y-2">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="bg-surface border border-app rounded-xl p-4 flex items-center gap-4">
-                <div className="h-10 w-10 bg-surface2 rounded-full flex-shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-surface2 rounded w-48" />
-                  <div className="h-3 bg-surface2 rounded w-32" />
-                </div>
-                <div className="h-4 bg-surface2 rounded w-16" />
-              </div>
-            ))}
-          </div>
-        </main>
-      </div>
-    )
-  }
+  const normalizedSearch = search.trim()
+  const hasQuery = normalizedSearch.length >= SEARCH_MIN_LENGTH
 
   return (
     <div className="min-h-screen bg-app text-app">
@@ -205,15 +139,30 @@ export default function PatientsPage() {
           <input
             type="text"
             value={search}
-            onChange={e => handleSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nombre, teléfono o DNI..."
+            autoFocus
             className="w-full bg-surface border border-app rounded-xl pl-10 pr-4 py-3 text-app focus:outline-none focus:border-[#00C4BC] transition-colors"
           />
         </div>
 
         {/* Lista */}
         <div className="bg-surface border border-app rounded-xl overflow-hidden">
-          {searching ? (
+          {!hasQuery ? (
+            <div className="px-6 py-16 text-center">
+              <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-3">
+                <Search size={20} className="text-app3" />
+              </div>
+              <p className="text-app font-medium">
+                {normalizedSearch.length === 0 ? 'Escribí para buscar pacientes' : 'Seguí escribiendo...'}
+              </p>
+              <p className="text-app3 text-sm mt-1">
+                {normalizedSearch.length === 0
+                  ? 'Buscá por nombre, teléfono o DNI'
+                  : `Ingresá al menos ${SEARCH_MIN_LENGTH} caracteres`}
+              </p>
+            </div>
+          ) : searching ? (
             <div className="divide-y divide-app/40 animate-pulse">
               {[...Array(5)].map((_, i) => (
                 <div key={i} className="px-5 py-3.5 flex items-center gap-4">
@@ -233,12 +182,7 @@ export default function PatientsPage() {
               <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-3">
                 <Search size={20} className="text-app3" />
               </div>
-              <p className="text-app3 font-medium">
-                {search ? 'No se encontraron pacientes' : 'No hay pacientes todavía'}
-              </p>
-              {!search && (
-                <p className="text-app3 text-sm mt-1">Agregá el primero con el botón de arriba</p>
-              )}
+              <p className="text-app3 font-medium">No se encontraron pacientes</p>
             </div>
           ) : (
             <>
@@ -303,7 +247,9 @@ export default function PatientsPage() {
           onCreated={async () => {
             setShowModal(false)
             invalidatePatientsCache()
-            await fetchPatients(token, search, { force: true })
+            if (search.trim().length >= SEARCH_MIN_LENGTH) {
+              await fetchPatients(token, search, { force: true })
+            }
           }}
         />
       )}
