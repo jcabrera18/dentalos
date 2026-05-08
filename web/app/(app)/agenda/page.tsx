@@ -424,7 +424,7 @@ export default function AgendaPage() {
 
       {/* ── MOBILE VIEW ── */}
       <div className="md:hidden flex flex-col h-full">
-        <div className="border-b border-app px-4 py-2">
+        <div className="border-b border-neutral-200 dark:border-neutral-800/50 px-4 py-2">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-semibold text-app2">
               {weekDates[0].toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
@@ -511,10 +511,10 @@ export default function AgendaPage() {
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {dayBlocks.map(block => (
                 <div key={block.id} onClick={() => setSelectedBlock(block)}
-                  className="rounded-xl border-l-4 border-l-slate-400 bg-slate-400/10 p-4 cursor-pointer active:scale-95 transition-transform">
+                  className="rounded-xl border-l-2 border-l-slate-400/60 bg-slate-400/8 p-3 cursor-pointer active:scale-95 transition-transform">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-bold text-slate-600 dark:text-slate-300 truncate">🔒 Bloqueado</div>
@@ -538,9 +538,9 @@ export default function AgendaPage() {
                 const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
                 const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
                 return (
-                  <div key={appt.id} className={`rounded-xl border-l-4 ${cfg.border} ${cfg.bg} overflow-hidden`}>
+                  <div key={appt.id} className={`rounded-xl border-l-2 ${cfg.border} ${cfg.bg} overflow-hidden`}>
                     {/* Main row */}
-                    <div className="flex items-start gap-3 p-3" onClick={() => setSelectedAppt(appt)}>
+                    <div className="flex items-start gap-3 p-2.5" onClick={() => setSelectedAppt(appt)}>
                       {/* Hora */}
                       <div className="tabular-nums text-sm font-semibold text-app2 w-12 flex-shrink-0 pt-0.5">
                         {fmt24(appt.starts_at)}
@@ -604,7 +604,7 @@ export default function AgendaPage() {
       {/* ── DESKTOP VIEW ── */}
       <div className="hidden md:flex flex-col flex-1 overflow-hidden">
         {/* Barra superior con navegación */}
-        <div className="px-6 py-2 border-b border-app flex items-center justify-between flex-shrink-0">
+        <div className="px-6 py-2 border-b border-neutral-200 dark:border-neutral-800/50 flex items-center justify-between flex-shrink-0">
           <span className="text-sm text-app2">
             {weekDates[0].toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
             {weekDates[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -662,13 +662,13 @@ export default function AgendaPage() {
         {/* Contenedor scroll — header sticky + grid body */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {/* Header días sticky */}
-          <div className="grid sticky top-0 z-20 bg-app border-b border-app"
+          <div className="grid sticky top-0 z-20 bg-app border-b border-neutral-200 dark:border-neutral-800/50"
             style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
             <div />
             {weekDates.map((d, i) => {
               const isToday = formatDate(d) === today
               return (
-                <div key={i} className="py-2 text-center border-l border-gray-200 dark:border-gray-800">
+                <div key={i} className="py-2 text-center border-l border-neutral-200 dark:border-neutral-800/50">
                   <div className="text-[10px] text-app3 uppercase tracking-wider">{DAYS[i]}</div>
                   <div className={`text-base font-bold mx-auto w-7 h-7 flex items-center justify-center rounded-full ${
                     isToday ? 'bg-[#00C4BC] text-white' : 'text-app'
@@ -685,7 +685,7 @@ export default function AgendaPage() {
             {/* Columna horas */}
             <div>
               {HOURS.map(h => (
-                <div key={h} className="relative border-t border-app/20" style={{ height: SLOT_H }}>
+                <div key={h} className="relative border-t border-neutral-200 dark:border-neutral-800/50" style={{ height: SLOT_H }}>
                   <span className="absolute top-1 right-1.5 text-[10px] tabular-nums text-app3 leading-none">{h}</span>
                 </div>
               ))}
@@ -699,7 +699,7 @@ export default function AgendaPage() {
               const dayBlks = blocksByDay(dateStr)
               return (
                 <div key={dayIdx}
-                  className={`relative border-l border-app/30 ${isToday ? 'bg-[#00C4BC]/5' : ''}`}
+                  className={`relative border-l border-neutral-200 dark:border-neutral-800/50 ${isToday ? 'bg-[#00C4BC]/4' : ''}`}
                   style={{ minHeight: `${HOURS.length * SLOT_H}px` }}
                   onClick={(e) => {
                     if (e.target === e.currentTarget) {
@@ -712,7 +712,7 @@ export default function AgendaPage() {
                     }
                   }}>
                   {HOURS.map((_, i) => (
-                    <div key={i} className="absolute w-full border-t border-app/20"
+                    <div key={i} className="absolute w-full border-t border-neutral-200 dark:border-neutral-800/50"
                       style={{ top: i * SLOT_H }} />
                   ))}
 
@@ -735,7 +735,7 @@ export default function AgendaPage() {
                   {dayBlks.map(block => (
                     <div key={block.id}
                       onClick={() => setSelectedBlock(block)}
-                      className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 bg-slate-400/15 px-1 py-0.5 cursor-pointer hover:bg-slate-400/25 transition-colors overflow-hidden"
+                      className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400/60 bg-slate-400/10 px-1 py-0.5 cursor-pointer hover:bg-slate-400/18 transition-colors overflow-hidden"
                       style={{
                         top:    getSlotTop(block.starts_at),
                         height: getSlotHeight(block.starts_at, block.ends_at),
@@ -752,7 +752,7 @@ export default function AgendaPage() {
                     const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
                     return (
                       <div key={appt.id}
-                        className={`group absolute left-0.5 right-0.5 rounded border-l-4 cursor-pointer hover:z-10 hover:brightness-95 transition-all overflow-visible ${cfg.border} ${cfg.bg}`}
+                        className={`group absolute left-0.5 right-0.5 rounded border-l-2 cursor-pointer hover:z-10 hover:brightness-97 transition-all overflow-visible ${cfg.border} ${cfg.bg}`}
                         style={{ top: getSlotTop(appt.starts_at), height: blockH }}
                         onClick={() => setSelectedAppt(appt)}
                       >
@@ -776,7 +776,7 @@ export default function AgendaPage() {
 
                         {/* Hover actions — aparecen debajo del bloque */}
                         {!isDone && blockH >= 32 && (
-                          <div className="hidden group-hover:flex absolute left-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app rounded-b-lg shadow-xl mt-px w-max">
+                          <div className="hidden group-hover:flex absolute left-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app/30 rounded-b-lg shadow-md mt-px w-max">
                             {appt.status === 'pending' && (
                               <button
                                 onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'confirmed') }}
