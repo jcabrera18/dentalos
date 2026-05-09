@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showInviteSuccess, setShowInviteSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
-  const { data: subscription } = useSubscription()
+  const { data: subscription, refetch: refetchSubscription } = useSubscription()
   const [showPlansModal, setShowPlansModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'growth' | 'scale' | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
@@ -179,6 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const res = await apiFetch('/subscription/status', { token: session.access_token })
         if (res.status === 'active' && !res.alerts?.accessBlocked) {
           invalidateSubscriptionCache()
+          await refetchSubscription()
           setPaymentConfirmed(true)
         }
       } catch { /* silencioso */ }
