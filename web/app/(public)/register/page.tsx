@@ -270,28 +270,44 @@ function RegisterForm() {
 
   // Success state
   if (submitted) {
+    // Invite flow: user is already confirmed, show login modal
+    if (inviteClinic) {
+      return (
+        <div className="text-center space-y-6 max-w-sm mx-auto">
+          <div className="w-16 h-16 bg-[#E6F8F1] rounded-2xl flex items-center justify-center mx-auto">
+            <Check className="w-8 h-8 text-[#00C4BC]" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-extrabold text-[#0F1720] mb-2">¡Cuenta creada!</h2>
+            <p className="text-[#6B7280] text-sm leading-relaxed">
+              Ya sos parte de <span className="font-semibold text-[#0F1720]">{inviteClinic.name}</span>. Ingresá para empezar.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="inline-flex items-center justify-center gap-2 w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-4 rounded-xl transition-all text-base shadow-lg shadow-[#00C4BC]/20"
+          >
+            Ingresar a mi consultorio <ArrowRight className="h-5 w-5" />
+          </button>
+        </div>
+      )
+    }
+
+    // New clinic: user needs to confirm email before logging in
     return (
       <div className="text-center space-y-6 max-w-sm mx-auto">
         <div className="w-16 h-16 bg-[#E6F8F1] rounded-2xl flex items-center justify-center mx-auto">
           <Check className="w-8 h-8 text-[#00C4BC]" />
         </div>
         <div>
-          <h2 className="text-2xl font-extrabold text-[#0F1720] mb-2">¡Cuenta creada!</h2>
+          <h2 className="text-2xl font-extrabold text-[#0F1720] mb-2">¡Ya casi!</h2>
           <p className="text-[#6B7280] text-sm leading-relaxed">
-            {inviteClinic
-              ? `Ya sos parte de ${inviteClinic.name}. Ingresá para empezar.`
-              : 'Tu cuenta está lista. Ingresá ahora para empezar a ordenar tu consultorio.'}
+            Te enviamos un email a <span className="font-semibold text-[#0F1720]">{form.email}</span>. Hacé clic en el enlace para confirmar tu cuenta y empezar.
           </p>
         </div>
-        <button
-          onClick={() => setShowLoginModal(true)}
-          className="inline-flex items-center justify-center gap-2 w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-4 rounded-xl transition-all text-base shadow-lg shadow-[#00C4BC]/20"
-        >
-          Ingresar a mi consultorio <ArrowRight className="h-5 w-5" />
-        </button>
-        {!inviteClinic && (
-          <p className="text-xs text-[#6B7280]">Tus 10 días de prueba empezaron ahora.</p>
-        )}
+        <p className="text-xs text-[#9CA3AF]">
+          ¿No llegó? Revisá la carpeta de spam.
+        </p>
       </div>
     )
   }

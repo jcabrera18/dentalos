@@ -357,7 +357,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ── BOTTOM NAV — mobile ─────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-app z-40">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {NAV_ITEMS.map(item => {
             const Icon = item.icon
             const active = isActive(item.href)
@@ -374,6 +374,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )
           })}
+          <button
+            onClick={() => router.push('/settings')}
+            className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+              isActive('/settings') ? 'text-[#00C4BC]' : 'text-app3'
+            }`}
+          >
+            <Settings size={22} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
+            <span>Config.</span>
+          </button>
         </div>
       </nav>
 

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Plus_Jakarta_Sans } from 'next/font/google'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -16,6 +16,17 @@ const jakarta = Plus_Jakarta_Sans({
 export default function HomePage() {
   const router = useRouter()
   const supabase = createClient()
+
+  // Supabase implicit flow: redirect auth callbacks that land on the home page
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash.includes('type=recovery')) {
+      router.replace('/auth/reset-password' + hash)
+    } else if (hash.includes('type=signup') || hash.includes('type=email_change')) {
+      router.replace('/auth/confirm' + hash)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

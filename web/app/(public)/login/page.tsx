@@ -218,9 +218,9 @@ function LoginForm() {
             <label htmlFor="password" className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider">
               Contraseña
             </label>
-            <a href="#" className="text-xs text-[#00C4BC] hover:underline">
+            <Link href="/auth/forgot-password" className="text-xs text-[#00C4BC] hover:underline">
               ¿Olvidaste tu contraseña?
-            </a>
+            </Link>
           </div>
           <input
             id="password"
