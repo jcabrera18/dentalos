@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
-import { useAppTheme } from '../providers'
+import { useAppTheme, PlansModalProvider } from '../providers'
 import { useState, useEffect } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 import {
@@ -91,7 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       name: 'Scale',
       price: '$95.000',
       description: 'Gestioná tu clínica como una empresa',
-      features: ['Todo lo de Growth', 'Hasta 10 profesionales', '2.000 recordatorios WhatsApp/mes', 'Reportes avanzados', 'Onboarding personalizado', 'Soporte dedicado'],
+      features: ['Todo lo de Growth', 'Profesionales ilimitados', '2.000 recordatorios WhatsApp/mes', 'Reportes avanzados', 'Onboarding personalizado', 'Soporte dedicado'],
       highlight: false,
     },
   ]
@@ -237,6 +237,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
+    <PlansModalProvider openPlansModal={() => { setSelectedPlan(null); setShowPlansModal(true) }}>
     <div className={`${jakarta.className} min-h-screen bg-app flex`}>
 
       {/* ── SIDEBAR — desktop ───────────────────────────────────── */}
@@ -744,5 +745,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
     </div>
+    </PlansModalProvider>
   )
 }

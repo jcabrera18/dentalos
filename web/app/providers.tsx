@@ -16,6 +16,24 @@ export function useAppTheme() {
   return useContext(ThemeContext)
 }
 
+const PlansModalContext = createContext<{
+  openPlansModal: () => void
+}>({
+  openPlansModal: () => {}
+})
+
+export function usePlansModal() {
+  return useContext(PlansModalContext)
+}
+
+export function PlansModalProvider({ openPlansModal, children }: { openPlansModal: () => void; children: React.ReactNode }) {
+  return (
+    <PlansModalContext.Provider value={{ openPlansModal }}>
+      {children}
+    </PlansModalContext.Provider>
+  )
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark')
 
