@@ -124,6 +124,7 @@ export default function AgendaPage() {
   const router   = useRouter()
   const supabase = createClient()
   const auxiliaryDataStartedRef = useRef(false)
+  const myWorkingHoursRef = useRef<WorkingHours | null>(null)
 
   const weekDates = getWeekDates(weekOffset)
   const from = formatDate(weekDates[0])
@@ -192,9 +193,18 @@ export default function AgendaPage() {
     setUserId(myId)
     setProfessionals(profs)
 
-    if (meData.data?.schedule_config?.working_hours) {
-      setWorkingHours(meData.data.schedule_config.working_hours)
+    const myWH = meData.data?.schedule_config?.working_hours ?? null
+    myWorkingHoursRef.current = myWH
+    setWorkingHours(myWH)
+  }
+
+  function loadWorkingHoursForProfessional(id: string, profs: any[]) {
+    if (!id) {
+      setWorkingHours(myWorkingHoursRef.current)
+      return
     }
+    const prof = profs.find(p => p.id === id)
+    setWorkingHours(prof?.schedule_config?.working_hours ?? null)
   }
 
 
@@ -448,8 +458,7 @@ export default function AgendaPage() {
                 onChange={e => {
                   const id = e.target.value
                   setSelectedProfId(id)
-                  const prof = professionals.find(p => p.id === id)
-                  setWorkingHours(id ? (prof?.schedule_config?.working_hours ?? null) : null)
+                  loadWorkingHoursForProfessional(id, professionals)
                 }}
                 className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
@@ -616,8 +625,7 @@ export default function AgendaPage() {
                 onChange={e => {
                   const id = e.target.value
                   setSelectedProfId(id)
-                  const prof = professionals.find(p => p.id === id)
-                  setWorkingHours(id ? (prof?.schedule_config?.working_hours ?? null) : null)
+                  loadWorkingHoursForProfessional(id, professionals)
                 }}
                 className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
@@ -734,8 +742,8 @@ export default function AgendaPage() {
                       style={{
                         top: block.top,
                         height: block.height,
-                        background: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(120,120,120,0.06) 4px, rgba(120,120,120,0.06) 8px)',
-                        backgroundColor: 'rgba(120,120,120,0.07)',
+                        background: 'repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(120,120,120,0.18) 5px, rgba(120,120,120,0.18) 6px)',
+                        backgroundColor: 'rgba(120,120,120,0.08)',
                       }}
                     />
                   ))}

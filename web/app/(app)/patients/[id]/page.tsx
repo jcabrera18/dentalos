@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
-import { Wallet } from 'lucide-react'
+import { Wallet, FileText } from 'lucide-react'
 
 const EMPTY_ACCOUNT_SUMMARY = {
   total_billed: 0,
@@ -116,6 +116,23 @@ export default function PatientDetailPage() {
   const [clinicalHistoryForm, setClinicalHistoryForm] = useState<any>(EMPTY_CLINICAL_HISTORY)
   const [savingClinicalHistory, setSavingClinicalHistory] = useState(false)
   const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(false)
+
+  // --- Consentimientos ---
+  const [showConsentModal, setShowConsentModal] = useState(false)
+  const [consentView, setConsentView] = useState<'list' | 'select' | 'sign' | 'view'>('list')
+  const [viewingConsent, setViewingConsent] = useState<any>(null)
+  const [viewingConsentLoading, setViewingConsentLoading] = useState(false)
+  const [consentTemplates, setConsentTemplates] = useState<any[]>([])
+  const [existingConsents, setExistingConsents] = useState<any[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+  const [consentLoading, setConsentLoading] = useState(false)
+  const [consentSaving, setConsentSaving] = useState(false)
+  const [consentSaved, setConsentSaved] = useState(false)
+  const [professionalName, setProfessionalName] = useState('')
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [hasSignature, setHasSignature] = useState(false)
+  const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
+
   const APPTS_PER_PAGE = 5
   const router = useRouter()
   const params = useParams()
@@ -174,6 +191,10 @@ export default function PatientDetailPage() {
           setClinicalHistoryLoaded(true)
         })
 
+      // Fase 2: consentimientos en background (para badge del botón)
+      void apiFetch(`/consents?patient_id=${params.id}`, { token: session.access_token })
+        .then(res => setExistingConsents(res.data ?? []))
+
       // Fase 2: archivos en background
       void (async () => {
         const { createClient: createSupabase } = await import('@/lib/supabase')
@@ -215,6 +236,140 @@ export default function PatientDetailPage() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
+
+  useEffect(() => {
+    if (consentView !== 'sign') return
+    requestAnimationFrame(() => {
+      const canvas = signatureCanvasRef.current
+      if (!canvas) return
+      canvas.width = canvas.offsetWidth || 400
+      canvas.height = 160
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.strokeStyle = '#1a1a1a'
+        ctx.lineWidth = 2.5
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+      }
+      setHasSignature(false)
+    })
+  }, [consentView])
+
+  async function openConsentModal() {
+    setShowConsentModal(true)
+    setConsentView('list')
+    setConsentLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const [templatesRes, consentsRes, meRes] = await Promise.all([
+        apiFetch('/consents/templates', { token: session.access_token }),
+        apiFetch(`/consents?patient_id=${params.id}`, { token: session.access_token }),
+        apiFetch('/auth/me', { token: session.access_token }),
+      ])
+      setConsentTemplates(templatesRes.data ?? [])
+      setExistingConsents(consentsRes.data ?? [])
+      if (meRes.data) {
+        setProfessionalName(`${meRes.data.first_name} ${meRes.data.last_name}`)
+      }
+    } finally {
+      setConsentLoading(false)
+    }
+  }
+
+  async function openConsentDetail(consentId: string) {
+    setConsentView('view')
+    setViewingConsent(null)
+    setViewingConsentLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const res = await apiFetch(`/consents/${consentId}`, { token: session.access_token })
+      setViewingConsent(res.data)
+    } finally {
+      setViewingConsentLoading(false)
+    }
+  }
+
+  function renderConsentHtml(html: string) {
+    return html
+      .replace(/\{\{patient_name\}\}/g, `${patient.first_name} ${patient.last_name}`)
+      .replace(/\{\{patient_document\}\}/g, patient.document_number ?? '')
+      .replace(/\{\{professional_name\}\}/g, professionalName)
+  }
+
+  function onSignPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = signatureCanvasRef.current
+    if (!canvas) return
+    canvas.setPointerCapture(e.pointerId)
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.beginPath()
+    ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY)
+    setIsDrawing(true)
+  }
+
+  function onSignPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!isDrawing) return
+    const canvas = signatureCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY)
+    ctx.stroke()
+    setHasSignature(true)
+  }
+
+  function onSignPointerUp() {
+    setIsDrawing(false)
+  }
+
+  function clearSignature() {
+    const canvas = signatureCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setHasSignature(false)
+  }
+
+  async function handleSaveConsent() {
+    if (!selectedTemplate || !hasSignature || !signatureCanvasRef.current) return
+    setConsentSaving(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const signatureData = signatureCanvasRef.current.toDataURL('image/png')
+      const renderedHtml = renderConsentHtml(selectedTemplate.content_html)
+      await apiFetch('/consents', {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({
+          patient_id:     params.id,
+          template_id:    selectedTemplate.id,
+          content_html:   renderedHtml,
+          signature_data: signatureData,
+        }),
+      })
+      const updated = await apiFetch(`/consents?patient_id=${params.id}`, { token: session.access_token })
+      setExistingConsents(updated.data ?? [])
+      setConsentSaved(true)
+      setTimeout(() => {
+        setConsentSaved(false)
+        setConsentView('list')
+        setSelectedTemplate(null)
+        setHasSignature(false)
+      }, 1800)
+    } finally {
+      setConsentSaving(false)
+    }
+  }
 
   async function handleSaveNotes() {
     setSavingNotes(true)
@@ -644,10 +799,20 @@ export default function PatientDetailPage() {
 
             <button
               onClick={openAccountModal}
-              className="w-full flex items-center justify-center gap-2 border-2 border-[#00C4BC]/30 hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-[#00C4BC] font-bold text-sm py-2.5 rounded-xl transition-all active:scale-95"
+              className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95"
             >
-              <Wallet size={15} strokeWidth={2} />
-              Ver cuenta corriente
+              <span className="flex items-center gap-2"><Wallet size={15} strokeWidth={2} /> Ver cuenta corriente</span>
+              <span className="text-app3">›</span>
+            </button>
+
+            <button
+              onClick={openConsentModal}
+              className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95"
+            >
+              <span className="flex items-center gap-2"><FileText size={15} strokeWidth={2} /> Consentimientos</span>
+              {existingConsents.length > 0 && (
+                <span className="text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-2 py-0.5 rounded-md">{existingConsents.length}</span>
+              )}
             </button>
 
             {/* Notas del paciente */}
@@ -1645,6 +1810,246 @@ export default function PatientDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal consentimientos */}
+      {showConsentModal && patient && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-surface">
+
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-app shrink-0">
+            {consentView !== 'list' ? (
+              <button
+                onClick={() => {
+                  if (consentView === 'sign') { setConsentView('select'); setHasSignature(false) }
+                  else { setConsentView('list'); setViewingConsent(null) }
+                }}
+                className="w-9 h-9 rounded-xl bg-surface2 flex items-center justify-center text-app hover:bg-surface3 transition-colors text-lg font-medium"
+              >
+                ←
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowConsentModal(false)}
+                className="w-9 h-9 rounded-xl bg-surface2 flex items-center justify-center text-app hover:bg-surface3 transition-colors"
+              >
+                ✕
+              </button>
+            )}
+            <div className="flex-1 min-w-0">
+              <h2 className="font-bold text-base text-app">
+                {consentView === 'list' && 'Consentimientos'}
+                {consentView === 'select' && 'Nuevo consentimiento'}
+                {consentView === 'sign' && selectedTemplate?.name}
+                {consentView === 'view' && ((viewingConsent?.consent_templates as any)?.name ?? 'Consentimiento')}
+              </h2>
+              <p className="text-xs text-app3 truncate">{patient.first_name} {patient.last_name}</p>
+            </div>
+            {consentView === 'list' && !consentLoading && (
+              <button
+                onClick={() => setConsentView('select')}
+                className="flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] text-white text-sm font-bold px-3 py-2 rounded-xl transition-colors active:scale-95"
+              >
+                + Nuevo
+              </button>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-h-0">
+
+            {/* LIST VIEW */}
+            {consentView === 'list' && (
+              <div className="h-full overflow-y-auto p-4">
+                {consentLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => <div key={i} className="bg-surface2 rounded-xl h-16 animate-pulse" />)}
+                  </div>
+                ) : existingConsents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <div className="w-16 h-16 rounded-full bg-surface2 flex items-center justify-center mb-4">
+                      <FileText size={28} className="text-app3" />
+                    </div>
+                    <p className="font-semibold text-app mb-1">Sin consentimientos</p>
+                    <p className="text-sm text-app3 mb-6">No hay consentimientos firmados para este paciente.</p>
+                    <button
+                      onClick={() => setConsentView('select')}
+                      className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-6 py-3 rounded-xl transition-colors active:scale-95"
+                    >
+                      + Nuevo consentimiento
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-w-2xl mx-auto">
+                    {existingConsents.map((c: any) => {
+                      const templateName = (c.consent_templates as any)?.name ?? 'Consentimiento'
+                      const date = c.signed_at
+                        ? new Date(c.signed_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : new Date(c.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => openConsentDetail(c.id)}
+                          className="w-full text-left bg-surface border border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-all active:scale-[0.99]"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-app truncate">{templateName}</p>
+                            <p className="text-xs text-app3">{date}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                              c.status === 'signed' ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'bg-surface2 text-app3'
+                            }`}>
+                              {c.status === 'signed' ? '✓ Firmado' : c.status}
+                            </span>
+                            <span className="text-app3 text-lg">›</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SELECT TEMPLATE VIEW */}
+            {consentView === 'select' && (
+              <div className="h-full overflow-y-auto p-4">
+                {consentLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => <div key={i} className="bg-surface2 rounded-xl h-20 animate-pulse" />)}
+                  </div>
+                ) : consentTemplates.length === 0 ? (
+                  <div className="text-center py-12 text-app3 text-sm">No hay plantillas disponibles.</div>
+                ) : (
+                  <div className="space-y-3 max-w-2xl mx-auto">
+                    <p className="text-sm text-app3 mb-4">Seleccioná el tipo de consentimiento:</p>
+                    {consentTemplates.map((t: any) => (
+                      <button
+                        key={t.id}
+                        onClick={() => { setSelectedTemplate(t); setConsentView('sign') }}
+                        className="w-full text-left bg-surface border border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 rounded-xl px-4 py-4 transition-all active:scale-[0.99] group"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold text-app group-hover:text-[#00C4BC] transition-colors">{t.name}</p>
+                          <span className="text-app3 group-hover:text-[#00C4BC] transition-colors text-lg">›</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* VIEW (detail) */}
+            {consentView === 'view' && (
+              <div className="h-full overflow-y-auto">
+                {viewingConsentLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : viewingConsent ? (
+                  <>
+                    {/* Documento */}
+                    <div className="bg-white">
+                      <div
+                        className="max-w-2xl mx-auto px-6 py-8 text-gray-800 text-sm leading-relaxed [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mb-3 [&_h2]:mt-0 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_li]:mb-1 [&_p]:mb-3 [&_strong]:font-semibold"
+                        dangerouslySetInnerHTML={{ __html: viewingConsent.content_html }}
+                      />
+                    </div>
+
+                    {/* Firma */}
+                    <div className="border-t-2 border-app px-6 py-6 max-w-2xl mx-auto">
+                      <p className="text-xs font-semibold text-app2 uppercase tracking-wider mb-3">Firma del paciente</p>
+                      {viewingConsent.signature_data ? (
+                        <div className="border-2 border-app rounded-xl overflow-hidden bg-white">
+                          <img
+                            src={viewingConsent.signature_data}
+                            alt="Firma del paciente"
+                            className="w-full object-contain"
+                            style={{ maxHeight: 160 }}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-app3 italic">Sin firma registrada</p>
+                      )}
+                      {viewingConsent.signed_at && (
+                        <p className="text-xs text-app3 mt-2">
+                          Firmado el {new Date(viewingConsent.signed_at).toLocaleDateString('es-AR', {
+                            day: 'numeric', month: 'long', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            )}
+
+            {/* SIGN VIEW */}
+            {consentView === 'sign' && selectedTemplate && (
+              <div className="h-full flex flex-col">
+
+                {/* Document preview — scrollable, always white */}
+                <div className="flex-1 overflow-y-auto bg-white">
+                  <div
+                    className="max-w-2xl mx-auto px-6 py-8 text-gray-800 text-sm leading-relaxed [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mb-3 [&_h2]:mt-0 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_li]:mb-1 [&_p]:mb-3 [&_strong]:font-semibold"
+                    dangerouslySetInnerHTML={{ __html: renderConsentHtml(selectedTemplate.content_html) }}
+                  />
+                </div>
+
+                {/* Signature area — fixed at bottom */}
+                <div className="shrink-0 bg-surface border-t-2 border-app px-4 pt-4 pb-6">
+                  {consentSaved ? (
+                    <div className="flex flex-col items-center justify-center py-6 gap-3">
+                      <div className="w-14 h-14 rounded-full bg-[#E6F8F1] flex items-center justify-center">
+                        <svg className="w-7 h-7 text-[#00C4BC]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <p className="font-bold text-app text-base">Consentimiento guardado</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-app2 uppercase tracking-wider">Firma del paciente</p>
+                        <button onClick={clearSignature} className="text-xs text-app3 hover:text-app transition-colors">
+                          Limpiar
+                        </button>
+                      </div>
+                      <div className="relative rounded-xl border-2 border-dashed border-app overflow-hidden bg-white">
+                        {!hasSignature && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+                            <p className="text-gray-300 text-sm">Firme aquí</p>
+                          </div>
+                        )}
+                        <canvas
+                          ref={signatureCanvasRef}
+                          className="w-full block"
+                          style={{ height: 160, touchAction: 'none' }}
+                          onPointerDown={onSignPointerDown}
+                          onPointerMove={onSignPointerMove}
+                          onPointerUp={onSignPointerUp}
+                          onPointerLeave={onSignPointerUp}
+                        />
+                      </div>
+                      <button
+                        onClick={handleSaveConsent}
+                        disabled={!hasSignature || consentSaving}
+                        className="mt-3 w-full bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-40 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl transition-all shadow-sm shadow-[#00C4BC]/20 text-sm"
+                      >
+                        {consentSaving ? 'Guardando...' : 'Firmar y guardar'}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+              </div>
+            )}
+
           </div>
         </div>
       )}
