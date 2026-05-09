@@ -640,21 +640,30 @@ export default function AgendaPage() {
               className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
               🔒 Bloquear horario
             </button>
-            <button
-              onClick={() => {
-                const link = `${window.location.origin}/booking/${userId}`
-                navigator.clipboard.writeText(link)
-                setLinkCopied(true)
-                setTimeout(() => setLinkCopied(false), 2000)
-              }}
-              disabled={!userId}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                linkCopied
-                  ? 'bg-[#E6F8F1] border border-[#00C4BC]/50 text-[#00C4BC]'
-                  : 'bg-[#E6F8F1] hover:bg-[#00C4BC]/20 border border-[#00C4BC]/30 text-[#00C4BC]'
-              } disabled:opacity-60 disabled:hover:bg-[#E6F8F1]`}>
-              {linkCopied ? '✓ Copiado' : '📋 Link de agenda'}
-            </button>
+            <div className="relative group">
+              <button
+                onClick={() => {
+                  const link = `${window.location.origin}/booking/${userId}`
+                  navigator.clipboard.writeText(link)
+                  setLinkCopied(true)
+                  setTimeout(() => setLinkCopied(false), 2000)
+                }}
+                disabled={!userId}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  linkCopied
+                    ? 'bg-[#E6F8F1] border border-[#00C4BC]/50 text-[#00C4BC]'
+                    : 'bg-[#E6F8F1] hover:bg-[#00C4BC]/20 border border-[#00C4BC]/30 text-[#00C4BC]'
+                } disabled:opacity-60 disabled:hover:bg-[#E6F8F1]`}>
+                {linkCopied ? '✓ Copiado' : '📋 Link de agenda'}
+              </button>
+              <div className="pointer-events-none absolute top-full right-0 mt-2 w-64 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                <div className="bg-neutral-900 text-white text-xs rounded-xl px-3 py-2.5 shadow-lg leading-relaxed">
+                  <div className="absolute right-4 bottom-full w-0 h-0 border-x-4 border-x-transparent border-b-4 border-b-neutral-900" />
+                  <div className="font-semibold mb-0.5">Link de reserva online</div>
+                  Copiá este link y compartilo con tus pacientes. Ellos pueden elegir un horario y reservar un turno sin que tengas que llamarlos.
+                </div>
+              </div>
+            </div>
             <WeekNav />
           </div>
         </div>
