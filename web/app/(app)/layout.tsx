@@ -51,6 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showPlansModal, setShowPlansModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'growth' | 'scale' | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [qrInitPoint, setQrInitPoint] = useState<string | null>(null)
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState<string | null>(null)
 
@@ -128,6 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let cancelled = false
     setQrLoading(true)
     setQrDataUrl(null)
+    setQrInitPoint(null)
     setQrError(null)
 
     async function generateQr() {
@@ -145,10 +147,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           ? res.init_point
           : (res.sandbox_init_point ?? res.init_point)
 
-        const QRCode = (await import('qrcode')).default
-        const dataUrl = await QRCode.toDataURL(url, { width: 208, margin: 1 })
+        if (!cancelled) setQrInitPoint(url)
 
-        if (!cancelled) setQrDataUrl(dataUrl)
+        if (res.qr_data) {
+          const QRCode = (await import('qrcode')).default
+          const dataUrl = await QRCode.toDataURL(res.qr_data, { width: 208, margin: 1 })
+          if (!cancelled) setQrDataUrl(dataUrl)
+        }
       } catch (err) {
         if (!cancelled) setQrError('No se pudo generar el QR. Intentá de nuevo.')
       } finally {
@@ -587,26 +592,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                     {/* QR MercadoPago */}
                     <div className="flex-1 flex flex-col items-center text-center">
-                      <p className="text-sm font-semibold text-[#0F1720] mb-4">
-                        Escaneá con tu app bancaria o de pago
-                      </p>
-                      <div className="w-52 h-52 bg-[#F3F4F6] border-2 border-[#D1D5DB] rounded-2xl flex flex-col items-center justify-center gap-2 mb-4 overflow-hidden">
-                        {qrLoading && (
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
-                            <p className="text-xs text-[#6B7280]">Generando QR...</p>
+                      {/* QR — solo desktop, solo si hay qr_data */}
+                      {(qrLoading || qrDataUrl) && (
+                        <div className="hidden md:flex flex-col items-center">
+                          <p className="text-sm font-semibold text-[#0F1720] mb-4">
+                            Escaneá con tu app bancaria o de pago
+                          </p>
+                          <div className="w-52 h-52 bg-[#F3F4F6] border-2 border-[#D1D5DB] rounded-2xl flex flex-col items-center justify-center gap-2 mb-4 overflow-hidden">
+                            {qrLoading && (
+                              <div className="flex flex-col items-center gap-2">
+                                <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
+                                <p className="text-xs text-[#6B7280]">Generando QR...</p>
+                              </div>
+                            )}
+                            {qrDataUrl && !qrLoading && (
+                              <img src={qrDataUrl} alt="QR de pago MercadoPago" className="w-full h-full object-contain" />
+                            )}
                           </div>
-                        )}
-                        {qrDataUrl && !qrLoading && (
-                          <img src={qrDataUrl} alt="QR de pago MercadoPago" className="w-full h-full object-contain" />
-                        )}
-                        {qrError && !qrLoading && (
-                          <p className="text-xs text-red-500 px-4">{qrError}</p>
-                        )}
+                          <p className="text-xs text-[#6B7280] mb-4">
+                            Cualquier billetera virtual o app bancaria
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Mobile: título sin QR */}
+                      <div className="flex md:hidden flex-col items-center mb-4">
+                        <p className="text-sm font-semibold text-[#0F1720] mb-1">
+                          Completá tu pago en MercadoPago
+                        </p>
+                        <p className="text-xs text-[#6B7280]">
+                          Serás redirigido de forma segura
+                        </p>
                       </div>
-                      <p className="text-xs text-[#6B7280] max-w-[200px]">
-                        Podés pagar con cualquier billetera virtual o app bancaria que soporte MercadoPago.
-                      </p>
+
+                      {/* Botón de redirección — siempre visible */}
+                      {qrInitPoint && !qrLoading && (
+                        <a
+                          href={qrInitPoint}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 bg-[#009EE3] hover:bg-[#0088cc] text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+                        >
+                          Pagar en MercadoPago
+                        </a>
+                      )}
+                      {qrLoading && (
+                        <div className="h-10 w-48 bg-[#F3F4F6] rounded-xl animate-pulse" />
+                      )}
                     </div>
 
                   </div>
