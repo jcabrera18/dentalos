@@ -47,7 +47,7 @@ function ResetPasswordForm() {
     // ── PKCE flow: ?code=... ─────────────────────────────────
     if (code) {
       supabase.auth.exchangeCodeForSession(code)
-        .then(({ error }) => {
+        .then(({ error }: { error: Error | null }) => {
           if (error) {
             setErrorMsg('El enlace expiró o ya fue utilizado. Solicitá uno nuevo.')
             setStatus('error')

@@ -50,6 +50,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: subscription } = useSubscription()
   const [showPlansModal, setShowPlansModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'growth' | 'scale' | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrError, setQrError] = useState<string | null>(null)
 
   const PLAN_KEY_MAP: Record<string, 'starter' | 'growth' | 'scale'> = {
     basic: 'starter',
@@ -114,6 +117,48 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
+
+  useEffect(() => {
+    if (!selectedPlan) {
+      setQrDataUrl(null)
+      setQrError(null)
+      return
+    }
+
+    let cancelled = false
+    setQrLoading(true)
+    setQrDataUrl(null)
+    setQrError(null)
+
+    async function generateQr() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error('Sin sesión')
+
+        const res = await apiFetch('/mercadopago/preference', {
+          method: 'POST',
+          token: session.access_token,
+          body: JSON.stringify({ plan: selectedPlan }),
+        })
+
+        const url = process.env.NODE_ENV === 'production'
+          ? res.init_point
+          : (res.sandbox_init_point ?? res.init_point)
+
+        const QRCode = (await import('qrcode')).default
+        const dataUrl = await QRCode.toDataURL(url, { width: 208, margin: 1 })
+
+        if (!cancelled) setQrDataUrl(dataUrl)
+      } catch (err) {
+        if (!cancelled) setQrError('No se pudo generar el QR. Intentá de nuevo.')
+      } finally {
+        if (!cancelled) setQrLoading(false)
+      }
+    }
+
+    generateQr()
+    return () => { cancelled = true }
+  }, [selectedPlan])
 
   async function handleCopyInviteLink() {
     setCopyState('loading')
@@ -540,26 +585,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </ul>
                     </div>
 
-                    {/* QR placeholder */}
+                    {/* QR MercadoPago */}
                     <div className="flex-1 flex flex-col items-center text-center">
                       <p className="text-sm font-semibold text-[#0F1720] mb-4">
                         Escaneá con tu app bancaria o de pago
                       </p>
-                      <div className="w-52 h-52 bg-[#F3F4F6] border-2 border-dashed border-[#D1D5DB] rounded-2xl flex flex-col items-center justify-center gap-2 mb-4">
-                        <span className="text-4xl">📲</span>
-                        <p className="text-xs text-[#6B7280] font-medium">QR próximamente</p>
+                      <div className="w-52 h-52 bg-[#F3F4F6] border-2 border-[#D1D5DB] rounded-2xl flex flex-col items-center justify-center gap-2 mb-4 overflow-hidden">
+                        {qrLoading && (
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
+                            <p className="text-xs text-[#6B7280]">Generando QR...</p>
+                          </div>
+                        )}
+                        {qrDataUrl && !qrLoading && (
+                          <img src={qrDataUrl} alt="QR de pago MercadoPago" className="w-full h-full object-contain" />
+                        )}
+                        {qrError && !qrLoading && (
+                          <p className="text-xs text-red-500 px-4">{qrError}</p>
+                        )}
                       </div>
                       <p className="text-xs text-[#6B7280] max-w-[200px]">
-                        Estamos integrando MercadoPago. Por ahora contactanos para activar tu plan.
+                        Podés pagar con cualquier billetera virtual o app bancaria que soporte MercadoPago.
                       </p>
-                      <a
-                        href="https://wa.me/5491100000000"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-4 inline-flex items-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
-                      >
-                        Contactar por WhatsApp
-                      </a>
                     </div>
 
                   </div>
