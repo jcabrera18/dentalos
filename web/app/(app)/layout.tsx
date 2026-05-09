@@ -20,7 +20,7 @@ import {
   Clock,
   Settings,
 } from 'lucide-react'
-import { useSubscription } from '@/lib/useSubscription'
+import { useSubscription, invalidateSubscriptionCache } from '@/lib/useSubscription'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -54,6 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [qrInitPoint, setQrInitPoint] = useState<string | null>(null)
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState<string | null>(null)
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false)
 
   const PLAN_KEY_MAP: Record<string, 'starter' | 'growth' | 'scale'> = {
     basic: 'starter',
@@ -122,7 +123,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!selectedPlan) {
       setQrDataUrl(null)
+      setQrInitPoint(null)
       setQrError(null)
+      setPaymentConfirmed(false)
       return
     }
 
@@ -164,6 +167,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     generateQr()
     return () => { cancelled = true }
   }, [selectedPlan])
+
+  // Polling: verifica cada 4s si el pago fue confirmado mientras el modal está abierto
+  useEffect(() => {
+    if (!qrInitPoint || paymentConfirmed) return
+
+    const check = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+        const res = await apiFetch('/subscription/status', { token: session.access_token })
+        if (res.status === 'active' && !res.alerts?.accessBlocked) {
+          invalidateSubscriptionCache()
+          setPaymentConfirmed(true)
+        }
+      } catch { /* silencioso */ }
+    }
+
+    const interval = setInterval(check, 4000)
+    return () => clearInterval(interval)
+  }, [qrInitPoint, paymentConfirmed])
 
   async function handleCopyInviteLink() {
     setCopyState('loading')
@@ -573,6 +596,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               const plan = PLANS.find(p => p.key === selectedPlan)!
               return (
                 <div className="px-8 pb-8">
+
+                  {/* Pago confirmado */}
+                  {paymentConfirmed && (
+                    <div className="flex flex-col items-center text-center py-8 gap-4">
+                      <div className="w-16 h-16 rounded-full bg-[#00C4BC]/10 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-[#00C4BC]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-xl font-extrabold text-[#0F1720]">¡Pago recibido!</p>
+                        <p className="text-sm text-[#6B7280] mt-1">Tu plan <span className="font-semibold text-[#0F1720]">{plan.name}</span> ya está activo.</p>
+                      </div>
+                      <button
+                        onClick={() => { setShowPlansModal(false); setSelectedPlan(null) }}
+                        className="mt-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-8 py-3 rounded-xl transition-colors"
+                      >
+                        Continuar
+                      </button>
+                    </div>
+                  )}
+
+                  {!paymentConfirmed && (
                   <div className="flex flex-col md:flex-row gap-8 items-start">
 
                     {/* Resumen del plan elegido */}
@@ -659,6 +705,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </button>
                     )}
                   </div>
+                  )}
                 </div>
               )
             })()}
