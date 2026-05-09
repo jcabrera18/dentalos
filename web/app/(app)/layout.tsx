@@ -619,6 +619,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   )}
 
                   {!paymentConfirmed && (
+                  <>
                   <div className="flex flex-col md:flex-row gap-8 items-start">
 
                     {/* Resumen del plan elegido */}
@@ -705,6 +706,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </button>
                     )}
                   </div>
+                  </>
                   )}
                 </div>
               )
