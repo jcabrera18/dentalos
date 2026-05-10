@@ -131,43 +131,34 @@ function periodChartLabel(p: Period, customFrom: string, customTo: string): stri
 export default function StatisticsPage() {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
+  const [movementsLoading, setMovementsLoading] = useState(false)
   const [token, setToken] = useState('')
 
-  // Subvista
   const [subview, setSubview] = useState<'financieras' | 'clinicas'>('financieras')
-
-  // Período del análisis
   const [period, setPeriod] = useState<Period>('month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
 
-  // Datos del período seleccionado (para análisis)
-  const [payments, setPayments] = useState<any[]>([])
-  const [expenses, setExpenses] = useState<any[]>([])
-  const [chartData, setChartData] = useState<{ day: string; total: number }[]>([])
+  // Persistent KPIs (all-time + this month, not period-scoped)
+  const [kpis, setKpis] = useState<any>(null)
+  // Period analytics: income/expenses totals, breakdowns, chart data
+  const [analytics, setAnalytics] = useState<any>(null)
+  // Server-paginated movements list
+  const [movements, setMovements] = useState<any[]>([])
+  const [movementsTotal, setMovementsTotal] = useState(0)
 
-  // Período anterior (para comparación)
-  const [prevPayments, setPrevPayments] = useState<any[]>([])
-  const [prevExpenses, setPrevExpenses] = useState<any[]>([])
-
-  // KPIs persistentes (no dependen del filtro temporal)
-  const [allPayments, setAllPayments] = useState<any[]>([])
-  const [allExpenses, setAllExpenses] = useState<any[]>([])
-  const [thisMonthPayments, setThisMonthPayments] = useState<any[]>([])
-  const [thisMonthExpenses, setThisMonthExpenses] = useState<any[]>([])
-
-  // Métricas clínicas (últimos 90 días)
+  // Clinical metrics (last 90 days, static)
   const [attendedByMonth, setAttendedByMonth] = useState<{ month: string; total: number }[]>([])
   const [topTypes, setTopTypes] = useState<{ type: string; count: number }[]>([])
   const [attendedByProfessional, setAttendedByProfessional] = useState<{ name: string; color: string; count: number }[]>([])
 
-  // KPIs clínicos por período
+  // Clinical KPIs per period
   const [clinicalPeriod, setClinicalPeriod] = useState<Period>('month')
   const [clinicalAppts, setClinicalAppts] = useState<any[]>([])
   const [clinicalLoading, setClinicalLoading] = useState(false)
 
-  // Historial
-  const [histFilter, setHistFilter] = useState<'all' | 'ingresos' | 'gastos'>('all')
+  // Historial filters — type matches API values
+  const [histFilter, setHistFilter] = useState<'all' | 'payment' | 'expense'>('all')
   const [histPage, setHistPage] = useState(1)
 
   // Modales
@@ -199,8 +190,9 @@ export default function StatisticsPage() {
       setToken(t)
 
       await Promise.all([
-        fetchFinancialData('month', t),
-        fetchPersistentData(t),
+        fetchKpis(t),
+        fetchAnalytics('month', t),
+        fetchMovements('month', t, '', '', 'all', 1),
         fetchPatients(t),
         fetchProfessionals(t),
         fetchClinicalMetrics(t),
@@ -218,76 +210,35 @@ export default function StatisticsPage() {
 
   // ── Fetchers ──
 
-  async function fetchAllPages(path: string, t: string): Promise<any[]> {
-    const results: any[] = []
-    let offset = 0
-    const pageSize = 500
-    while (true) {
-      const sep = path.includes('?') ? '&' : '?'
-      const data = await apiFetch(`${path}${sep}limit=${pageSize}&offset=${offset}`, { token: t })
-      const page: any[] = data.data ?? []
-      results.push(...page)
-      if (page.length < pageSize) break
-      offset += pageSize
-    }
-    return results
+  async function fetchKpis(t: string) {
+    const data = await apiFetch('/finance/kpis', { token: t })
+    setKpis(data.data ?? null)
   }
 
-  async function fetchPersistentData(t: string) {
-    const [allP, allE, monthP, monthE] = await Promise.all([
-      fetchAllPages(`/payments?from=2020-01-01&to=${todayAR()}`, t),
-      fetchAllPages(`/expenses?from=2020-01-01&to=${todayAR()}`, t),
-      apiFetch(`/payments?from=${firstOfMonthAR()}&to=${todayAR()}&limit=500`, { token: t }),
-      apiFetch(`/expenses?from=${firstOfMonthAR()}&to=${todayAR()}&limit=500`, { token: t }),
-    ])
-    setAllPayments(allP)
-    setAllExpenses(allE)
-    setThisMonthPayments(monthP.data ?? [])
-    setThisMonthExpenses(monthE.data ?? [])
-  }
-
-  async function fetchFinancialData(p: Period, t: string, cFrom = '', cTo = '') {
+  async function fetchAnalytics(p: Period, t: string, cFrom = '', cTo = '') {
     setDataLoading(true)
     try {
       const { from, to } = periodToDateRange(p, cFrom, cTo)
       const prevRange = getPrevPeriodRange(p)
-
-      const fetches: Promise<any>[] = [
-        apiFetch(`/payments?from=${from}&to=${to}&limit=500`, { token: t }),
-        apiFetch(`/expenses?from=${from}&to=${to}&limit=500`, { token: t }),
-      ]
-      if (prevRange) {
-        fetches.push(apiFetch(`/payments?from=${prevRange.from}&to=${prevRange.to}&limit=500`, { token: t }))
-        fetches.push(apiFetch(`/expenses?from=${prevRange.from}&to=${prevRange.to}&limit=500`, { token: t }))
-      }
-
-      const [pData, eData, prevPData, prevEData] = await Promise.all(fetches)
-      const paymentsList: any[] = pData.data ?? []
-      setPayments(paymentsList)
-      setExpenses(eData.data ?? [])
-      setPrevPayments(prevPData?.data ?? [])
-      setPrevExpenses(prevEData?.data ?? [])
-      setHistPage(1)
-
-      // Calcular chartData a partir de los pagos ya traídos
-      const byDay: Record<string, number> = {}
-      paymentsList.forEach(pay => {
-        const day = new Date(pay.paid_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-        byDay[day] = (byDay[day] ?? 0) + Number(pay.amount)
-      })
-      const result: { day: string; total: number }[] = []
-      const start = new Date(`${from}T12:00:00-03:00`)
-      const end = new Date(`${to}T12:00:00-03:00`)
-      const cur = new Date(start)
-      while (cur <= end) {
-        const key = cur.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-        const label = cur.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires' })
-        result.push({ day: label, total: byDay[key] ?? 0 })
-        cur.setDate(cur.getDate() + 1)
-      }
-      setChartData(result)
+      let url = `/finance/analytics?from=${from}&to=${to}`
+      if (prevRange) url += `&prev_from=${prevRange.from}&prev_to=${prevRange.to}`
+      const data = await apiFetch(url, { token: t })
+      setAnalytics(data.data ?? null)
     } finally {
       setDataLoading(false)
+    }
+  }
+
+  async function fetchMovements(p: Period, t: string, cFrom = '', cTo = '', type: 'all' | 'payment' | 'expense' = 'all', page = 1) {
+    setMovementsLoading(true)
+    try {
+      const { from, to } = periodToDateRange(p, cFrom, cTo)
+      const offset = (page - 1) * HIST_PAGE_SIZE
+      const data = await apiFetch(`/finance/movements?from=${from}&to=${to}&type=${type}&limit=${HIST_PAGE_SIZE}&offset=${offset}`, { token: t })
+      setMovements(data.data ?? [])
+      setMovementsTotal(data.meta?.total ?? 0)
+    } finally {
+      setMovementsLoading(false)
     }
   }
 
@@ -357,21 +308,49 @@ export default function StatisticsPage() {
     }
   }
 
+  async function refreshAll() {
+    await Promise.all([
+      fetchKpis(token),
+      fetchAnalytics(period, token, customFrom, customTo),
+      fetchMovements(period, token, customFrom, customTo, histFilter, 1),
+    ])
+    setHistPage(1)
+  }
+
   async function handleChangePeriod(p: Period) {
     setPeriod(p)
+    setHistPage(1)
     if (p !== 'custom') {
-      await fetchFinancialData(p, token)
+      await Promise.all([
+        fetchAnalytics(p, token),
+        fetchMovements(p, token, '', '', histFilter, 1),
+      ])
     }
   }
 
   async function handleApplyCustomPeriod() {
     if (!customFrom || !customTo) return
-    await fetchFinancialData('custom', token, customFrom, customTo)
+    setHistPage(1)
+    await Promise.all([
+      fetchAnalytics('custom', token, customFrom, customTo),
+      fetchMovements('custom', token, customFrom, customTo, histFilter, 1),
+    ])
   }
 
   async function handleChangeClinicalPeriod(p: Period) {
     setClinicalPeriod(p)
     await fetchClinicalPeriodData(p, token)
+  }
+
+  async function handleHistFilterChange(f: 'all' | 'payment' | 'expense') {
+    setHistFilter(f)
+    setHistPage(1)
+    await fetchMovements(period, token, customFrom, customTo, f, 1)
+  }
+
+  async function handleHistPageChange(page: number) {
+    setHistPage(page)
+    await fetchMovements(period, token, customFrom, customTo, histFilter, page)
   }
 
   async function confirmDeletePayment() {
@@ -380,10 +359,7 @@ export default function StatisticsPage() {
     setDeletePaymentError('')
     try {
       await apiFetch(`/payments/${paymentToDelete.id}`, { method: 'DELETE', token })
-      await Promise.all([
-        fetchFinancialData(period, token, customFrom, customTo),
-        fetchPersistentData(token),
-      ])
+      await refreshAll()
       setPaymentToDelete(null)
     } catch (err) {
       setDeletePaymentError(err instanceof Error ? err.message : 'No se pudo eliminar el cobro')
@@ -394,60 +370,53 @@ export default function StatisticsPage() {
 
   async function deleteExpense(id: string) {
     await apiFetch(`/expenses/${id}`, { method: 'DELETE', token })
-    await Promise.all([
-      fetchFinancialData(period, token, customFrom, customTo),
-      fetchPersistentData(token),
-    ])
+    await refreshAll()
   }
 
-  // ── KPIs persistentes (no afectados por el filtro temporal) ──
+  // ── Derived values from kpis (persistent, not period-scoped) ──
 
-  const allIncome = allPayments.reduce((s, p) => s + Number(p.amount), 0)
-  const allExpense = allExpenses.reduce((s, e) => s + Number(e.amount), 0)
+  const allIncome = Number(kpis?.all_time_income ?? 0)
+  const allExpense = Number(kpis?.all_time_expenses ?? 0)
   const cajaDispo = allIncome - allExpense
+  const cobradoEsteMes = Number(kpis?.month_income ?? 0)
+  const egresosEsteMes = Number(kpis?.month_expenses ?? 0)
+  const pendingTotal = Number(kpis?.pending_total ?? 0)
+  const allDebtorsByPatient: any[] = kpis?.debtors ?? []
 
-  const cobradoEsteMes = thisMonthPayments.reduce((s, p) => s + Number(p.amount), 0)
-  const egresosEsteMes = thisMonthExpenses.reduce((s, e) => s + Number(e.amount), 0)
+  // ── Derived values from analytics (period-scoped) ──
 
-  const patientNetBalanceMap: Record<string, number> = allPayments.reduce((acc, p) => {
-    const id = p.patient_id
-    if (!id) return acc
-    const total = Number(p.total_amount) || 0
-    const paid = Number(p.amount) || 0
-    acc[id] = (acc[id] ?? 0) + (total - paid)
-    return acc
-  }, {} as Record<string, number>)
+  const income = Number(analytics?.income ?? 0)
+  const expense = Number(analytics?.expenses ?? 0)
+  const incomeCount = Number(analytics?.income_count ?? 0)
+  const avgTicket = incomeCount > 0 ? Math.round(income / incomeCount) : 0
+  const prevIncome = Number(analytics?.prev_income ?? 0)
+  const prevExpense = Number(analytics?.prev_expenses ?? 0)
+  const prevIncomeCount = Number(analytics?.prev_income_count ?? 0)
+  const prevAvgTicket = prevIncomeCount > 0 ? Math.round(prevIncome / prevIncomeCount) : 0
 
-  const allDebtorsByPatient = (Object.values(
-    allPayments.reduce((acc, p) => {
-      const id = p.patient_id ?? 'unknown'
-      if (!id || id === 'unknown') return acc
-      const total = Number(p.total_amount) || 0
-      const paid = Number(p.amount) || 0
-      if (!acc[id]) acc[id] = {
-        id,
-        name: p.patients ? `${p.patients.first_name} ${p.patients.last_name}` : 'Sin nombre',
-        phone: p.patients?.phone ?? '',
-        balance: 0,
-        lastPayment: p.paid_at,
-      }
-      acc[id].balance += total - paid
-      if (new Date(p.paid_at) > new Date(acc[id].lastPayment)) acc[id].lastPayment = p.paid_at
-      return acc
-    }, {} as Record<string, any>)
-  ) as any[]).filter((d: any) => d.balance > 0).sort((a: any, b: any) => b.balance - a.balance)
+  const byMethod: { method: string; total: number }[] = analytics?.by_method ?? []
+  const byCategory: { category: string; total: number }[] = analytics?.by_category ?? []
+  const byProfessional: { name: string; total: number }[] = analytics?.by_professional ?? []
 
-  const pendingTotal = allDebtorsByPatient.reduce((s: number, d: any) => s + d.balance, 0)
-
-  // ── KPIs del período seleccionado (para el bloque de análisis) ──
-
-  const income = payments.reduce((s, p) => s + Number(p.amount), 0)
-  const expense = expenses.reduce((s, e) => s + Number(e.amount), 0)
-  const avgTicket = payments.length > 0 ? Math.round(income / payments.length) : 0
-
-  const prevIncome = prevPayments.reduce((s, p) => s + Number(p.amount), 0)
-  const prevExpense = prevExpenses.reduce((s, e) => s + Number(e.amount), 0)
-  const prevAvgTicket = prevPayments.length > 0 ? Math.round(prevIncome / prevPayments.length) : 0
+  // Fill zero-days in the date range so the chart has a point for every day
+  const chartData = (() => {
+    const byDay: Record<string, number> = {}
+    ;(analytics?.by_day ?? []).forEach(({ day, total }: { day: string; total: number }) => {
+      byDay[String(day)] = Number(total)
+    })
+    const result: { day: string; total: number }[] = []
+    const { from, to } = periodToDateRange(period, customFrom, customTo)
+    const start = new Date(`${from}T12:00:00-03:00`)
+    const end = new Date(`${to}T12:00:00-03:00`)
+    const cur = new Date(start)
+    while (cur <= end) {
+      const key = cur.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+      const label = cur.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires' })
+      result.push({ day: label, total: byDay[key] ?? 0 })
+      cur.setDate(cur.getDate() + 1)
+    }
+    return result
+  })()
 
   function delta(current: number, previous: number): { pct: number; up: boolean } | null {
     if (previous === 0 || !PREV_LABEL[period]) return null
@@ -460,34 +429,6 @@ export default function StatisticsPage() {
   const deltaAvgTicket = delta(avgTicket, prevAvgTicket)
   const prevLabel = PREV_LABEL[period]
 
-  const byMethod = (Object.values(
-    payments.reduce((acc, p) => {
-      const k = p.method ?? 'other'
-      acc[k] = { method: k, total: (acc[k]?.total ?? 0) + Number(p.amount) }
-      return acc
-    }, {} as Record<string, { method: string; total: number }>)
-  ) as { method: string; total: number }[]).sort((a, b) => b.total - a.total)
-
-  const byCategory = (Object.values(
-    expenses.reduce((acc, e) => {
-      const k = e.category ?? 'Otro'
-      acc[k] = { category: k, total: (acc[k]?.total ?? 0) + Number(e.amount) }
-      return acc
-    }, {} as Record<string, { category: string; total: number }>)
-  ) as { category: string; total: number }[]).sort((a, b) => b.total - a.total)
-
-  const byProfessional = (Object.values(
-    payments.reduce((acc, p) => {
-      const k = p.professional_id ?? 'sin'
-      const name = p.professionals
-        ? `${p.professionals.first_name} ${p.professionals.last_name}`
-        : 'Sin profesional'
-      if (!acc[k]) acc[k] = { name, total: 0 }
-      acc[k].total += Number(p.amount)
-      return acc
-    }, {} as Record<string, { name: string; total: number }>)
-  ) as { name: string; total: number }[]).sort((a, b) => b.total - a.total)
-
   // ── KPIs clínicos por período ──
   const clinicalTotal = clinicalAppts.length
   const clinicalActive = clinicalAppts.filter(a => a.status !== 'cancelled').length
@@ -497,20 +438,7 @@ export default function StatisticsPage() {
   const clinicalAbsenceRate = clinicalActive > 0 ? Math.round((clinicalAbsent / clinicalActive) * 100) : 0
   const clinicalOccupancyRate = clinicalTotal > 0 ? Math.round((clinicalAttended / clinicalTotal) * 100) : 0
 
-  // Historial combinado del período
-  const combined = [
-    ...payments.map(p => ({ ...p, _type: 'ingreso' as const, _date: p.paid_at })),
-    ...expenses.map(e => ({ ...e, _type: 'gasto' as const, _date: e.paid_at })),
-  ].sort((a, b) => new Date(b._date).getTime() - new Date(a._date).getTime())
-
-  const filteredHist = histFilter === 'all'
-    ? combined
-    : histFilter === 'ingresos'
-      ? combined.filter(i => i._type === 'ingreso')
-      : combined.filter(i => i._type === 'gasto')
-
-  const totalHistPages = Math.ceil(filteredHist.length / HIST_PAGE_SIZE) || 1
-  const histItems = filteredHist.slice((histPage - 1) * HIST_PAGE_SIZE, histPage * HIST_PAGE_SIZE)
+  const totalHistPages = Math.ceil(movementsTotal / HIST_PAGE_SIZE) || 1
 
 
   // ── Loading skeleton ──
@@ -675,7 +603,7 @@ export default function StatisticsPage() {
                 <div className="text-2xl font-bold text-[#00C4BC] dark:text-emerald-400">
                   {maskedAmt(cobradoEsteMes)}
                 </div>
-                <div className="text-xs text-app3 mt-1">{thisMonthPayments.length} cobros</div>
+                <div className="text-xs text-app3 mt-1">{Number(kpis?.month_income_count ?? 0)} cobros</div>
               </div>
 
               {/* Egresos este mes */}
@@ -684,7 +612,7 @@ export default function StatisticsPage() {
                 <div className={`text-2xl font-bold ${egresosEsteMes > 0 ? 'text-red-500 dark:text-red-400' : 'text-app3'}`}>
                   {egresosEsteMes > 0 ? maskedAmt(egresosEsteMes) : '—'}
                 </div>
-                <div className="text-xs text-app3 mt-1">{thisMonthExpenses.length} registros</div>
+                <div className="text-xs text-app3 mt-1">{Number(kpis?.month_expense_count ?? 0)} registros</div>
               </div>
 
             </div>
@@ -783,7 +711,7 @@ export default function StatisticsPage() {
               }
 
               // Deudores antiguos
-              const oldDebtors = allDebtorsByPatient.filter((d: any) => daysSince(d.lastPayment) > 30)
+              const oldDebtors = allDebtorsByPatient.filter((d: any) => daysSince(d.last_payment_at) > 30)
               if (oldDebtors.length > 0) {
                 insights.push({
                   icon: '⏳',
@@ -809,12 +737,12 @@ export default function StatisticsPage() {
               }
 
               // Mejor día de la semana
-              if (payments.length >= 5) {
+              if (incomeCount >= 5) {
                 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
                 const byWeekday: Record<number, number> = {}
-                payments.forEach(p => {
-                  const dow = new Date(p.paid_at).getDay()
-                  byWeekday[dow] = (byWeekday[dow] ?? 0) + Number(p.amount)
+                ;(analytics?.by_day ?? []).forEach(({ day, total }: { day: string; total: number }) => {
+                  const dow = new Date(String(day) + 'T12:00:00').getDay()
+                  byWeekday[dow] = (byWeekday[dow] ?? 0) + Number(total)
                 })
                 const topDay = Object.entries(byWeekday).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
                 if (topDay) {
@@ -865,7 +793,7 @@ export default function StatisticsPage() {
                     <div className="text-xs text-app3 uppercase tracking-wider mb-1">Ingresos del período</div>
                     <div className="text-2xl font-bold text-[#00C4BC] dark:text-emerald-400">{maskedAmt(income)}</div>
                     {!masked && <DeltaBadge d={deltaIncome} label={prevLabel} positiveIsGood />}
-                    <div className="text-xs text-app3 mt-1">{payments.length} cobros</div>
+                    <div className="text-xs text-app3 mt-1">{incomeCount} cobros</div>
                   </div>
 
                   {/* Egresos del período */}
@@ -873,7 +801,7 @@ export default function StatisticsPage() {
                     <div className="text-xs text-app3 uppercase tracking-wider mb-1">Egresos del período</div>
                     <div className="text-2xl font-bold text-red-500 dark:text-red-400">{maskedAmt(expense)}</div>
                     {!masked && <DeltaBadge d={deltaExpense} label={prevLabel} positiveIsGood={false} />}
-                    <div className="text-xs text-app3 mt-1">{expenses.length} registros</div>
+                    <div className="text-xs text-app3 mt-1">{Number(analytics?.expense_count ?? 0)} registros</div>
                   </div>
 
                   {/* Ticket promedio */}
@@ -1009,12 +937,12 @@ export default function StatisticsPage() {
               <div className="flex items-center gap-1 bg-surface2 rounded-lg p-1">
                 {([
                   { key: 'all', label: 'Todos' },
-                  { key: 'ingresos', label: 'Cobros' },
-                  { key: 'gastos', label: 'Egresos' },
+                  { key: 'payment', label: 'Cobros' },
+                  { key: 'expense', label: 'Egresos' },
                 ] as const).map(f => (
                   <button
                     key={f.key}
-                    onClick={() => { setHistFilter(f.key); setHistPage(1) }}
+                    onClick={() => handleHistFilterChange(f.key as 'all' | 'payment' | 'expense')}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${histFilter === f.key ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app3 hover:text-app'
                       }`}
                   >
@@ -1024,63 +952,63 @@ export default function StatisticsPage() {
               </div>
             </div>
 
-            <div className={`bg-surface border border-app rounded-xl overflow-hidden transition-opacity duration-150 ${dataLoading ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`bg-surface border border-app rounded-xl overflow-hidden transition-opacity duration-150 ${movementsLoading ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="px-5 py-3 border-b border-app flex items-center justify-between">
-                <span className="text-sm font-semibold">{filteredHist.length} movimientos</span>
+                <span className="text-sm font-semibold">{movementsTotal} movimientos</span>
                 {totalHistPages > 1 && (
                   <span className="text-xs text-app3">Pág. {histPage}/{totalHistPages}</span>
                 )}
               </div>
 
-              {!dataLoading && histItems.length === 0 ? (
+              {!movementsLoading && movements.length === 0 ? (
                 <div className="px-5 py-12 text-center text-app3 text-sm">Sin movimientos en este período</div>
               ) : (
                 <>
                   <div className="divide-y divide-app">
-                    {histItems.map((item: any) => (
-                      <div key={`${item._type}-${item.id}`} className="px-5 py-3.5 flex items-center gap-4">
-                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${item._type === 'ingreso' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                    {movements.map((item: any) => (
+                      <div key={`${item.type}-${item.id}`} className="px-5 py-3.5 flex items-center gap-4">
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${item.type === 'payment' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
                           }`}>
-                          {item._type === 'ingreso' ? '💰' : '📦'}
+                          {item.type === 'payment' ? '💰' : '📦'}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate">
-                            {item._type === 'ingreso'
-                              ? (item.patients
+                            {item.type === 'payment'
+                              ? (item.patient_name
                                 ? <span
                                     onClick={() => router.push(`/patients/${item.patient_id}`)}
                                     className="cursor-pointer hover:text-[#00C4BC] transition-colors"
-                                  >{item.patients.first_name} {item.patients.last_name}</span>
+                                  >{item.patient_name}</span>
                                 : 'Sin paciente')
                               : item.category}
                           </div>
                           <div className="text-xs text-app3 truncate">
-                            {item._type === 'ingreso'
+                            {item.type === 'payment'
                               ? (METODOS.find(m => m.value === item.method)?.label ?? item.method)
                               : (item.description || '')}
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <div className={`font-bold text-sm ${item._type === 'ingreso' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-                            {masked ? '••••••' : `${item._type === 'ingreso' ? '+' : '-'}${formatARS(Number(item.amount))}`}
+                          <div className={`font-bold text-sm ${item.type === 'payment' ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                            {masked ? '••••••' : `${item.type === 'payment' ? '+' : '-'}${formatARS(Number(item.amount))}`}
                           </div>
-                          {item._type === 'ingreso' && !masked && (() => {
-                            const netBalance = patientNetBalanceMap[item.patient_id] ?? 0
-                            if (netBalance > 0) return (
+                          {item.type === 'payment' && !masked && (() => {
+                            const balance = Number(item.patient_balance_due ?? 0)
+                            if (balance > 0) return (
                               <div className="text-xs text-amber-500 font-semibold">
-                                Debe {formatARS(netBalance)}
+                                Debe {formatARS(balance)}
                               </div>
                             )
-                            if (netBalance < 0) return (
+                            if (balance < 0) return (
                               <div className="text-xs text-[#00C4BC] font-semibold">
-                                A favor {formatARS(Math.abs(netBalance))}
+                                A favor {formatARS(Math.abs(balance))}
                               </div>
                             )
                             return null
                           })()}
-                          <div className="text-xs text-app3">{formatDateAR(item._date)}</div>
+                          <div className="text-xs text-app3">{formatDateAR(item.date)}</div>
                         </div>
-                        {item._type === 'ingreso' ? (
+                        {item.type === 'payment' ? (
                           <div className="flex flex-col gap-1 flex-shrink-0">
                             <button
                               onClick={() => { setEditingPayment(item); setPreselectedPatientId(null); setShowPaymentModal(true) }}
@@ -1109,8 +1037,8 @@ export default function StatisticsPage() {
                   <Pagination
                     page={histPage}
                     hasMore={histPage < totalHistPages}
-                    onPrev={() => setHistPage(p => Math.max(1, p - 1))}
-                    onNext={() => setHistPage(p => p + 1)}
+                    onPrev={() => handleHistPageChange(Math.max(1, histPage - 1))}
+                    onNext={() => handleHistPageChange(histPage + 1)}
                   />
                 </>
               )}
@@ -1285,10 +1213,7 @@ export default function StatisticsPage() {
           onClose={() => { setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null) }}
           onSaved={async (success) => {
             setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null)
-            await Promise.all([
-              fetchFinancialData(period, token, customFrom, customTo),
-              fetchPersistentData(token),
-            ])
+            await refreshAll()
             if (success) setPaymentSuccess(success)
           }}
         />
@@ -1385,10 +1310,7 @@ export default function StatisticsPage() {
           onClose={() => setShowExpenseModal(false)}
           onCreated={async () => {
             setShowExpenseModal(false)
-            await Promise.all([
-              fetchFinancialData(period, token, customFrom, customTo),
-              fetchPersistentData(token),
-            ])
+            await refreshAll()
           }}
         />
       )}
@@ -1842,7 +1764,7 @@ function daysSince(dateStr: string): number {
 }
 
 function PendingDebtorsModal({ debtors, masked, onClose, onRegisterPayment }: {
-  debtors: { id: string; name: string; phone: string; balance: number; lastPayment: string }[]
+  debtors: { id: string; name: string; phone: string; balance: number; last_payment_at: string }[]
   masked: boolean
   onClose: () => void
   onRegisterPayment: (patientId: string) => void
@@ -1855,7 +1777,7 @@ function PendingDebtorsModal({ debtors, masked, onClose, onRegisterPayment }: {
   const total = debtors.reduce((s, d) => s + d.balance, 0)
 
   const agingFiltered = agingBand === 'all' ? debtors : debtors.filter(d => {
-    const days = daysSince(d.lastPayment)
+    const days = daysSince(d.last_payment_at)
     if (agingBand === '0-30') return days <= 30
     if (agingBand === '30-60') return days > 30 && days <= 60
     return days > 60
@@ -1969,7 +1891,7 @@ function PendingDebtorsModal({ debtors, masked, onClose, onRegisterPayment }: {
                     <div className="font-semibold text-sm text-app truncate">{d.name}</div>
                     <div className="text-xs text-app3 mt-0.5">
                       Último pago:{' '}
-                      {new Date(d.lastPayment).toLocaleDateString('es-AR', {
+                      {new Date(d.last_payment_at).toLocaleDateString('es-AR', {
                         day: 'numeric', month: 'short', year: 'numeric',
                         timeZone: 'America/Argentina/Buenos_Aires',
                       })}
@@ -1979,7 +1901,7 @@ function PendingDebtorsModal({ debtors, masked, onClose, onRegisterPayment }: {
                     <div className="text-sm font-bold text-amber-400">
                       {masked ? '••••••' : '$' + d.balance.toLocaleString('es-AR')}
                     </div>
-                    <div className="text-xs text-app3">{daysSince(d.lastPayment)}d atrás</div>
+                    <div className="text-xs text-app3">{daysSince(d.last_payment_at)}d atrás</div>
                   </div>
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
                     <button
