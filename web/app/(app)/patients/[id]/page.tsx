@@ -1999,18 +1999,18 @@ export default function PatientDetailPage() {
 
             {/* SIGN VIEW */}
             {consentView === 'sign' && selectedTemplate && (
-              <div className="h-full flex flex-col">
+              <div className="h-full overflow-y-auto">
 
-                {/* Document preview — scrollable, always white */}
-                <div className="flex-1 overflow-y-auto bg-white">
+                {/* Document preview */}
+                <div className="bg-white">
                   <div
                     className="max-w-2xl mx-auto px-6 py-8 text-gray-800 text-sm leading-relaxed [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mb-3 [&_h2]:mt-0 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_li]:mb-1 [&_p]:mb-3 [&_strong]:font-semibold"
                     dangerouslySetInnerHTML={{ __html: renderConsentHtml(selectedTemplate.content_html) }}
                   />
                 </div>
 
-                {/* Signature area — fixed at bottom */}
-                <div className="shrink-0 bg-surface border-t-2 border-app px-4 pt-4 pb-6">
+                {/* Signature area */}
+                <div className="bg-surface border-t-2 border-app px-4 pt-4 pb-6">
                   {consentSaved ? (
                     <div className="flex flex-col items-center justify-center py-6 gap-3">
                       <div className="w-14 h-14 rounded-full bg-[#E6F8F1] flex items-center justify-center">
@@ -2219,8 +2219,11 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
   const [prostheticType, setProstheticType] = useState<ProstheticType>('bridge')
   const [prostheticColor, setProstheticColor] = useState<'red' | 'blue'>('red')
   const [prostheticStart, setProstheticStart] = useState<number | null>(null)
-  const [prevSnapshot, setPrevSnapshot] = useState<{ teeth: Record<number, ToothState>; prosthetics: Prosthetic[] } | null>(null)
+  type Snapshot = { teeth: Record<number, ToothState>; prosthetics: Prosthetic[] }
+  const [history, setHistory] = useState<Snapshot[]>([])
+  const initialSnapshotRef = useRef<Snapshot | null>(null)
   const handleUndoRef = useRef<() => Promise<void>>(async () => {})
+  const handleResetRef = useRef<() => Promise<void>>(async () => {})
 
   function startSaving() {
     savingCountRef.current++
@@ -2285,16 +2288,19 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
     return teeth[n] ?? {}
   }
 
-  function takeSnapshot() {
+  function makeSnapshot(): Snapshot {
     const teethCopy: Record<number, ToothState> = {}
     Object.keys(teeth).forEach(k => { teethCopy[Number(k)] = { ...teeth[Number(k)] } })
-    setPrevSnapshot({ teeth: teethCopy, prosthetics: prosthetics.map(p => ({ ...p, teeth: [...p.teeth] })) })
+    return { teeth: teethCopy, prosthetics: prosthetics.map(p => ({ ...p, teeth: [...p.teeth] })) }
   }
 
-  async function handleUndo() {
-    if (!prevSnapshot) return
-    const snap = prevSnapshot
-    setPrevSnapshot(null)
+  function takeSnapshot() {
+    const snap = makeSnapshot()
+    if (!initialSnapshotRef.current) initialSnapshotRef.current = snap
+    setHistory(h => [...h.slice(-19), snap])
+  }
+
+  async function applySnapshot(snap: Snapshot) {
     setTeeth(snap.teeth)
     setProsthetics(snap.prosthetics)
     const allNums = [...new Set([
@@ -2319,7 +2325,21 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
     }
   }
 
+  async function handleUndo() {
+    if (history.length === 0) return
+    const snap = history[history.length - 1]
+    setHistory(h => h.slice(0, -1))
+    await applySnapshot(snap)
+  }
+
+  async function handleReset() {
+    if (!initialSnapshotRef.current) return
+    setHistory([])
+    await applySnapshot(initialSnapshotRef.current)
+  }
+
   handleUndoRef.current = handleUndo
+  handleResetRef.current = handleReset
 
   function buildSurfaces(state: ToothState): string {
     if (state.missing) return 'missing'
@@ -2577,73 +2597,70 @@ function OdontogramView({ odontogram, onSaveTooth, onSaveBulk, odontogramType }:
   return (
     <div>
       {/* Barra superior */}
-      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Selector de modo */}
-          <div className="flex gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
-            <button
-              onClick={() => { setMode('paint'); setProstheticStart(null) }}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${mode === 'paint' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
-            >Normal</button>
-            <button
-              onClick={() => { setMode('prosthetic'); setSelectedTooth(null) }}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${mode === 'prosthetic' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
-            >Prótesis</button>
-          </div>
-
-          {mode === 'paint' && (
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPaintColor('red')}
-                className={`w-7 h-7 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'red' ? 'bg-red-600 ring-red-500' : 'bg-red-900/40 ring-transparent hover:ring-red-800'}`}
-                title="Realizado" />
-              <button onClick={() => setPaintColor('emerald')}
-                className={`w-7 h-7 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'emerald' ? 'bg-blue-600 ring-blue-500' : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'}`}
-                title="Por realizar" />
-              <span className="text-xs text-app3">Tocá para pintar · Tocá de nuevo para borrar</span>
-            </div>
-          )}
-
-          {mode === 'prosthetic' && (
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
-                <button onClick={() => { setProstheticType('bridge'); setProstheticStart(null) }}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'bridge' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
-                >Puente</button>
-                <button onClick={() => { setProstheticType('removable'); setProstheticStart(null) }}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'removable' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
-                >Removible</button>
-                <button onClick={() => { setProstheticType('crown'); setProstheticStart(null) }}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'crown' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
-                >Corona</button>
-              </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setProstheticColor('red')}
-                  className={`w-5 h-5 rounded-full ring-2 ring-offset-1 ring-offset-gray-900 transition-all ${prostheticColor === 'red' ? 'bg-red-600 ring-red-500' : 'bg-red-900/40 ring-transparent hover:ring-red-800'}`}
-                  title="Existente (rojo)" />
-                <button onClick={() => setProstheticColor('blue')}
-                  className={`w-5 h-5 rounded-full ring-2 ring-offset-1 ring-offset-gray-900 transition-all ${prostheticColor === 'blue' ? 'bg-blue-600 ring-blue-500' : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'}`}
-                  title="A realizar (azul)" />
-              </div>
-              {prostheticStart && (
-                <span className="text-xs text-emerald-400 font-mono">{prostheticStart} →</span>
-              )}
-            </div>
-          )}
+      <div className="flex items-center mb-4 gap-3 flex-wrap">
+        {/* Selector de modo */}
+        <div className="flex gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
+          <button
+            onClick={() => { setMode('paint'); setProstheticStart(null) }}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${mode === 'paint' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+          >Normal</button>
+          <button
+            onClick={() => { setMode('prosthetic'); setSelectedTooth(null) }}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${mode === 'prosthetic' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+          >Prótesis</button>
         </div>
 
-        <button
-          onClick={() => !saving && prevSnapshot && handleUndoRef.current()}
-          disabled={saving || !prevSnapshot}
-          className={`text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface2 border transition-all active:scale-95 shrink-0 ${
-            saving
-              ? 'border-gray-700 text-app3 cursor-default'
-              : prevSnapshot
-              ? 'border-gray-600 text-app2 hover:border-gray-500 hover:text-app'
-              : 'invisible'
-          }`}
-        >
-          {saving ? 'Guardando...' : '↩ Deshacer'}
-        </button>
+        {mode === 'paint' && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPaintColor('red')}
+              className={`w-7 h-7 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'red' ? 'bg-red-600 ring-red-500' : 'bg-red-900/40 ring-transparent hover:ring-red-800'}`}
+              title="Realizado" />
+            <button onClick={() => setPaintColor('emerald')}
+              className={`w-7 h-7 rounded-full transition-all active:scale-90 ring-2 ring-offset-2 ring-offset-gray-900 ${paintColor === 'emerald' ? 'bg-blue-600 ring-blue-500' : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'}`}
+              title="Por realizar" />
+            <span className="text-xs text-app3">Tocá para pintar · Tocá de nuevo para borrar</span>
+          </div>
+        )}
+
+        {mode === 'prosthetic' && (
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
+              <button onClick={() => { setProstheticType('bridge'); setProstheticStart(null) }}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'bridge' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+              >Puente</button>
+              <button onClick={() => { setProstheticType('removable'); setProstheticStart(null) }}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'removable' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+              >Removible</button>
+              <button onClick={() => { setProstheticType('crown'); setProstheticStart(null) }}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${prostheticType === 'crown' ? 'bg-surface3 border border-gray-600 text-app' : 'text-app3 hover:text-app2'}`}
+              >Corona</button>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setProstheticColor('red')}
+                className={`w-5 h-5 rounded-full ring-2 ring-offset-1 ring-offset-gray-900 transition-all ${prostheticColor === 'red' ? 'bg-red-600 ring-red-500' : 'bg-red-900/40 ring-transparent hover:ring-red-800'}`}
+                title="Existente (rojo)" />
+              <button onClick={() => setProstheticColor('blue')}
+                className={`w-5 h-5 rounded-full ring-2 ring-offset-1 ring-offset-gray-900 transition-all ${prostheticColor === 'blue' ? 'bg-blue-600 ring-blue-500' : 'bg-blue-900/40 ring-transparent hover:ring-blue-800'}`}
+                title="A realizar (azul)" />
+            </div>
+            {prostheticStart && (
+              <span className="text-xs text-emerald-400 font-mono">{prostheticStart} →</span>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => !saving && handleUndoRef.current()}
+            title={`Deshacer${history.length > 1 ? ` (${history.length} pasos)` : ''}`}
+            className={`w-7 h-7 flex items-center justify-center rounded-lg bg-surface2 border text-sm transition-all active:scale-95 border-gray-600 text-app2 hover:border-gray-500 hover:text-app ${!saving && history.length > 0 ? '' : 'invisible'}`}
+          >↩</button>
+          <button
+            onClick={() => !saving && handleResetRef.current()}
+            title="Resetear todo"
+            className={`w-7 h-7 flex items-center justify-center rounded-lg bg-surface2 border text-xs transition-all active:scale-95 border-gray-700 text-app3 hover:border-red-800 hover:text-red-400 ${!saving && history.length > 0 ? '' : 'invisible'}`}
+          >✕</button>
+        </div>
       </div>
 
       {/* Grid cuadrantes */}
