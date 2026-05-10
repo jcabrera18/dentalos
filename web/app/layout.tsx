@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { Providers } from './providers'
 import { PHProvider } from './providers/posthog'
@@ -7,6 +7,10 @@ import { Suspense } from 'react'
 import './globals.css'
 
 const siteUrl = 'https://dentalos.pro'
+
+export const viewport: Viewport = {
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   title: 'DentalOS',

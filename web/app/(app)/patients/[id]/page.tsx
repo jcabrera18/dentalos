@@ -2010,7 +2010,7 @@ export default function PatientDetailPage() {
                 </div>
 
                 {/* Signature area */}
-                <div className="bg-surface border-t-2 border-app px-4 pt-4 pb-6">
+                <div className="bg-surface border-t-2 border-app px-4 pt-4" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
                   {consentSaved ? (
                     <div className="flex flex-col items-center justify-center py-6 gap-3">
                       <div className="w-14 h-14 rounded-full bg-[#E6F8F1] flex items-center justify-center">
