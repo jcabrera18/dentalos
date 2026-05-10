@@ -179,7 +179,14 @@ export default function BookingPage() {
 
   const isDayDisabled = (day: number) => {
     const d = new Date(year, month, day)
-    return d < today || d > maxDate || d.getDay() === 0
+    if (d < today || d > maxDate) return true
+    const jsDay = d.getDay()
+    if (workingHours) {
+      const dayKey = jsDay === 0 ? 6 : jsDay - 1
+      const dayConfig = workingHours[dayKey]
+      return !dayConfig || !dayConfig.enabled
+    }
+    return jsDay === 0
   }
 
   const canGoPrev = !(year === today.getFullYear() && month <= today.getMonth())
@@ -443,7 +450,7 @@ export default function BookingPage() {
             </div>
 
             <p className="text-xs mt-4 text-center" style={{ color: '#9CA3AF' }}>
-              Los domingos no hay atención · Turnos hasta 90 días
+              Turnos disponibles hasta 90 días
             </p>
           </div>
         )}

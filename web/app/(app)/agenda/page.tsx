@@ -125,6 +125,7 @@ export default function AgendaPage() {
   const supabase = createClient()
   const auxiliaryDataStartedRef = useRef(false)
   const myWorkingHoursRef = useRef<WorkingHours | null>(null)
+  const hasLoadedRef = useRef(false)
 
   const weekDates = getWeekDates(weekOffset)
   const from = formatDate(weekDates[0])
@@ -141,8 +142,9 @@ export default function AgendaPage() {
   useEffect(() => {
     if (!token) return
 
-    setLoading(true)
+    if (!hasLoadedRef.current) setLoading(true)
     void fetchCalendarData(token).finally(() => {
+      hasLoadedRef.current = true
       setLoading(false)
     })
   }, [from, to, token])
@@ -193,7 +195,8 @@ export default function AgendaPage() {
     setUserId(myId)
     setProfessionals(profs)
 
-    const myWH = meData.data?.schedule_config?.working_hours ?? null
+    const myProf = profs.find(p => p.id === myId)
+    const myWH = myProf?.schedule_config?.working_hours ?? null
     myWorkingHoursRef.current = myWH
     setWorkingHours(myWH)
   }
@@ -386,39 +389,92 @@ export default function AgendaPage() {
   if (loading && appointments.length === 0) {
     return (
       <div className="bg-app text-app flex flex-col h-[calc(100vh-57px)] animate-pulse">
-        {/* Week nav skeleton */}
-        <div className="border-b border-app px-4 py-2">
-          <div className="flex items-center justify-between mb-2">
-            <div className="h-4 bg-surface2 rounded w-32" />
-            <div className="flex gap-2">
-              <div className="h-7 w-7 bg-surface2 rounded-lg" />
-              <div className="h-7 w-7 bg-surface2 rounded-lg" />
+
+        {/* ── MOBILE SKELETON ── */}
+        <div className="md:hidden flex flex-col h-full">
+          {/* Header: mes + nav + refresh + day picker */}
+          <div className="border-b border-neutral-200 dark:border-neutral-800/50 px-4 py-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="h-4 bg-surface2 rounded w-28" />
+              <div className="flex gap-1.5">
+                <div className="h-7 w-9 bg-surface2 rounded-lg" />
+                <div className="h-7 w-14 bg-surface2 rounded-lg" />
+                <div className="h-7 w-9 bg-surface2 rounded-lg" />
+              </div>
+            </div>
+            {/* Refresh button */}
+            <div className="h-9 bg-surface2 rounded-xl mb-2" />
+            {/* Day picker */}
+            <div className="grid grid-cols-7 gap-0">
+              {[...Array(7)].map((_, i) => (
+                <div key={i} className="flex flex-col items-center gap-1 py-1">
+                  <div className="h-2.5 bg-surface2 rounded w-5" />
+                  <div className="h-7 w-7 bg-surface2 rounded-full" />
+                  <div className="h-1 w-1 rounded-full bg-surface2" />
+                </div>
+              ))}
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-1">
-            {[...Array(7)].map((_, i) => (
-              <div key={i} className="flex flex-col items-center gap-1 py-1">
-                <div className="h-3 bg-surface2 rounded w-6" />
-                <div className="h-8 w-8 bg-surface2 rounded-full" />
+          {/* Appointment list */}
+          <div className="flex-1 overflow-hidden p-4 space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-xl border-l-2 border-l-surface3 bg-surface2 p-2.5">
+                <div className="flex items-start gap-3">
+                  <div className="h-4 bg-surface3 rounded w-10 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-4 bg-surface3 rounded w-3/4" />
+                    <div className="h-3 bg-surface3 rounded w-1/2" />
+                  </div>
+                  <div className="h-5 bg-surface3 rounded-full w-16 flex-shrink-0" />
+                </div>
               </div>
             ))}
           </div>
         </div>
-        {/* Time grid skeleton */}
-        <div className="flex-1 overflow-hidden relative">
-          <div className="flex h-full">
-            <div className="w-14 flex-shrink-0 border-r border-app flex flex-col">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-16 flex items-start pt-1 px-2">
-                  <div className="h-3 bg-surface2 rounded w-8" />
-                </div>
-              ))}
+
+        {/* ── DESKTOP SKELETON ── */}
+        <div className="hidden md:flex flex-col flex-1 overflow-hidden">
+          {/* Toolbar */}
+          <div className="px-6 py-2 border-b border-neutral-200 dark:border-neutral-800/50 flex items-center justify-between flex-shrink-0">
+            <div className="h-4 bg-surface2 rounded w-36" />
+            <div className="flex items-center gap-2">
+              <div className="h-8 bg-surface2 rounded-lg w-24" />
+              <div className="h-8 bg-surface2 rounded-lg w-24" />
+              <div className="h-8 bg-surface2 rounded-lg w-32" />
+              <div className="h-8 bg-surface2 rounded-lg w-9" />
+              <div className="h-8 bg-surface2 rounded-lg w-10" />
+              <div className="h-8 bg-surface2 rounded-lg w-9" />
             </div>
-            <div className="flex-1 grid grid-cols-7">
+          </div>
+          {/* Day header sticky */}
+          <div className="grid border-b border-neutral-200 dark:border-neutral-800/50 flex-shrink-0"
+            style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+            <div />
+            {[...Array(7)].map((_, i) => (
+              <div key={i} className="py-2 flex flex-col items-center gap-1 border-l border-neutral-200 dark:border-neutral-800/50">
+                <div className="h-2.5 bg-surface2 rounded w-6" />
+                <div className="h-7 w-7 bg-surface2 rounded-full" />
+              </div>
+            ))}
+          </div>
+          {/* Time grid */}
+          <div className="flex-1 overflow-hidden">
+            <div className="grid h-full" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+              {/* Hours column */}
+              <div>
+                {[...Array(9)].map((_, i) => (
+                  <div key={i} className="border-t border-neutral-200 dark:border-neutral-800/50 flex items-start pt-1 pr-1.5 justify-end"
+                    style={{ height: SLOT_H }}>
+                    <div className="h-2.5 bg-surface2 rounded w-8" />
+                  </div>
+                ))}
+              </div>
+              {/* Day columns */}
               {[...Array(7)].map((_, col) => (
-                <div key={col} className="border-r border-app last:border-r-0">
-                  {[...Array(8)].map((_, row) => (
-                    <div key={row} className="h-16 border-b border-app/40" />
+                <div key={col} className="border-l border-neutral-200 dark:border-neutral-800/50">
+                  {[...Array(9)].map((_, row) => (
+                    <div key={row} className="border-t border-neutral-200 dark:border-neutral-800/50"
+                      style={{ height: SLOT_H }} />
                   ))}
                 </div>
               ))}
