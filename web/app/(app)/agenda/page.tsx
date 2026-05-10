@@ -957,11 +957,12 @@ export default function AgendaPage() {
                 const date = (document.getElementById('edit-date') as HTMLInputElement).value
                 const time = (document.getElementById('edit-time') as HTMLInputElement).value
                 const type = (document.getElementById('edit-type') as HTMLInputElement).value
+                const duration = Number((document.getElementById('edit-duration') as HTMLSelectElement).value)
                 const startsAt = `${date}T${time}:00-03:00`
-                const endsAt = new Date(new Date(startsAt).getTime() + editingAppt.duration_minutes * 60000).toISOString()
+                const endsAt = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString()
                 await apiFetch(`/appointments/${editingAppt.id}`, {
                   method: 'PATCH', token,
-                  body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, appointment_type: type || undefined })
+                  body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, duration_minutes: duration, appointment_type: type || undefined })
                 })
                 await fetchCalendarData(token)
                 setEditingAppt(null)
@@ -982,6 +983,19 @@ export default function AgendaPage() {
                     return d.toLocaleString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
                   })()}
                   className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Duración</label>
+                <select id="edit-duration"
+                  defaultValue={String(editingAppt.duration_minutes ?? 45)}
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
+                  <option value="15">15m</option>
+                  <option value="30">30m</option>
+                  <option value="45">45m</option>
+                  <option value="60">1h</option>
+                  <option value="90">1h 30m</option>
+                  <option value="120">2h</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Tipo de consulta</label>

@@ -3,6 +3,18 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { Plus_Jakarta_Sans } from 'next/font/google'
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+})
+
+const BRAND = '#00C4BC'
+const BRAND_HOVER = '#00aaa3'
+const BRAND_TINT = '#E6F8F1'
+const DARK = '#0F1720'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
@@ -224,74 +236,162 @@ export default function BookingPage() {
   // ── Render states ───────────────────────────────────
   if (pageLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div
-          className="w-8 h-8 rounded-full border-4 border-gray-200 animate-spin"
-          style={{ borderTopColor: '#10b981' }}
-        />
+      <div className={`${jakarta.className} min-h-screen flex items-center justify-center bg-white`}>
+        <div className="text-center">
+          <p className="text-2xl font-extrabold tracking-tight mb-6" style={{ color: DARK }}>
+            Dental<span style={{ color: BRAND }}>OS</span>
+          </p>
+          <div
+            className="w-8 h-8 rounded-full border-4 mx-auto animate-spin"
+            style={{ borderColor: `${BRAND}30`, borderTopColor: BRAND }}
+          />
+        </div>
       </div>
     )
   }
 
   if (notFound) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
-        <p className="text-4xl mb-4">🔍</p>
-        <h1 className="text-xl font-semibold text-gray-800 mb-2">Profesional no encontrado</h1>
-        <p className="text-gray-500 text-sm">El enlace puede ser incorrecto o el profesional ya no está activo.</p>
+      <div className={`${jakarta.className} min-h-screen flex flex-col items-center justify-center bg-white p-6 text-center`}>
+        <p className="text-2xl font-extrabold tracking-tight mb-8" style={{ color: DARK }}>
+          Dental<span style={{ color: BRAND }}>OS</span>
+        </p>
+        <h1 className="text-xl font-bold mb-2" style={{ color: DARK }}>Profesional no encontrado</h1>
+        <p className="text-sm" style={{ color: '#6B7280' }}>El enlace puede ser incorrecto o el profesional ya no está activo.</p>
       </div>
     )
   }
 
-  const accent = professional?.color ?? '#10b981'
   const initials = `${professional?.first_name?.[0] ?? ''}${professional?.last_name?.[0] ?? ''}`
+  const STEPS: { key: Step; label: string }[] = [
+    { key: 'date', label: 'Fecha' },
+    { key: 'time', label: 'Horario' },
+    { key: 'form', label: 'Datos' },
+  ]
+  const stepIndex = step === 'success' ? 3 : STEPS.findIndex(s => s.key === step)
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-md mx-auto space-y-3">
+    <div className={`${jakarta.className} min-h-screen bg-white`}>
+      {/* ── Ambient glow ── */}
+      <div
+        className="fixed top-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none"
+        style={{ background: `${BRAND}08`, filter: 'blur(120px)' }}
+      />
+      <div
+        className="fixed bottom-0 left-0 w-[300px] h-[300px] rounded-full pointer-events-none"
+        style={{ background: `${BRAND}05`, filter: 'blur(80px)' }}
+      />
 
-        {/* ── Header ── */}
-        <div className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4">
+      <div className="relative max-w-md mx-auto px-4 py-8 space-y-4">
+
+        {/* ── Logo ── */}
+        <div className="text-center pt-2 pb-1">
+          <p className="text-2xl font-extrabold tracking-tight" style={{ color: DARK }}>
+            Dental<span style={{ color: BRAND }}>OS</span>
+          </p>
+        </div>
+
+        {/* ── Professional card ── */}
+        <div
+          className="rounded-2xl p-5 flex items-center gap-4 border"
+          style={{ background: '#fff', borderColor: `${BRAND}25`, boxShadow: `0 4px 20px ${BRAND}10` }}
+        >
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base flex-shrink-0"
-            style={{ backgroundColor: accent }}
+            className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+            style={{ background: `linear-gradient(135deg, ${BRAND}, ${BRAND_HOVER})` }}
           >
             {initials}
           </div>
           <div className="min-w-0">
-            <h1 className="font-semibold text-gray-900 text-base leading-tight">
+            <h1 className="font-bold text-base leading-tight" style={{ color: DARK }}>
               Dr/a. {professional?.first_name} {professional?.last_name}
             </h1>
             {professional?.specialty && (
-              <p className="text-sm text-gray-500 truncate">{professional.specialty}</p>
+              <p className="text-sm truncate" style={{ color: '#6B7280' }}>{professional.specialty}</p>
             )}
             {professional?.clinics?.name && (
-              <p className="text-xs text-gray-400 truncate">{professional.clinics.name}</p>
+              <p className="text-xs truncate" style={{ color: '#9CA3AF' }}>{professional.clinics.name}</p>
             )}
+          </div>
+          <div
+            className="ml-auto flex-shrink-0 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider"
+            style={{ background: BRAND_TINT, color: BRAND }}
+          >
+            Turno
           </div>
         </div>
 
+        {/* ── Step indicator ── */}
+        {step !== 'success' && (
+          <div className="flex items-start">
+            {STEPS.flatMap((s, i) => {
+              const isActive = i === stepIndex
+              const isDone = i < stepIndex
+              const items = []
+              if (i > 0) {
+                items.push(
+                  <div
+                    key={`line-${i}`}
+                    className="flex-1 h-px mt-3.5 transition-all"
+                    style={{ background: i <= stepIndex ? BRAND : '#E5E7EB' }}
+                  />
+                )
+              }
+              items.push(
+                <div key={s.key} className="flex flex-col items-center shrink-0 w-16">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+                    style={{
+                      background: isActive ? BRAND : isDone ? BRAND_TINT : '#F3F4F6',
+                      color: isActive ? '#fff' : isDone ? BRAND : '#9CA3AF',
+                      boxShadow: isActive ? `0 0 0 3px ${BRAND}25` : 'none',
+                    }}
+                  >
+                    {isDone ? '✓' : i + 1}
+                  </div>
+                  <span
+                    className="text-[10px] font-bold mt-1 uppercase tracking-wider text-center"
+                    style={{ color: isActive ? BRAND : '#9CA3AF' }}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+              )
+              return items
+            })}
+          </div>
+        )}
+
         {/* ── Step: Pick date ── */}
         {step === 'date' && (
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <h2 className="font-semibold text-gray-800 mb-4">Elegí un día</h2>
+          <div
+            className="bg-white rounded-2xl p-5 border"
+            style={{ borderColor: '#E5E7EB', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
+          >
+            <h2 className="font-bold mb-4" style={{ color: DARK }}>Elegí un día</h2>
 
             {/* Month nav */}
             <div className="flex items-center justify-between mb-3">
               <button
                 onClick={() => setCalMonth(new Date(year, month - 1, 1))}
                 disabled={!canGoPrev}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-25 disabled:cursor-not-allowed text-lg font-light"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-lg font-light transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                style={{ color: '#6B7280' }}
+                onMouseEnter={e => { if (canGoPrev) (e.currentTarget as HTMLButtonElement).style.background = BRAND_TINT }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '' }}
               >
                 ‹
               </button>
-              <span className="font-medium text-gray-800 text-sm capitalize">
+              <span className="font-semibold text-sm capitalize" style={{ color: DARK }}>
                 {MONTHS[month]} {year}
               </span>
               <button
                 onClick={() => canGoNext && setCalMonth(new Date(year, month + 1, 1))}
                 disabled={!canGoNext}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-25 disabled:cursor-not-allowed text-lg font-light"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-lg font-light transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                style={{ color: '#6B7280' }}
+                onMouseEnter={e => { if (canGoNext) (e.currentTarget as HTMLButtonElement).style.background = BRAND_TINT }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '' }}
               >
                 ›
               </button>
@@ -300,7 +400,7 @@ export default function BookingPage() {
             {/* Day names header */}
             <div className="grid grid-cols-7 mb-1">
               {DAY_NAMES.map(d => (
-                <div key={d} className="text-center text-xs text-gray-400 py-1 font-medium">{d}</div>
+                <div key={d} className="text-center text-[10px] py-1 font-bold uppercase tracking-wider" style={{ color: '#9CA3AF' }}>{d}</div>
               ))}
             </div>
 
@@ -319,15 +419,22 @@ export default function BookingPage() {
                     key={day}
                     onClick={() => handleDayClick(day)}
                     disabled={disabled}
-                    className={[
-                      'aspect-square rounded-xl text-sm font-medium transition-all',
-                      disabled
-                        ? 'text-gray-300 cursor-not-allowed'
-                        : 'hover:bg-gray-100 text-gray-700 cursor-pointer',
-                      isSelected ? 'text-white' : '',
-                      isToday && !isSelected ? 'font-bold' : '',
-                    ].join(' ')}
-                    style={isSelected ? { backgroundColor: accent } : undefined}
+                    className="aspect-square rounded-xl text-sm transition-all"
+                    style={{
+                      fontWeight: isToday ? '800' : '500',
+                      color: disabled ? '#D1D5DB' : isSelected ? '#fff' : DARK,
+                      background: isSelected ? BRAND : 'transparent',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      boxShadow: isSelected ? `0 2px 8px ${BRAND}40` : 'none',
+                    }}
+                    onMouseEnter={e => {
+                      if (!disabled && !isSelected)
+                        (e.currentTarget as HTMLButtonElement).style.background = BRAND_TINT
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected)
+                        (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+                    }}
                   >
                     {day}
                   </button>
@@ -335,7 +442,7 @@ export default function BookingPage() {
               })}
             </div>
 
-            <p className="text-xs text-gray-400 mt-4 text-center">
+            <p className="text-xs mt-4 text-center" style={{ color: '#9CA3AF' }}>
               Los domingos no hay atención · Turnos hasta 90 días
             </p>
           </div>
@@ -343,33 +450,39 @@ export default function BookingPage() {
 
         {/* ── Step: Pick time ── */}
         {step === 'time' && (
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div
+            className="bg-white rounded-2xl p-5 border"
+            style={{ borderColor: '#E5E7EB', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
+          >
             <button
               onClick={() => setStep('date')}
-              className="text-sm text-gray-500 hover:text-gray-700 mb-3 flex items-center gap-1"
+              className="text-sm font-semibold mb-3 flex items-center gap-1 transition-colors"
+              style={{ color: BRAND }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = BRAND_HOVER}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = BRAND}
             >
               ← Cambiar fecha
             </button>
 
-            <h2 className="font-semibold text-gray-800 mb-0.5">Elegí un horario</h2>
-            <p className="text-sm text-gray-500 mb-4 capitalize">
+            <h2 className="font-bold mb-0.5" style={{ color: DARK }}>Elegí un horario</h2>
+            <p className="text-sm mb-4 capitalize" style={{ color: '#6B7280' }}>
               {selectedDate && formatDate(`${selectedDate}T12:00:00-03:00`)}
             </p>
 
             {slotsLoading ? (
               <div className="flex justify-center py-10">
                 <div
-                  className="w-6 h-6 rounded-full border-4 border-gray-200 animate-spin"
-                  style={{ borderTopColor: accent }}
+                  className="w-6 h-6 rounded-full border-4 animate-spin"
+                  style={{ borderColor: `${BRAND}30`, borderTopColor: BRAND }}
                 />
               </div>
             ) : slots.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-4 text-sm">No hay turnos disponibles para este día.</p>
+                <p className="text-sm mb-4" style={{ color: '#6B7280' }}>No hay turnos disponibles para este día.</p>
                 <button
                   onClick={() => setStep('date')}
-                  className="text-sm font-semibold"
-                  style={{ color: accent }}
+                  className="text-sm font-bold"
+                  style={{ color: BRAND }}
                 >
                   Elegir otro día
                 </button>
@@ -380,17 +493,19 @@ export default function BookingPage() {
                   <button
                     key={slot}
                     onClick={() => handleSlotClick(slot)}
-                    className="py-2.5 rounded-xl border text-sm font-semibold transition-all hover:text-white hover:border-transparent"
-                    style={{ borderColor: accent, color: accent }}
+                    className="py-2.5 rounded-xl border-2 text-sm font-bold transition-all"
+                    style={{ borderColor: BRAND, color: BRAND, background: 'transparent' }}
                     onMouseEnter={e => {
                       const el = e.currentTarget as HTMLButtonElement
-                      el.style.backgroundColor = accent
-                      el.style.color = 'white'
+                      el.style.background = BRAND
+                      el.style.color = '#fff'
+                      el.style.boxShadow = `0 4px 12px ${BRAND}40`
                     }}
                     onMouseLeave={e => {
                       const el = e.currentTarget as HTMLButtonElement
-                      el.style.backgroundColor = ''
-                      el.style.color = accent
+                      el.style.background = 'transparent'
+                      el.style.color = BRAND
+                      el.style.boxShadow = 'none'
                     }}
                   >
                     {formatTime(slot)}
@@ -403,83 +518,107 @@ export default function BookingPage() {
 
         {/* ── Step: Patient form ── */}
         {step === 'form' && (
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div
+            className="bg-white rounded-2xl p-5 border"
+            style={{ borderColor: '#E5E7EB', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
+          >
             <button
               onClick={() => setStep('time')}
-              className="text-sm text-gray-500 hover:text-gray-700 mb-3 flex items-center gap-1"
+              className="text-sm font-semibold mb-3 flex items-center gap-1 transition-colors"
+              style={{ color: BRAND }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = BRAND_HOVER}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = BRAND}
             >
               ← Cambiar horario
             </button>
 
             {/* Selected slot summary */}
             <div
-              className="flex items-center gap-2 rounded-xl px-3 py-2.5 mb-5"
-              style={{ backgroundColor: `${accent}15` }}
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 mb-5 border"
+              style={{ background: BRAND_TINT, borderColor: `${BRAND}30` }}
             >
-              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />
-              <span className="text-sm font-medium text-gray-700 capitalize">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: BRAND }} />
+              <span className="text-sm font-semibold capitalize" style={{ color: DARK }}>
                 {selectedDate && formatDate(`${selectedDate}T12:00:00-03:00`)}
                 {' · '}
                 {selectedSlot && formatTime(selectedSlot)}
               </span>
             </div>
 
-            <h2 className="font-semibold text-gray-800 mb-4">Tus datos</h2>
+            <h2 className="font-bold mb-4" style={{ color: DARK }}>Tus datos</h2>
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs text-gray-500 mb-1 block">Nombre *</span>
+                  <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Nombre *</span>
                   <input
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors"
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                    style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
                     value={form.first_name}
                     onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
                     placeholder="Juan"
                     autoComplete="given-name"
+                    onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs text-gray-500 mb-1 block">Apellido *</span>
+                  <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Apellido *</span>
                   <input
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors"
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                    style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
                     value={form.last_name}
                     onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
                     placeholder="García"
                     autoComplete="family-name"
+                    onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                   />
                 </label>
               </div>
 
               <label className="block">
-                <span className="text-xs text-gray-500 mb-1 block">Teléfono *</span>
+                <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Teléfono *</span>
                 <input
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                  style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
                   value={form.phone}
                   onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="+54 9 11 1234-5678"
                   type="tel"
                   autoComplete="tel"
+                  onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                 />
               </label>
 
               <label className="block">
-                <span className="text-xs text-gray-500 mb-1 block">Email <span className="text-gray-400">(opcional)</span></span>
+                <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>
+                  Email{' '}
+                  <span style={{ color: '#9CA3AF', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span>
+                </span>
                 <input
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                  style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="juan@email.com"
                   type="email"
                   autoComplete="email"
+                  onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                 />
               </label>
 
               <label className="block">
-                <span className="text-xs text-gray-500 mb-1 block">Tipo de consulta *</span>
+                <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Tipo de consulta *</span>
                 <select
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 bg-white transition-colors appearance-none"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all appearance-none"
+                  style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: form.appointment_type ? DARK : '#9CA3AF' }}
                   value={form.appointment_type}
                   onChange={e => setForm(f => ({ ...f, appointment_type: e.target.value }))}
+                  onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                 >
                   <option value="">Seleccioná...</option>
                   {APPOINTMENT_TYPES.map(t => (
@@ -489,69 +628,89 @@ export default function BookingPage() {
               </label>
 
               <label className="block">
-                <span className="text-xs text-gray-500 mb-1 block">
-                  Motivo de consulta <span className="text-gray-400">(opcional)</span>
+                <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>
+                  Motivo{' '}
+                  <span style={{ color: '#9CA3AF', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span>
                 </span>
                 <textarea
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors resize-none"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all resize-none"
+                  style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
                   value={form.chief_complaint}
                   onChange={e => setForm(f => ({ ...f, chief_complaint: e.target.value }))}
                   placeholder="Contanos brevemente el motivo de tu visita..."
                   rows={3}
+                  onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                 />
               </label>
             </div>
 
             {error && (
-              <p className="mt-3 text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{error}</p>
+              <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">{error}</p>
             )}
 
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="mt-5 w-full py-3 rounded-xl text-white font-semibold text-sm transition-opacity disabled:opacity-60 active:scale-95"
-              style={{ backgroundColor: accent }}
+              className="mt-5 w-full py-4 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-60"
+              style={{ background: BRAND, boxShadow: `0 4px 14px ${BRAND}40` }}
+              onMouseEnter={e => { if (!submitting) (e.currentTarget as HTMLButtonElement).style.background = BRAND_HOVER }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = BRAND }}
             >
-              {submitting ? 'Reservando...' : 'Confirmar turno'}
+              {submitting ? 'Reservando...' : 'Confirmar turno →'}
             </button>
           </div>
         )}
 
         {/* ── Step: Success ── */}
         {step === 'success' && successData && (
-          <div className="bg-white rounded-2xl shadow-sm p-6 text-center">
+          <div
+            className="bg-white rounded-2xl p-6 text-center border"
+            style={{ borderColor: `${BRAND}30`, boxShadow: `0 4px 20px ${BRAND}15` }}
+          >
             <div
-              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold"
-              style={{ backgroundColor: `${accent}18`, color: accent }}
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 text-2xl font-extrabold"
+              style={{ background: BRAND_TINT, color: BRAND }}
             >
               ✓
             </div>
-            <h2 className="font-bold text-gray-900 text-xl mb-2">¡Turno solicitado!</h2>
-            <p className="text-gray-500 text-sm mb-5">
+            <h2 className="font-extrabold text-xl mb-2" style={{ color: DARK }}>¡Turno solicitado!</h2>
+            <p className="text-sm mb-6" style={{ color: '#6B7280' }}>
               Tu turno está confirmado. ¡Te esperamos!
             </p>
 
-            <div className="bg-gray-50 rounded-xl p-4 text-left space-y-3">
+            <div className="rounded-xl p-4 text-left space-y-3" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
               <div>
-                <p className="text-xs text-gray-400 mb-0.5">Fecha y hora</p>
-                <p className="font-semibold text-gray-800 capitalize text-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Fecha y hora</p>
+                <p className="font-semibold capitalize text-sm" style={{ color: DARK }}>
                   {formatDate(successData.starts_at)} · {formatTime(successData.starts_at)}
                 </p>
               </div>
+              <div className="h-px" style={{ background: '#E5E7EB' }} />
               <div>
-                <p className="text-xs text-gray-400 mb-0.5">Profesional</p>
-                <p className="font-medium text-gray-800 text-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Profesional</p>
+                <p className="font-semibold text-sm" style={{ color: DARK }}>
                   Dr/a. {professional?.first_name} {professional?.last_name}
                 </p>
               </div>
+              <div className="h-px" style={{ background: '#E5E7EB' }} />
               <div>
-                <p className="text-xs text-gray-400 mb-0.5">Tipo de consulta</p>
-                <p className="font-medium text-gray-800 text-sm">{successData.appointment_type}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#9CA3AF' }}>Tipo de consulta</p>
+                <p className="font-semibold text-sm" style={{ color: DARK }}>{successData.appointment_type}</p>
               </div>
             </div>
-
           </div>
         )}
+
+        {/* ── Footer ── */}
+        <div className="text-center pt-2 pb-6">
+          <p className="text-xs" style={{ color: '#9CA3AF' }}>
+            Agendado con{' '}
+            <span className="font-extrabold" style={{ color: DARK }}>
+              Dental<span style={{ color: BRAND }}>OS</span>
+            </span>
+          </p>
+        </div>
 
       </div>
     </div>
