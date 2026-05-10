@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
-import { Wallet, FileText } from 'lucide-react'
+import { Wallet, FileText, ClipboardList } from 'lucide-react'
 
 const EMPTY_ACCOUNT_SUMMARY = {
   total_billed: 0,
@@ -785,7 +785,7 @@ export default function PatientDetailPage() {
               onClick={openClinicalHistory}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95"
             >
-              <span className="flex items-center gap-2">🩺 Ver historia clínica</span>
+              <span className="flex items-center gap-2">🩺  Ver historia clínica</span>
               {clinicalHistory?.risk_level === 'high' && (
                 <span className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded-md">Alto riesgo</span>
               )}
@@ -806,13 +806,21 @@ export default function PatientDetailPage() {
             </button>
 
             <button
-              onClick={openConsentModal}
+              onClick={() => router.push(`/patients/${params.id}/consents`)}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95"
             >
               <span className="flex items-center gap-2"><FileText size={15} strokeWidth={2} /> Consentimientos</span>
               {existingConsents.length > 0 && (
                 <span className="text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-2 py-0.5 rounded-md">{existingConsents.length}</span>
               )}
+            </button>
+
+            <button
+              onClick={() => router.push(`/patients/${params.id}/quotes`)}
+              className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95"
+            >
+              <span className="flex items-center gap-2"><ClipboardList size={15} strokeWidth={2} /> Presupuestos</span>
+              <span className="text-app3">›</span>
             </button>
 
             {/* Notas del paciente */}
