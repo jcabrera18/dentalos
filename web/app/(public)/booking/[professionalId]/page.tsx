@@ -125,7 +125,7 @@ export default function BookingPage() {
         .from('professionals')
         .select('schedule_config')
         .eq('id', professionalId)
-        .single(),
+        .maybeSingle(),
     ])
       .then(([res, { data: profRow }]) => {
         if (res.data) setProfessional(res.data)
