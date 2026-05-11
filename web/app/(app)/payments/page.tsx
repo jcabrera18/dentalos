@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { Eye, EyeOff, MoreVertical } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
@@ -10,6 +10,8 @@ import {
   BarChart, Bar, Cell, PieChart, Pie,
 } from 'recharts'
 import { PaymentModal, METODOS, TIPOS } from '@/components/PaymentModal'
+import { InvoiceModal } from '@/components/InvoiceModal'
+import { FileText } from 'lucide-react'
 
 const CATEGORIAS_GASTO = [
   'Materiales', 'Equipamiento', 'Alquiler', 'Servicios',
@@ -165,6 +167,37 @@ export default function StatisticsPage() {
     return masked ? '••••••' : formatARS(n)
   }
 
+  // Menú de acciones por pago
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+
+  // Facturación AFIP
+  const [myAfipIvaCondition, setMyAfipIvaCondition] = useState<string>('MO')
+  const [invoicesMap, setInvoicesMap] = useState<Record<string, any>>({})
+  const [invoiceModalPayment, setInvoiceModalPayment] = useState<any>(null)
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
+
+  async function downloadInvoicePdf(invoiceId: string, invoiceType: string, numero: number) {
+    setDownloadingPdfId(invoiceId)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
+      const res = await fetch(`${apiUrl}/invoices/${invoiceId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('No se pudo generar el PDF')
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = `factura-${invoiceType}-${String(numero).padStart(8, '0')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert(err.message ?? 'Error al descargar PDF')
+    } finally {
+      setDownloadingPdfId(null)
+    }
+  }
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -183,6 +216,8 @@ export default function StatisticsPage() {
         fetchProfessionals(t),
         fetchClinicalMetrics(t),
         fetchClinicalPeriodData('month', t),
+        fetchAfipConfig(t),
+        fetchInvoices(t),
       ])
 
       const searchParams = new URLSearchParams(window.location.search)
@@ -236,6 +271,24 @@ export default function StatisticsPage() {
   async function fetchProfessionals(t: string) {
     const data = await apiFetch('/professionals', { token: t })
     setProfessionals(data.data ?? [])
+  }
+
+  async function fetchAfipConfig(t: string) {
+    try {
+      const data = await apiFetch('/professionals/me/afip-config', { token: t })
+      if (data.data?.iva_condition) setMyAfipIvaCondition(data.data.iva_condition)
+    } catch {}
+  }
+
+  async function fetchInvoices(t: string) {
+    try {
+      const data = await apiFetch('/invoices', { token: t })
+      const map: Record<string, any> = {}
+      for (const inv of (data.data ?? [])) {
+        if (inv.payment_id) map[inv.payment_id] = inv
+      }
+      setInvoicesMap(map)
+    } catch {}
   }
 
   async function fetchClinicalMetrics(t: string) {
@@ -995,19 +1048,49 @@ export default function StatisticsPage() {
                           <div className="text-xs text-app3">{formatDateAR(item.date)}</div>
                         </div>
                         {item.type === 'payment' ? (
-                          <div className="flex flex-col gap-1 flex-shrink-0">
+                          <div className="relative flex-shrink-0">
                             <button
-                              onClick={() => { setEditingPayment(item); setPreselectedPatientId(null); setShowPaymentModal(true) }}
-                              className="text-xs font-semibold bg-surface2 hover:bg-surface3 border border-app text-app2 px-2.5 py-1.5 rounded-lg transition-all active:scale-95"
+                              onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+                              className="p-1.5 rounded-lg text-app3 hover:text-app hover:bg-surface2 transition-all"
                             >
-                              Editar
+                              <MoreVertical size={16} />
                             </button>
-                            <button
-                              onClick={() => setPaymentToDelete(item)}
-                              className="text-xs font-semibold bg-surface2 hover:bg-surface3 border border-app text-app2 px-2.5 py-1.5 rounded-lg transition-all active:scale-95"
-                            >
-                              Eliminar
-                            </button>
+                            {openMenuId === item.id && (
+                              <>
+                                <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                                <div className="absolute right-0 top-8 z-20 bg-surface border border-app rounded-xl shadow-lg py-1 min-w-[130px]">
+                                  <button
+                                    onClick={() => { setOpenMenuId(null); setEditingPayment(item); setPreselectedPatientId(null); setShowPaymentModal(true) }}
+                                    className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors"
+                                  >
+                                    Editar
+                                  </button>
+                                  {invoicesMap[item.id] ? (
+                                    <button
+                                      onClick={() => { setOpenMenuId(null); const inv = invoicesMap[item.id]; downloadInvoicePdf(inv.id, inv.invoice_type, inv.afip_numero ?? inv.numero) }}
+                                      disabled={downloadingPdfId === invoicesMap[item.id]?.id}
+                                      className="w-full text-left px-4 py-2 text-sm text-emerald-500 hover:bg-surface2 transition-colors disabled:opacity-50"
+                                    >
+                                      {downloadingPdfId === invoicesMap[item.id]?.id ? 'Generando...' : 'Descargar factura'}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setOpenMenuId(null); setInvoiceModalPayment({ ...item, patient_name: item.patient_name ?? '' }) }}
+                                      className="w-full text-left px-4 py-2 text-sm text-amber-500 hover:bg-surface2 transition-colors"
+                                    >
+                                      Facturar
+                                    </button>
+                                  )}
+                                  <div className="my-1 border-t border-app" />
+                                  <button
+                                    onClick={() => { setOpenMenuId(null); setPaymentToDelete(item) }}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-surface2 transition-colors"
+                                  >
+                                    Eliminar
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         ) : (
                           <button
@@ -1189,6 +1272,19 @@ export default function StatisticsPage() {
       </main>
 
       {/* ── Modales ── */}
+      {invoiceModalPayment && (
+        <InvoiceModal
+          payment={invoiceModalPayment}
+          profesionalIvaCondition={myAfipIvaCondition}
+          token={token}
+          onClose={() => setInvoiceModalPayment(null)}
+          onSuccess={(inv) => {
+            setInvoicesMap(prev => ({ ...prev, [inv.payment_id]: inv }))
+            // keep modal open to show success + download PDF
+          }}
+        />
+      )}
+
       {showPaymentModal && (
         <PaymentModal
           token={token}

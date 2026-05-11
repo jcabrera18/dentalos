@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal } from '@/app/providers'
+import { Upload, CheckCircle2, AlertCircle } from 'lucide-react'
 
 const DAYS = [
   { key: 0, label: 'Lunes' },
@@ -173,6 +174,256 @@ function PlanCard() {
         >
           {sub.trial.active || sub.status === 'trialing' ? 'Ver planes' : 'Cambiar plan'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+const IVA_CONDITIONS = [
+  { value: 'RI', label: 'Responsable Inscripto' },
+  { value: 'MO', label: 'Monotributista' },
+  { value: 'EX', label: 'Exento' },
+]
+
+const AFIP_ENVIRONMENTS = [
+  { value: 'homo', label: 'Homologación (pruebas)' },
+  { value: 'prod', label: 'Producción' },
+]
+
+function AfipConfigSection({ token }: { token: string }) {
+  const [config, setConfig]     = useState<any>(null)
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+  const [saved, setSaved]       = useState(false)
+  const [error, setError]       = useState('')
+  const [cuit, setCuit]         = useState('')
+  const [address, setAddress]   = useState('')
+  const [ivaCondition, setIvaCondition] = useState('MO')
+  const [puntoVenta, setPuntoVenta]     = useState('')
+  const [environment, setEnvironment]   = useState('homo')
+  const [certFile, setCertFile]         = useState<File | null>(null)
+  const [keyFile, setKeyFile]           = useState<File | null>(null)
+  const certInputRef = useRef<HTMLInputElement>(null)
+  const keyInputRef  = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!token) return
+    setLoading(true)
+    apiFetch('/professionals/me/afip-config', { token })
+      .then(res => {
+        const d = res.data
+        setConfig(d)
+        setCuit(d.cuit ?? '')
+        setAddress(d.address ?? '')
+        setIvaCondition(d.iva_condition ?? 'MO')
+        setPuntoVenta(d.afip_punto_venta ? String(d.afip_punto_venta) : '')
+        setEnvironment(d.afip_environment ?? 'homo')
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [token])
+
+  async function readFileAsText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = e => resolve(e.target?.result as string)
+      reader.onerror = reject
+      reader.readAsText(file)
+    })
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      const body: any = {}
+      if (cuit)         body.cuit             = cuit.replace(/\D/g, '')
+      body.address      = address.trim()
+      if (ivaCondition) body.iva_condition     = ivaCondition
+      if (puntoVenta)   body.afip_punto_venta  = Number(puntoVenta)
+      if (environment)  body.afip_environment  = environment
+      if (certFile)     body.afip_cert         = await readFileAsText(certFile)
+      if (keyFile)      body.afip_key          = await readFileAsText(keyFile)
+
+      const res = await apiFetch('/professionals/me/afip-config', { method: 'PUT', body: JSON.stringify(body), token })
+      setConfig((prev: any) => ({ ...prev, ...res.data, has_cert: certFile ? true : prev?.has_cert, has_key: keyFile ? true : prev?.has_key }))
+      setCertFile(null)
+      setKeyFile(null)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err: any) {
+      setError(err.message ?? 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-surface border border-app rounded-2xl overflow-hidden mt-8 animate-pulse">
+        <div className="px-5 py-4 border-b border-app">
+          <div className="h-5 bg-surface2 rounded w-40 mb-1" />
+          <div className="h-3 bg-surface2 rounded w-64" />
+        </div>
+        <div className="p-5 space-y-4">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-surface2 rounded-xl" />)}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-surface border border-app rounded-2xl overflow-hidden mt-8">
+      <div className="px-5 py-4 border-b border-app">
+        <h2 className="font-semibold text-app">Facturación electrónica AFIP</h2>
+        <p className="text-xs text-app3 mt-0.5">
+          Configurá tus datos fiscales para emitir facturas electrónicas A, B o C.
+        </p>
+      </div>
+
+      <div className="p-5 space-y-4">
+        {/* CUIT */}
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">CUIT</label>
+          <input
+            type="text"
+            value={cuit}
+            onChange={e => setCuit(e.target.value.replace(/\D/g, '').slice(0, 11))}
+            placeholder="20123456789"
+            maxLength={11}
+            className="bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] w-full max-w-xs"
+          />
+          <p className="text-xs text-app3 mt-1">11 dígitos sin guiones</p>
+        </div>
+
+        {/* Address */}
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Domicilio fiscal</label>
+          <input
+            type="text"
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+            placeholder="Av. Corrientes 1234, CABA"
+            className="bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] w-full"
+          />
+        </div>
+
+        {/* IVA Condition */}
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Condición frente al IVA</label>
+          <div className="flex flex-wrap gap-2">
+            {IVA_CONDITIONS.map(c => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setIvaCondition(c.value)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                  ivaCondition === c.value
+                    ? 'bg-[#00C4BC] text-white border-[#00C4BC]'
+                    : 'bg-surface2 text-app2 border-app hover:border-[#00C4BC]/50'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          {ivaCondition === 'MO' && <p className="text-xs text-app3 mt-1">Emitirás Facturas C (sin IVA desglosado)</p>}
+          {ivaCondition === 'RI' && <p className="text-xs text-app3 mt-1">Emitirás Facturas A (para RI) o B (para CF/Monotributista)</p>}
+          {ivaCondition === 'EX' && <p className="text-xs text-app3 mt-1">Emitirás Facturas B</p>}
+        </div>
+
+        {/* Punto de Venta + Ambiente */}
+        <div className="flex flex-wrap gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Punto de Venta</label>
+            <input
+              type="number"
+              value={puntoVenta}
+              onChange={e => setPuntoVenta(e.target.value)}
+              placeholder="1"
+              min={1}
+              max={99999}
+              className="bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] w-32"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Ambiente</label>
+            <select
+              value={environment}
+              onChange={e => setEnvironment(e.target.value)}
+              className="bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+            >
+              {AFIP_ENVIRONMENTS.map(e => (
+                <option key={e.value} value={e.value}>{e.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Certificate */}
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Certificado AFIP</label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => certInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface2 border border-app hover:border-[#00C4BC]/50 text-sm text-app2 transition-all"
+            >
+              <Upload size={14} />
+              {certFile ? certFile.name : 'Subir .crt o .pem'}
+            </button>
+            {config?.has_cert && !certFile && (
+              <span className="flex items-center gap-1 text-xs text-emerald-500">
+                <CheckCircle2 size={13} /> Configurado
+              </span>
+            )}
+            <input ref={certInputRef} type="file" accept=".crt,.pem,.cer" className="hidden" onChange={e => setCertFile(e.target.files?.[0] ?? null)} />
+          </div>
+          <p className="text-xs text-app3 mt-1">Certificado que obtuviste en el portal AFIP (formato PEM)</p>
+        </div>
+
+        {/* Private Key */}
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Clave Privada</label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => keyInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface2 border border-app hover:border-[#00C4BC]/50 text-sm text-app2 transition-all"
+            >
+              <Upload size={14} />
+              {keyFile ? keyFile.name : 'Subir .key o .pem'}
+            </button>
+            {config?.has_key && !keyFile && (
+              <span className="flex items-center gap-1 text-xs text-emerald-500">
+                <CheckCircle2 size={13} /> Configurado
+              </span>
+            )}
+            <input ref={keyInputRef} type="file" accept=".key,.pem" className="hidden" onChange={e => setKeyFile(e.target.files?.[0] ?? null)} />
+          </div>
+          <p className="text-xs text-app3 mt-1">Clave privada correspondiente al certificado (formato PEM)</p>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">
+            <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 ${
+              saved
+                ? 'bg-[#E6F8F1] text-[#00C4BC] border border-[#00C4BC]/30'
+                : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
+            }`}
+          >
+            {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar configuración AFIP'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -420,6 +671,8 @@ export default function SettingsPage() {
           {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}
         </button>
       </div>
+
+      {token && <AfipConfigSection token={token} />}
     </div>
   )
 }
