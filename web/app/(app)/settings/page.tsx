@@ -404,6 +404,24 @@ function AfipConfigSection({ token }: { token: string }) {
           <p className="text-xs text-app3 mt-1">Clave privada correspondiente al certificado (formato PEM)</p>
         </div>
 
+        {/* Help message when cert/key not yet configured */}
+        {!loading && !config?.has_cert && !config?.has_key && (
+          <div className="flex items-start gap-3 p-4 bg-surface2 border border-app rounded-xl">
+            <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-app3" />
+            <div className="text-sm text-app3">
+              ¿No sabés cómo obtener el certificado AFIP?{' '}
+              Escribinos a{' '}
+              <a
+                href="mailto:soporte.dentalos@gmail.com"
+                className="text-[#00C4BC] font-medium hover:underline"
+              >
+                soporte.dentalos@gmail.com
+              </a>{' '}
+              y te ayudamos a configurarlo.
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">
             <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />

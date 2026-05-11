@@ -169,9 +169,11 @@ export default function StatisticsPage() {
 
   // Menú de acciones por pago
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [menuOpenUp, setMenuOpenUp] = useState(false)
 
   // Facturación AFIP
   const [myAfipIvaCondition, setMyAfipIvaCondition] = useState<string>('MO')
+  const [myAfipConfigured, setMyAfipConfigured]     = useState(false)
   const [invoicesMap, setInvoicesMap] = useState<Record<string, any>>({})
   const [invoiceModalPayment, setInvoiceModalPayment] = useState<any>(null)
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
@@ -276,7 +278,9 @@ export default function StatisticsPage() {
   async function fetchAfipConfig(t: string) {
     try {
       const data = await apiFetch('/professionals/me/afip-config', { token: t })
-      if (data.data?.iva_condition) setMyAfipIvaCondition(data.data.iva_condition)
+      const d = data.data
+      if (d?.iva_condition) setMyAfipIvaCondition(d.iva_condition)
+      setMyAfipConfigured(!!(d?.cuit && d?.has_cert && d?.has_key && d?.afip_punto_venta))
     } catch {}
   }
 
@@ -1050,18 +1054,23 @@ export default function StatisticsPage() {
                         {item.type === 'payment' ? (
                           <div className="relative flex-shrink-0">
                             <button
-                              onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
-                              className="p-1.5 rounded-lg text-app3 hover:text-app hover:bg-surface2 transition-all"
+                              onClick={(e) => {
+                                if (openMenuId === item.id) { setOpenMenuId(null); return }
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                setMenuOpenUp(window.innerHeight - rect.bottom < 160)
+                                setOpenMenuId(item.id)
+                              }}
+                              className="p-1.5 rounded-lg text-app3 hover:text-app hover:bg-surface2 transition-all cursor-pointer"
                             >
                               <MoreVertical size={16} />
                             </button>
                             {openMenuId === item.id && (
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                                <div className="absolute right-0 top-8 z-20 bg-surface border border-app rounded-xl shadow-lg py-1 min-w-[130px]">
+                                <div className={`absolute right-0 z-20 bg-surface border border-app rounded-xl shadow-lg py-1 min-w-[130px] ${menuOpenUp ? 'bottom-8' : 'top-8'}`}>
                                   <button
                                     onClick={() => { setOpenMenuId(null); setEditingPayment(item); setPreselectedPatientId(null); setShowPaymentModal(true) }}
-                                    className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors"
+                                    className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors cursor-pointer"
                                   >
                                     Editar
                                   </button>
@@ -1069,22 +1078,27 @@ export default function StatisticsPage() {
                                     <button
                                       onClick={() => { setOpenMenuId(null); const inv = invoicesMap[item.id]; downloadInvoicePdf(inv.id, inv.invoice_type, inv.afip_numero ?? inv.numero) }}
                                       disabled={downloadingPdfId === invoicesMap[item.id]?.id}
-                                      className="w-full text-left px-4 py-2 text-sm text-emerald-500 hover:bg-surface2 transition-colors disabled:opacity-50"
+                                      className="w-full text-left px-4 py-2 text-sm text-emerald-500 hover:bg-surface2 transition-colors disabled:opacity-50 cursor-pointer"
                                     >
                                       {downloadingPdfId === invoicesMap[item.id]?.id ? 'Generando...' : 'Descargar factura'}
                                     </button>
-                                  ) : (
+                                  ) : myAfipConfigured ? (
                                     <button
                                       onClick={() => { setOpenMenuId(null); setInvoiceModalPayment({ ...item, patient_name: item.patient_name ?? '' }) }}
-                                      className="w-full text-left px-4 py-2 text-sm text-amber-500 hover:bg-surface2 transition-colors"
+                                      className="w-full text-left px-4 py-2 text-sm text-amber-500 hover:bg-surface2 transition-colors cursor-pointer"
                                     >
                                       Facturar
                                     </button>
+                                  ) : (
+                                    <div className="px-4 py-2">
+                                      <p className="text-sm text-app3 opacity-50 cursor-not-allowed">Facturar</p>
+                                      <p className="text-xs text-app3 mt-0.5">Configurá tus datos AFIP en <span className="text-[#00C4BC]">Configuración</span></p>
+                                    </div>
                                   )}
                                   <div className="my-1 border-t border-app" />
                                   <button
                                     onClick={() => { setOpenMenuId(null); setPaymentToDelete(item) }}
-                                    className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-surface2 transition-colors"
+                                    className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-surface2 transition-colors cursor-pointer"
                                   >
                                     Eliminar
                                   </button>
