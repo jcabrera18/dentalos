@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
 import { Wallet, FileText, ClipboardList } from 'lucide-react'
+import { PaymentModal } from '@/components/PaymentModal'
 
 const EMPTY_ACCOUNT_SUMMARY = {
   total_billed: 0,
@@ -104,6 +105,8 @@ export default function PatientDetailPage() {
   const [apptPage, setApptPage] = useState(1)
   const [notes, setNotes] = useState('')
   const [showAccountModal, setShowAccountModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [token, setToken] = useState('')
   const [accountPayments, setAccountPayments] = useState<any[]>([])
   const [accountPage, setAccountPage] = useState(0)
   const [savingNotes, setSavingNotes] = useState(false)
@@ -164,6 +167,7 @@ export default function PatientDetailPage() {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
+      setToken(session.access_token)
 
       // Fase 1: solo datos del paciente — desbloquea el render inmediatamente
       const patientData = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
@@ -1293,10 +1297,7 @@ export default function PatientDetailPage() {
               {/* Footer */}
               <div className="px-6 py-4 border-t border-app shrink-0">
                 <button
-                  onClick={() => {
-                    setShowAccountModal(false)
-                    router.push(`/payments?patient_id=${params.id}&patient_name=${patient.first_name} ${patient.last_name}`)
-                  }}
+                  onClick={() => setShowPaymentModal(true)}
                   className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all text-sm shadow-sm shadow-[#00C4BC]/20"
                 >
                   💰 Registrar nuevo cobro
@@ -1305,6 +1306,21 @@ export default function PatientDetailPage() {
             </>
           </div>
         </div>
+      )}
+
+      {/* Modal registro de cobro */}
+      {showPaymentModal && token && (
+        <PaymentModal
+          token={token}
+          patients={patient ? [patient] : []}
+          professionals={[]}
+          preselectedPatientId={params.id as string}
+          onClose={() => setShowPaymentModal(false)}
+          onSaved={async () => {
+            setShowPaymentModal(false)
+            await refreshAccountState(token)
+          }}
+        />
       )}
 
       {/* Lightbox previsualización */}
