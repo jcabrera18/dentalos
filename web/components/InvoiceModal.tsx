@@ -51,7 +51,7 @@ export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose,
   const [downloadingPdf, setDownloadingPdf]     = useState(false)
 
   const invoiceType  = resolveInvoiceType(profesionalIvaCondition, receptorIva)
-  const totalAmount  = Number(payment.total_amount ?? payment.amount)
+  const totalAmount  = Number(payment.amount)
 
   async function handleSubmit() {
     if (!receptorName.trim()) { setError('El nombre del receptor es obligatorio'); return }
