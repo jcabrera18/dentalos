@@ -1392,7 +1392,7 @@ const DURACIONES = [
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha</label>
                 <input type="date" value={form.date} onChange={e => set('date', e.target.value)}

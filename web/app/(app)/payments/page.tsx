@@ -203,6 +203,12 @@ export default function StatisticsPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  async function getToken(): Promise<string> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { router.push('/'); return '' }
+    return session.access_token
+  }
+
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession()
@@ -352,10 +358,12 @@ export default function StatisticsPage() {
   }
 
   async function refreshAll() {
+    const t = await getToken()
+    if (!t) return
     await Promise.all([
-      fetchKpis(token),
-      fetchAnalytics(period, token, customFrom, customTo),
-      fetchMovements(period, token, customFrom, customTo, histFilter, 1),
+      fetchKpis(t),
+      fetchAnalytics(period, t, customFrom, customTo),
+      fetchMovements(period, t, customFrom, customTo, histFilter, 1),
     ])
     setHistPage(1)
   }
@@ -364,9 +372,11 @@ export default function StatisticsPage() {
     setPeriod(p)
     setHistPage(1)
     if (p !== 'custom') {
+      const t = await getToken()
+      if (!t) return
       await Promise.all([
-        fetchAnalytics(p, token),
-        fetchMovements(p, token, '', '', histFilter, 1),
+        fetchAnalytics(p, t),
+        fetchMovements(p, t, '', '', histFilter, 1),
       ])
     }
   }
@@ -374,34 +384,44 @@ export default function StatisticsPage() {
   async function handleApplyCustomPeriod() {
     if (!customFrom || !customTo) return
     setHistPage(1)
+    const t = await getToken()
+    if (!t) return
     await Promise.all([
-      fetchAnalytics('custom', token, customFrom, customTo),
-      fetchMovements('custom', token, customFrom, customTo, histFilter, 1),
+      fetchAnalytics('custom', t, customFrom, customTo),
+      fetchMovements('custom', t, customFrom, customTo, histFilter, 1),
     ])
   }
 
   async function handleChangeClinicalPeriod(p: Period) {
     setClinicalPeriod(p)
-    await fetchClinicalPeriodData(p, token)
+    const t = await getToken()
+    if (!t) return
+    await fetchClinicalPeriodData(p, t)
   }
 
   async function handleHistFilterChange(f: 'all' | 'payment' | 'expense') {
     setHistFilter(f)
     setHistPage(1)
-    await fetchMovements(period, token, customFrom, customTo, f, 1)
+    const t = await getToken()
+    if (!t) return
+    await fetchMovements(period, t, customFrom, customTo, f, 1)
   }
 
   async function handleHistPageChange(page: number) {
     setHistPage(page)
-    await fetchMovements(period, token, customFrom, customTo, histFilter, page)
+    const t = await getToken()
+    if (!t) return
+    await fetchMovements(period, t, customFrom, customTo, histFilter, page)
   }
 
   async function confirmDeletePayment() {
-    if (!token || !paymentToDelete) return
+    if (!paymentToDelete) return
+    const t = await getToken()
+    if (!t) return
     setDeletingPayment(true)
     setDeletePaymentError('')
     try {
-      await apiFetch(`/payments/${paymentToDelete.id}`, { method: 'DELETE', token })
+      await apiFetch(`/payments/${paymentToDelete.id}`, { method: 'DELETE', token: t })
       await refreshAll()
       setPaymentToDelete(null)
     } catch (err) {
@@ -412,7 +432,9 @@ export default function StatisticsPage() {
   }
 
   async function deleteExpense(id: string) {
-    await apiFetch(`/expenses/${id}`, { method: 'DELETE', token })
+    const t = await getToken()
+    if (!t) return
+    await apiFetch(`/expenses/${id}`, { method: 'DELETE', token: t })
     await refreshAll()
   }
 
@@ -795,28 +817,34 @@ export default function StatisticsPage() {
               if (insights.length === 0) return null
 
               return (
-                <div>
-                  <div className="flex items-center gap-2 mb-2.5">
-                    <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Resumen inteligente</span>
-                    <div className="h-px flex-1 bg-[var(--border)]" />
+                <div className="bg-surface border-2 border-[var(--border)] rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-base">✦</span>
+                    <span className="text-sm font-bold text-app uppercase tracking-widest">Diagnóstico del período</span>
                   </div>
-                  <DragScroll>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {insights.map((ins, i) => (
                       <div
                         key={i}
-                        className={`flex items-center gap-2 flex-shrink-0 rounded-lg px-3 py-2 border text-xs font-semibold whitespace-nowrap ${
+                        className={`flex items-start gap-3 rounded-xl px-4 py-3 border ${
                           ins.type === 'good'
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                            ? 'bg-emerald-500/10 border-emerald-500/30'
                             : ins.type === 'bad'
-                              ? 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
-                              : 'bg-surface2 border-app text-app2'
+                              ? 'bg-red-500/10 border-red-500/30'
+                              : 'bg-surface2 border-app'
                         }`}
                       >
-                        <span>{ins.icon}</span>
-                        <span>{ins.text}</span>
+                        <span className="text-xl leading-none mt-0.5">{ins.icon}</span>
+                        <span className={`text-sm font-semibold leading-snug ${
+                          ins.type === 'good'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : ins.type === 'bad'
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-app2'
+                        }`}>{ins.text}</span>
                       </div>
                     ))}
-                  </DragScroll>
+                  </div>
                 </div>
               )
             })()}

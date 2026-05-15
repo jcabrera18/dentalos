@@ -347,7 +347,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
                 className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">DNI</label>
                 <input value={form.document_number} onChange={e => set('document_number', e.target.value)}
