@@ -69,6 +69,9 @@ export default function PatientDetailPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [apptPage, setApptPage] = useState(1)
+  const [appointments, setAppointments] = useState<any[]>([])
+  const [appointmentsTotal, setAppointmentsTotal] = useState(0)
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true)
   const [notes, setNotes] = useState('')
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -131,49 +134,51 @@ export default function PatientDetailPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
+      const token = session.access_token
 
-      // Fase 1: solo datos del paciente — desbloquea el render inmediatamente
-      const patientData = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
-      setPatient(patientData.data)
-      setOdontogramActiveType((patientData.data?.odontogram_type as 'adult' | 'child') ?? 'adult')
-      setNotes(patientData.data?.notes ?? '')
-      setLoading(false)
-
-      // Fase 2: odontograma + diagnósticos en background
+      // Disparar odontograma, diagnósticos y archivos en paralelo con el paciente
       void Promise.all([
-        apiFetch(`/treatments/odontogram/${params.id}`, { token: session.access_token }),
-        apiFetch(`/treatments/tooth-diagnostics/${params.id}`, { token: session.access_token }),
+        apiFetch(`/treatments/odontogram/${params.id}`, { token }),
+        apiFetch(`/treatments/tooth-diagnostics/${params.id}`, { token }),
       ]).then(([odontogramData, diagData]) => {
         setOdontogram(odontogramData.data ?? [])
         setToothDiagnostics(diagData.data ?? [])
         setOdontogramLoading(false)
       })
 
-      // Fase 2: historia clínica en background (para mostrar badges de alerta)
-      void apiFetch(`/patients/${params.id}/clinical-history`, { token: session.access_token })
-        .then((res) => {
-          const existing = res.data ?? null
-          setClinicalHistory(existing)
-          setClinicalHistoryLoaded(true)
-        })
-
-      // Fase 2: consentimientos en background (para badge del botón)
-      void apiFetch(`/consents?patient_id=${params.id}`, { token: session.access_token })
-        .then(res => setExistingConsents(res.data ?? []))
-
-      // Fase 2: archivos en background
       void (async () => {
-        const { createClient: createSupabase } = await import('@/lib/supabase')
-        const sb = createSupabase()
-        const { data: fileList } = await sb.storage.from('patient-files').list(`${params.id}/`)
+        const { data: fileList } = await supabase.storage.from('patient-files').list(`${params.id}/`)
         const list = fileList ?? []
         setFiles(list)
         await loadFileUrls(list)
         setFilesLoading(false)
       })()
+
+      // Desbloquear render en cuanto llegan los datos del paciente
+      const patientData = await apiFetch(`/patients/${params.id}`, { token })
+      setPatient(patientData.data)
+      setOdontogramActiveType((patientData.data?.odontogram_type as 'adult' | 'child') ?? 'adult')
+      setNotes(patientData.data?.notes ?? '')
+      setLoading(false)
     }
     load()
   }, [])
+
+  useEffect(() => {
+    if (!token) return
+    async function loadAppointments() {
+      setAppointmentsLoading(true)
+      const offset = (apptPage - 1) * APPTS_PER_PAGE
+      const res = await apiFetch(
+        `/patients/${params.id}/appointments?limit=${APPTS_PER_PAGE}&offset=${offset}`,
+        { token }
+      )
+      setAppointments(res.data ?? [])
+      setAppointmentsTotal(res.meta?.total ?? 0)
+      setAppointmentsLoading(false)
+    }
+    void loadAppointments()
+  }, [token, apptPage])
 
   useEffect(() => {
     async function syncAccountState() {
@@ -420,13 +425,12 @@ export default function PatientDetailPage() {
     setSavingEdit(true)
 
     try {
-      await apiFetch(`/patients/${params.id}`, {
+      const { data: updatedPatient } = await apiFetch(`/patients/${params.id}`, {
         method: 'PATCH',
         token: session.access_token,
         body: JSON.stringify(buildPatientUpdatePayload(editForm))
       })
-      const data = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
-      setPatient(data.data)
+      setPatient((prev: any) => ({ treatments: prev.treatments, ...updatedPatient }))
       setEditMode(false)
       setDeleteConfirm(false)
     } catch (err: unknown) {
@@ -980,23 +984,20 @@ export default function PatientDetailPage() {
               <div className="px-6 py-4 border-b border-app">
                 <h3 className="font-semibold">Historial clínico</h3>
               </div>
-              {!patient.appointments?.length ? (
+              {appointmentsLoading ? (
+                <div className="px-6 py-8 text-center text-app3 text-sm">Cargando...</div>
+              ) : !appointments.length ? (
                 <div className="px-6 py-8 text-center text-app3 text-sm">
                   Sin historial de consultas
                 </div>
               ) : (
                 <div className="divide-y divide-app">
                   {(() => {
-                    const sorted = [...patient.appointments].sort((a: any, b: any) =>
-                      new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()
-                    )
-                    const total = sorted.length
-                    const totalPages = Math.ceil(total / APPTS_PER_PAGE)
-                    const paged = sorted.slice((apptPage - 1) * APPTS_PER_PAGE, apptPage * APPTS_PER_PAGE)
+                    const totalPages = Math.ceil(appointmentsTotal / APPTS_PER_PAGE)
 
                     return (
                       <>
-                        {paged.map((appt: any) => {
+                        {appointments.map((appt: any) => {
                           const dt = new Date(appt.starts_at)
                           const fecha = dt.toLocaleDateString('es-AR', {
                             day: 'numeric', month: 'short',
@@ -1048,7 +1049,7 @@ export default function PatientDetailPage() {
                         {totalPages > 1 && (
                           <div className="px-5 py-3 border-t border-app flex items-center justify-between">
                             <span className="text-xs text-app3">
-                              {total} consultas · pág. {apptPage}/{totalPages}
+                              {appointmentsTotal} consultas · pág. {apptPage}/{totalPages}
                             </span>
                             <div className="flex gap-2">
                               <button
