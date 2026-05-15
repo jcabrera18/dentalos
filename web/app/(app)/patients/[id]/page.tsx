@@ -1508,7 +1508,8 @@ export default function PatientDetailPage() {
 
       {/* Modal historia clínica */}
       {showClinicalHistory && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4 sm:pb-4"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
           onClick={() => { if (chMode === 'form') { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY) } }}>
           <div className="bg-surface border border-app rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}>
