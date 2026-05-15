@@ -64,6 +64,7 @@ function buildPatientUpdatePayload(editForm: Record<string, unknown>) {
     last_name: normalizePatientTextField(editForm.last_name),
     phone: normalizePatientTextField(editForm.phone),
     email: normalizePatientTextField(editForm.email),
+    address: normalizePatientTextField(editForm.address),
     document_number: normalizePatientTextField(editForm.document_number),
     gender: typeof editForm.gender === 'string' && editForm.gender ? editForm.gender : null,
     insurance_name: normalizePatientTextField(editForm.insurance_name),
@@ -851,6 +852,9 @@ export default function PatientDetailPage() {
               {patient.email && (
                 <div className="text-app3 text-sm truncate">✉️ {patient.email}</div>
               )}
+              {patient.address && (
+                <div className="text-app3 text-sm">📍 {patient.address}</div>
+              )}
               <button
                 onClick={() => {
                   setEditMode(true); setEditForm({
@@ -858,6 +862,7 @@ export default function PatientDetailPage() {
                     last_name: patient.last_name,
                     phone: patient.phone ?? '',
                     email: patient.email ?? '',
+                    address: patient.address ?? '',
                     document_number: patient.document_number ?? '',
                     date_of_birth: patient.date_of_birth ?? '',
                     gender: patient.gender ?? '',
@@ -2204,6 +2209,13 @@ export default function PatientDetailPage() {
                       type="email"
                       className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Domicilio</label>
+                  <input value={editForm.address ?? ''} onChange={e => setEditForm((f: any) => ({ ...f, address: e.target.value }))}
+                    placeholder="Calle, número, piso, depto..."
+                    className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

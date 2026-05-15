@@ -266,7 +266,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
     first_name: '', last_name: '', phone: '',
     document_number: '', date_of_birth: '',
     gender: '',
-    email: '', insurance_name: '', insurance_plan: '', insurance_number: '', allergies: '',
+    email: '', address: '', insurance_name: '', insurance_plan: '', insurance_number: '', allergies: '',
     current_medications: ''
   })
   const [loading, setLoading] = useState(false)
@@ -338,6 +338,13 @@ function NewPatientModal({ token, onClose, onCreated }: {
                   type="email"
                   className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Domicilio</label>
+              <input value={form.address} onChange={e => set('address', e.target.value)}
+                placeholder="Calle, número, piso, depto..."
+                className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

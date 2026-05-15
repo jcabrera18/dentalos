@@ -582,20 +582,17 @@ export default function StatisticsPage() {
 
         {/* Fila 3: selector de período solo para Clínicas */}
         {subview === 'clinicas' && (
-          <div className="px-6 py-2.5 flex items-center gap-2 overflow-x-auto">
+          <div className="px-6 py-2.5 flex items-center gap-2">
             <span className="text-xs text-app3 whitespace-nowrap flex-shrink-0">Período:</span>
-            {PERIOD_OPTIONS.filter(o => o.value !== 'custom').map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => handleChangeClinicalPeriod(opt.value as Period)}
-                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${clinicalPeriod === opt.value
-                    ? 'bg-[#E6F8F1] text-[#00C4BC]'
-                    : 'bg-surface2 text-app2 hover:text-app'
-                  }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+            <select
+              value={clinicalPeriod}
+              onChange={e => handleChangeClinicalPeriod(e.target.value as Period)}
+              className="flex-1 bg-surface2 border border-app rounded-lg px-3 py-1.5 text-sm font-semibold text-app focus:outline-none focus:border-[#00C4BC] cursor-pointer"
+            >
+              {PERIOD_OPTIONS.filter(o => o.value !== 'custom').map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
         )}
       </div>
@@ -613,7 +610,7 @@ export default function StatisticsPage() {
               <div className="h-px flex-1 bg-[var(--border)]" />
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
               {/* Caja disponible */}
               <div className="bg-surface border border-app rounded-xl p-5">
@@ -690,20 +687,17 @@ export default function StatisticsPage() {
 
             {/* Selector temporal */}
             <div className="bg-surface border border-app rounded-xl p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-app3 whitespace-nowrap mr-1">Período:</span>
-                {PERIOD_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleChangePeriod(opt.value)}
-                    className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${period === opt.value
-                      ? 'bg-[#E6F8F1] text-[#00C4BC]'
-                      : 'bg-surface2 text-app2 hover:text-app'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-app3 whitespace-nowrap">Período:</span>
+                <select
+                  value={period}
+                  onChange={e => handleChangePeriod(e.target.value as Period)}
+                  className="flex-1 bg-surface2 border border-app rounded-lg px-3 py-1.5 text-sm font-semibold text-app focus:outline-none focus:border-[#00C4BC] cursor-pointer"
+                >
+                  {PERIOD_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
               {period === 'custom' && (
                 <div className="flex items-center gap-2 flex-wrap mt-3 pt-3 border-t border-app">
@@ -829,7 +823,7 @@ export default function StatisticsPage() {
 
             {/* Métricas del período */}
             <div className={`transition-opacity duration-150 ${dataLoading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                   {/* Ingresos del período */}
                   <div className="bg-surface border border-app rounded-xl p-5">
@@ -975,9 +969,9 @@ export default function StatisticsPage() {
 
           {/* ── BLOQUE 3: Historial de movimientos ── */}
           <section>
-            <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-3">
               <SectionLabel>Actividad financiera</SectionLabel>
-              <div className="flex items-center gap-1 bg-surface2 rounded-lg p-1">
+              <div className="flex items-center gap-1 bg-surface2 rounded-lg p-1 self-start sm:self-auto">
                 {([
                   { key: 'all', label: 'Todos' },
                   { key: 'payment', label: 'Cobros' },
@@ -1138,7 +1132,7 @@ export default function StatisticsPage() {
 
             {/* KPIs clínicos */}
             {clinicalLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 {[...Array(4)].map((_, i) => (
                   <div key={i} className="bg-surface border border-app rounded-xl p-5 animate-pulse space-y-3">
                     <div className="h-3 bg-surface2 rounded w-20" />
@@ -1148,7 +1142,7 @@ export default function StatisticsPage() {
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div className="bg-surface border border-app rounded-xl p-5">
                   <div className="text-xs text-app3 uppercase tracking-wider mb-1">Turnos agendados</div>
                   <div className="text-3xl font-bold text-app">{clinicalActive}</div>
