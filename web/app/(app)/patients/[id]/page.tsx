@@ -119,6 +119,15 @@ export default function PatientDetailPage() {
   const [clinicalHistoryForm, setClinicalHistoryForm] = useState<any>(EMPTY_CLINICAL_HISTORY)
   const [savingClinicalHistory, setSavingClinicalHistory] = useState(false)
   const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(false)
+  const [chMode, setChMode] = useState<'form' | 'sign' | 'signatures' | 'sig-detail'>('form')
+  const [chSignatures, setChSignatures] = useState<any[]>([])
+  const [chSigSelected, setChSigSelected] = useState<any>(null)
+  const [chSigLoading, setChSigLoading] = useState(false)
+  const [chSigIsDrawing, setChSigIsDrawing] = useState(false)
+  const [chSigHasSignature, setChSigHasSignature] = useState(false)
+  const [savingChSignature, setSavingChSignature] = useState(false)
+  const [chSigSaved, setChSigSaved] = useState(false)
+  const chSignatureCanvasRef = useRef<HTMLCanvasElement>(null)
 
   // --- Consentimientos ---
   const [showConsentModal, setShowConsentModal] = useState(false)
@@ -258,6 +267,24 @@ export default function PatientDetailPage() {
       setHasSignature(false)
     })
   }, [consentView])
+
+  useEffect(() => {
+    if (chMode !== 'sign') return
+    requestAnimationFrame(() => {
+      const canvas = chSignatureCanvasRef.current
+      if (!canvas) return
+      canvas.width = canvas.offsetWidth || 400
+      canvas.height = 160
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.strokeStyle = '#1a1a1a'
+        ctx.lineWidth = 2.5
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+      }
+      setChSigHasSignature(false)
+    })
+  }, [chMode])
 
   async function openConsentModal() {
     setShowConsentModal(true)
@@ -403,13 +430,22 @@ export default function PatientDetailPage() {
 
   async function openClinicalHistory() {
     setShowClinicalHistory(true)
-    if (clinicalHistoryLoaded) return
+    setChMode('form')
+    setChSigSelected(null)
+    if (clinicalHistoryLoaded) {
+      loadChSignatures()
+      return
+    }
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
-    const res = await apiFetch(`/patients/${params.id}/clinical-history`, { token: session.access_token })
+    const [res, sigsRes] = await Promise.all([
+      apiFetch(`/patients/${params.id}/clinical-history`, { token: session.access_token }),
+      apiFetch(`/patients/${params.id}/clinical-history/signatures`, { token: session.access_token }),
+    ])
     const existing = res.data ?? null
     setClinicalHistory(existing)
     setClinicalHistoryForm(existing ?? EMPTY_CLINICAL_HISTORY)
+    setChSignatures(sigsRes.data ?? [])
     setClinicalHistoryLoaded(true)
   }
 
@@ -425,9 +461,120 @@ export default function PatientDetailPage() {
       })
       setClinicalHistory(res.data)
       setShowClinicalHistory(false)
+      setChMode('form')
     } finally {
       setSavingClinicalHistory(false)
     }
+  }
+
+  async function openChSignMode() {
+    setSavingClinicalHistory(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    try {
+      const res = await apiFetch(`/patients/${params.id}/clinical-history`, {
+        method: 'PUT',
+        token: session.access_token,
+        body: JSON.stringify(clinicalHistoryForm),
+      })
+      setClinicalHistory(res.data)
+      const sigsRes = await apiFetch(`/patients/${params.id}/clinical-history/signatures`, { token: session.access_token })
+      setChSignatures(sigsRes.data ?? [])
+      setChSigHasSignature(false)
+      setChMode('sign')
+    } finally {
+      setSavingClinicalHistory(false)
+    }
+  }
+
+  async function loadChSignatures() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const sigsRes = await apiFetch(`/patients/${params.id}/clinical-history/signatures`, { token: session.access_token })
+    setChSignatures(sigsRes.data ?? [])
+  }
+
+  async function openChSignatureDetail(sigId: string) {
+    setChSigSelected(null)
+    setChSigLoading(true)
+    setChMode('sig-detail')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    try {
+      const res = await apiFetch(`/patients/${params.id}/clinical-history/signatures/${sigId}`, { token: session.access_token })
+      setChSigSelected(res.data)
+    } finally {
+      setChSigLoading(false)
+    }
+  }
+
+  async function handleSaveChSignature() {
+    if (!chSigHasSignature || !chSignatureCanvasRef.current) return
+    setSavingChSignature(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const signatureData = chSignatureCanvasRef.current.toDataURL('image/png')
+      await apiFetch(`/patients/${params.id}/clinical-history/signatures`, {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({
+          history_snapshot: clinicalHistory,
+          signature_data: signatureData,
+        }),
+      })
+      const sigsRes = await apiFetch(`/patients/${params.id}/clinical-history/signatures`, { token: session.access_token })
+      setChSignatures(sigsRes.data ?? [])
+      setChSigSaved(true)
+      setTimeout(() => {
+        setChSigSaved(false)
+        setChMode('form')
+        setChSigHasSignature(false)
+      }, 1800)
+    } finally {
+      setSavingChSignature(false)
+    }
+  }
+
+  function onChSignPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = chSignatureCanvasRef.current
+    if (!canvas) return
+    canvas.setPointerCapture(e.pointerId)
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.beginPath()
+    ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY)
+    setChSigIsDrawing(true)
+  }
+
+  function onChSignPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!chSigIsDrawing) return
+    const canvas = chSignatureCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY)
+    ctx.stroke()
+    setChSigHasSignature(true)
+  }
+
+  function onChSignPointerUp() {
+    setChSigIsDrawing(false)
+  }
+
+  function clearChSignature() {
+    const canvas = chSignatureCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setChSigHasSignature(false)
   }
 
   async function openAccountModal() {
@@ -1362,24 +1509,41 @@ export default function PatientDetailPage() {
       {/* Modal historia clínica */}
       {showClinicalHistory && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={() => { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY) }}>
+          onClick={() => { if (chMode === 'form') { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY) } }}>
           <div className="bg-surface border border-app rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
             onClick={e => e.stopPropagation()}>
 
             {/* Header */}
             <div className="px-6 py-4 border-b border-app flex items-center justify-between shrink-0">
-              <div>
-                <h2 className="text-lg font-bold">Historia clínica</h2>
-                <div className="text-sm text-app2">{patient.first_name} {patient.last_name}</div>
+              <div className="flex items-center gap-3">
+                {chMode !== 'form' && (
+                  <button onClick={() => { setChMode(chMode === 'sig-detail' ? 'signatures' : 'form'); setChSigSelected(null) }}
+                    className="text-app3 hover:text-app p-1 rounded-lg hover:bg-surface2 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                )}
+                <div>
+                  <h2 className="text-lg font-bold">
+                    {chMode === 'form' ? 'Historia clínica' : chMode === 'sign' ? 'Firma del paciente' : chMode === 'signatures' ? 'Firmas anteriores' : 'Detalle de firma'}
+                  </h2>
+                  <div className="text-sm text-app2">{patient.first_name} {patient.last_name}</div>
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                {clinicalHistory?.risk_level === 'high' && (
+                {chMode === 'form' && clinicalHistory?.risk_level === 'high' && (
                   <span className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg">Alto riesgo</span>
                 )}
-                {clinicalHistory?.risk_level === 'medium' && (
+                {chMode === 'form' && clinicalHistory?.risk_level === 'medium' && (
                   <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg">Riesgo medio</span>
                 )}
-                <button onClick={() => { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY) }}
+                {chMode === 'form' && chSignatures.length > 0 && (
+                  <button onClick={async () => { await loadChSignatures(); setChMode('signatures') }}
+                    className="text-xs text-app3 hover:text-app border border-app rounded-lg px-2 py-1 transition-colors cursor-pointer">
+                    {chSignatures.length} firma{chSignatures.length !== 1 ? 's' : ''}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inline ml-1 opacity-60"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                )}
+                <button onClick={() => { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY); setChMode('form'); setChSigSelected(null) }}
                   className="text-app3 hover:text-app p-1 rounded-lg hover:bg-surface2 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
@@ -1391,7 +1555,7 @@ export default function PatientDetailPage() {
               <div className="flex-1 flex items-center justify-center py-12">
                 <div className="text-app3 text-sm">Cargando...</div>
               </div>
-            ) : (
+            ) : chMode === 'form' ? (
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-5">
 
@@ -1564,7 +1728,7 @@ export default function PatientDetailPage() {
                           {(['mala', 'regular', 'buena'] as const).map(opt => (
                             <button key={opt} type="button"
                               onClick={() => setCH('habits', 'oral_hygiene', opt)}
-                              className={`flex-1 py-2 rounded-lg text-xs font-bold border capitalize transition-all active:scale-95 ${
+                              className={`flex-1 py-2 rounded-lg text-xs font-bold border capitalize transition-all active:scale-95 cursor-pointer ${
                                 clinicalHistoryForm.habits.oral_hygiene === opt
                                   ? opt === 'mala'    ? 'bg-red-500/15 border-red-400 text-red-400'
                                   : opt === 'regular' ? 'bg-amber-500/15 border-amber-400 text-amber-400'
@@ -1622,25 +1786,362 @@ export default function PatientDetailPage() {
 
                 </div>
               </div>
+
+            ) : chMode === 'sign' ? (
+              /* ── Vista firma ── */
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="bg-surface2 border-l-4 border-[#00C4BC] rounded-r-xl px-4 py-3 text-sm text-app leading-relaxed">
+                  El paciente confirma con su firma que los datos registrados son correctos y que fue informado sobre su estado de salud por el profesional.
+                </div>
+
+                {clinicalHistory && (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                    {/* Col izq: Alertas clínicas */}
+                    <section>
+                      <div className="text-xs font-bold uppercase tracking-wider text-red-400 mb-2">Alertas clínicas</div>
+                      <div className="space-y-1">
+                        {[
+                          { key: 'aspirin',        label: 'Toma aspirina' },
+                          { key: 'anticoagulants', label: 'Anticoagulantes' },
+                          { key: 'pregnancy',      label: 'Embarazo' },
+                          { key: 'cardiac',        label: 'Cardíaco' },
+                          { key: 'hypertension',   label: 'Presión alta' },
+                          { key: 'seizures',       label: 'Convulsiones / Epilepsia' },
+                        ].filter(f => (clinicalHistory.alerts as any)[f.key]).map(f => (
+                          <div key={f.key} className="flex items-center gap-2 text-app">
+                            <span className="text-red-400 text-xs">●</span>{f.label}
+                          </div>
+                        ))}
+                        {clinicalHistory.alerts?.diabetes?.active && (
+                          <div className="flex items-center gap-2 text-app">
+                            <span className="text-red-400 text-xs">●</span>Diabetes{clinicalHistory.alerts.diabetes.controlled ? ' (controlada)' : ''}
+                          </div>
+                        )}
+                        {clinicalHistory.alerts?.infectious_disease?.active && (
+                          <div className="flex items-center gap-2 text-app">
+                            <span className="text-red-400 text-xs">●</span>Enf. infectocontagiosa{clinicalHistory.alerts.infectious_disease.detail ? `: ${clinicalHistory.alerts.infectious_disease.detail}` : ''}
+                          </div>
+                        )}
+                        {!['aspirin','anticoagulants','pregnancy','cardiac','hypertension','seizures'].some(k => (clinicalHistory.alerts as any)[k]) && !clinicalHistory.alerts?.diabetes?.active && !clinicalHistory.alerts?.infectious_disease?.active && (
+                          <div className="text-app3 text-xs">Sin alertas</div>
+                        )}
+                      </div>
+                    </section>
+
+                    {/* Col der: Antecedentes personales */}
+                    <section>
+                      <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Antecedentes personales</div>
+                      <div className="space-y-1">
+                        {[
+                          { key: 'renal',                label: 'Renal' },
+                          { key: 'hepatic',              label: 'Hepático' },
+                          { key: 'respiratory',          label: 'Respiratorio' },
+                          { key: 'neurological',         label: 'Neurológico' },
+                          { key: 'transfusions',         label: 'Transfusiones' },
+                          { key: 'sexually_transmitted', label: 'Sífilis / Gonorrea' },
+                        ].filter(f => (clinicalHistory.medical_history as any)[f.key]).map(f => (
+                          <div key={f.key} className="flex items-center gap-2 text-app">
+                            <span className="text-[#00C4BC] text-xs">●</span>{f.label}
+                          </div>
+                        ))}
+                        {clinicalHistory.medical_history?.current_disease?.active && (
+                          <div className="flex items-center gap-2 text-app">
+                            <span className="text-[#00C4BC] text-xs">●</span>Enfermedad actual{clinicalHistory.medical_history.current_disease.detail ? `: ${clinicalHistory.medical_history.current_disease.detail}` : ''}
+                          </div>
+                        )}
+                        {clinicalHistory.medical_history?.current_treatment?.active && (
+                          <div className="flex items-center gap-2 text-app">
+                            <span className="text-[#00C4BC] text-xs">●</span>Medicación actual{clinicalHistory.medical_history.current_treatment.detail ? `: ${clinicalHistory.medical_history.current_treatment.detail}` : ''}
+                          </div>
+                        )}
+                        {clinicalHistory.medical_history?.surgeries && (
+                          <div className="flex items-center gap-2 text-app">
+                            <span className="text-[#00C4BC] text-xs">●</span>Cirugías: {clinicalHistory.medical_history.surgeries}
+                          </div>
+                        )}
+                        {!['renal','hepatic','respiratory','neurological','transfusions','sexually_transmitted'].some(k => (clinicalHistory.medical_history as any)[k]) && !clinicalHistory.medical_history?.current_disease?.active && !clinicalHistory.medical_history?.current_treatment?.active && !clinicalHistory.medical_history?.surgeries && (
+                          <div className="text-app3 text-xs">Sin antecedentes</div>
+                        )}
+                      </div>
+                    </section>
+
+                    {/* Col izq: Hábitos */}
+                    <section>
+                      <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Hábitos</div>
+                      <div className="space-y-1">
+                        {clinicalHistory.habits?.smoker && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Fumador</div>}
+                        {clinicalHistory.habits?.alcohol && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Consume alcohol</div>}
+                        {clinicalHistory.habits?.oral_hygiene && (
+                          <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Higiene oral: {clinicalHistory.habits.oral_hygiene}</div>
+                        )}
+                        {!clinicalHistory.habits?.smoker && !clinicalHistory.habits?.alcohol && !clinicalHistory.habits?.oral_hygiene && (
+                          <div className="text-app3 text-xs">Sin datos</div>
+                        )}
+                      </div>
+                    </section>
+
+                    {/* Col der: Antecedentes familiares */}
+                    <section>
+                      <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Antecedentes familiares</div>
+                      <div className="space-y-1">
+                        {clinicalHistory.family_history?.cardiac && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>Cardíaco</div>}
+                        {clinicalHistory.family_history?.diabetes && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>Diabetes</div>}
+                        {clinicalHistory.family_history?.other && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>{clinicalHistory.family_history.other}</div>}
+                        {!clinicalHistory.family_history?.cardiac && !clinicalHistory.family_history?.diabetes && !clinicalHistory.family_history?.other && (
+                          <div className="text-app3 text-xs">Sin antecedentes familiares</div>
+                        )}
+                      </div>
+                    </section>
+
+                    {/* Resumen — ocupa las dos columnas */}
+                    {clinicalHistory.summary && (
+                      <section className="col-span-2">
+                        <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Resumen clínico</div>
+                        <p className="text-app">{clinicalHistory.summary}</p>
+                      </section>
+                    )}
+                  </div>
+                )}
+
+                {/* Canvas firma */}
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Firma del paciente</div>
+                  <div className="relative bg-surface2 border-2 border-dashed border-app rounded-xl overflow-hidden" style={{ touchAction: 'none' }}>
+                    <canvas
+                      ref={chSignatureCanvasRef}
+                      className="w-full block"
+                      style={{ height: 160, touchAction: 'none', cursor: 'crosshair' }}
+                      onPointerDown={onChSignPointerDown}
+                      onPointerMove={onChSignPointerMove}
+                      onPointerUp={onChSignPointerUp}
+                      onPointerLeave={onChSignPointerUp}
+                    />
+                    {!chSigHasSignature && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <span className="text-app3 text-sm">Firmar aquí</span>
+                      </div>
+                    )}
+                  </div>
+                  {chSigHasSignature && (
+                    <button onClick={clearChSignature} className="mt-2 text-xs text-app3 hover:text-app underline">
+                      Borrar y volver a firmar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+            ) : chMode === 'signatures' ? (
+              /* ── Lista de firmas ── */
+              <div className="flex-1 overflow-y-auto p-6">
+                {chSignatures.length === 0 ? (
+                  <div className="text-center py-12 text-app3 text-sm">No hay firmas anteriores registradas</div>
+                ) : (
+                  <div className="space-y-3">
+                    {chSignatures.map((sig: any) => (
+                      <button key={sig.id} onClick={() => openChSignatureDetail(sig.id)}
+                        className="w-full text-left bg-surface2 hover:bg-surface3 border border-app rounded-xl px-4 py-3 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-semibold text-app">Historia firmada</div>
+                            <div className="text-xs text-app3 mt-0.5">
+                              {new Date(sig.signed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}{' — '}
+                              {new Date(sig.signed_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-app3"><polyline points="9 18 15 12 9 6"/></svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            ) : (
+              /* ── Detalle de una firma ── */
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {chSigLoading ? (
+                  <div className="flex items-center justify-center py-12 text-app3 text-sm">Cargando...</div>
+                ) : chSigSelected ? (
+                  <>
+                    {/* Firma del paciente */}
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-3">Firma del paciente</div>
+                      <div className="bg-white rounded-xl p-4 flex items-center justify-center border border-app" style={{ minHeight: 140 }}>
+                        <img
+                          src={chSigSelected.signature_data}
+                          alt="Firma del paciente"
+                          className="max-h-28 object-contain"
+                          style={{ imageRendering: 'pixelated' }}
+                        />
+                      </div>
+                      <div className="text-xs text-app3 mt-2">
+                        Firmado el{' '}
+                        {new Date(chSigSelected.signed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                        {' a las '}
+                        {new Date(chSigSelected.signed_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+
+                    {/* Snapshot de la historia al momento de firmar */}
+                    {chSigSelected.history_snapshot && (
+                      <div className="border-t border-app pt-5 text-sm">
+                        <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-4">Contenido firmado</div>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+
+                          {/* Col izq: Alertas */}
+                          <section>
+                            <div className="text-xs font-semibold text-red-400 mb-1.5">Alertas clínicas</div>
+                            <div className="space-y-1">
+                              {[
+                                { key: 'aspirin',        label: 'Toma aspirina' },
+                                { key: 'anticoagulants', label: 'Anticoagulantes' },
+                                { key: 'pregnancy',      label: 'Embarazo' },
+                                { key: 'cardiac',        label: 'Cardíaco' },
+                                { key: 'hypertension',   label: 'Presión alta' },
+                                { key: 'seizures',       label: 'Convulsiones / Epilepsia' },
+                              ].filter(f => chSigSelected.history_snapshot.alerts?.[f.key]).map(f => (
+                                <div key={f.key} className="flex items-center gap-2 text-app"><span className="text-red-400 text-xs">●</span>{f.label}</div>
+                              ))}
+                              {chSigSelected.history_snapshot.alerts?.diabetes?.active && (
+                                <div className="flex items-center gap-2 text-app"><span className="text-red-400 text-xs">●</span>Diabetes{chSigSelected.history_snapshot.alerts.diabetes.controlled ? ' (controlada)' : ''}</div>
+                              )}
+                              {chSigSelected.history_snapshot.alerts?.infectious_disease?.active && (
+                                <div className="flex items-center gap-2 text-app"><span className="text-red-400 text-xs">●</span>Enf. infectocontagiosa{chSigSelected.history_snapshot.alerts.infectious_disease.detail ? `: ${chSigSelected.history_snapshot.alerts.infectious_disease.detail}` : ''}</div>
+                              )}
+                              {!['aspirin','anticoagulants','pregnancy','cardiac','hypertension','seizures'].some((k: string) => chSigSelected.history_snapshot.alerts?.[k]) && !chSigSelected.history_snapshot.alerts?.diabetes?.active && !chSigSelected.history_snapshot.alerts?.infectious_disease?.active && (
+                                <div className="text-app3 text-xs">Sin alertas</div>
+                              )}
+                            </div>
+                          </section>
+
+                          {/* Col der: Antecedentes personales */}
+                          <section>
+                            <div className="text-xs font-semibold text-app3 mb-1.5">Antecedentes personales</div>
+                            <div className="space-y-1">
+                              {[
+                                { key: 'renal',                label: 'Renal' },
+                                { key: 'hepatic',              label: 'Hepático' },
+                                { key: 'respiratory',          label: 'Respiratorio' },
+                                { key: 'neurological',         label: 'Neurológico' },
+                                { key: 'transfusions',         label: 'Transfusiones' },
+                                { key: 'sexually_transmitted', label: 'Sífilis / Gonorrea' },
+                              ].filter(f => chSigSelected.history_snapshot.medical_history?.[f.key]).map(f => (
+                                <div key={f.key} className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>{f.label}</div>
+                              ))}
+                              {chSigSelected.history_snapshot.medical_history?.current_disease?.active && (
+                                <div className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>Enfermedad actual{chSigSelected.history_snapshot.medical_history.current_disease.detail ? `: ${chSigSelected.history_snapshot.medical_history.current_disease.detail}` : ''}</div>
+                              )}
+                              {chSigSelected.history_snapshot.medical_history?.current_treatment?.active && (
+                                <div className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>Medicación actual{chSigSelected.history_snapshot.medical_history.current_treatment.detail ? `: ${chSigSelected.history_snapshot.medical_history.current_treatment.detail}` : ''}</div>
+                              )}
+                              {chSigSelected.history_snapshot.medical_history?.surgeries && (
+                                <div className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>Cirugías: {chSigSelected.history_snapshot.medical_history.surgeries}</div>
+                              )}
+                              {!['renal','hepatic','respiratory','neurological','transfusions','sexually_transmitted'].some((k: string) => chSigSelected.history_snapshot.medical_history?.[k]) && !chSigSelected.history_snapshot.medical_history?.current_disease?.active && !chSigSelected.history_snapshot.medical_history?.current_treatment?.active && !chSigSelected.history_snapshot.medical_history?.surgeries && (
+                                <div className="text-app3 text-xs">Sin antecedentes</div>
+                              )}
+                            </div>
+                          </section>
+
+                          {/* Col izq: Hábitos */}
+                          <section>
+                            <div className="text-xs font-semibold text-app3 mb-1.5">Hábitos</div>
+                            <div className="space-y-1">
+                              {chSigSelected.history_snapshot.habits?.smoker && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Fumador</div>}
+                              {chSigSelected.history_snapshot.habits?.alcohol && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Consume alcohol</div>}
+                              {chSigSelected.history_snapshot.habits?.oral_hygiene && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Higiene oral: {chSigSelected.history_snapshot.habits.oral_hygiene}</div>}
+                              {!chSigSelected.history_snapshot.habits?.smoker && !chSigSelected.history_snapshot.habits?.alcohol && !chSigSelected.history_snapshot.habits?.oral_hygiene && (
+                                <div className="text-app3 text-xs">Sin datos</div>
+                              )}
+                            </div>
+                          </section>
+
+                          {/* Col der: Antecedentes familiares */}
+                          <section>
+                            <div className="text-xs font-semibold text-app3 mb-1.5">Antecedentes familiares</div>
+                            <div className="space-y-1">
+                              {chSigSelected.history_snapshot.family_history?.cardiac && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>Cardíaco</div>}
+                              {chSigSelected.history_snapshot.family_history?.diabetes && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>Diabetes</div>}
+                              {chSigSelected.history_snapshot.family_history?.other && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>{chSigSelected.history_snapshot.family_history.other}</div>}
+                              {!chSigSelected.history_snapshot.family_history?.cardiac && !chSigSelected.history_snapshot.family_history?.diabetes && !chSigSelected.history_snapshot.family_history?.other && (
+                                <div className="text-app3 text-xs">Sin antecedentes familiares</div>
+                              )}
+                            </div>
+                          </section>
+
+                          {/* Resumen — ancho completo */}
+                          {chSigSelected.history_snapshot.summary && (
+                            <section className="col-span-2">
+                              <div className="text-xs font-semibold text-app3 mb-1.5">Resumen clínico</div>
+                              <p className="text-app">{chSigSelected.history_snapshot.summary}</p>
+                            </section>
+                          )}
+
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+              </div>
             )}
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-app shrink-0 flex gap-3">
-              <button
-                onClick={() => { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY) }}
-                disabled={savingClinicalHistory}
-                className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors disabled:opacity-60"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveClinicalHistory}
-                disabled={savingClinicalHistory || !clinicalHistoryLoaded}
-                className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-[#00C4BC]/20"
-              >
-                {savingClinicalHistory ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
+            {chMode === 'form' ? (
+              <div className="px-6 py-4 border-t border-app shrink-0 flex gap-3">
+                <button
+                  onClick={() => { setShowClinicalHistory(false); setClinicalHistoryForm(clinicalHistory ?? EMPTY_CLINICAL_HISTORY); setChMode('form') }}
+                  disabled={savingClinicalHistory}
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors disabled:opacity-60 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveClinicalHistory}
+                  disabled={savingClinicalHistory || !clinicalHistoryLoaded}
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+                >
+                  {savingClinicalHistory ? 'Guardando...' : 'Guardar'}
+                </button>
+                <button
+                  onClick={openChSignMode}
+                  disabled={savingClinicalHistory || !clinicalHistoryLoaded}
+                  className="flex-[2] bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-[#00C4BC]/20 cursor-pointer"
+                >
+                  {savingClinicalHistory ? 'Guardando...' : 'Guardar y firmar'}
+                </button>
+              </div>
+            ) : chMode === 'sign' ? (
+              <div className="px-6 py-4 border-t border-app shrink-0 flex gap-3">
+                <button onClick={() => setChMode('form')} disabled={savingChSignature}
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors disabled:opacity-60">
+                  Volver
+                </button>
+                <button onClick={handleSaveChSignature}
+                  disabled={!chSigHasSignature || savingChSignature}
+                  className="flex-[2] bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-[#00C4BC]/20">
+                  {chSigSaved ? '✓ Historia firmada' : savingChSignature ? 'Guardando...' : 'Confirmar firma'}
+                </button>
+              </div>
+            ) : chMode === 'signatures' ? (
+              <div className="px-6 py-4 border-t border-app shrink-0 flex gap-3">
+                <button onClick={() => { setChMode('form'); setChSigSelected(null) }}
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors">
+                  Volver a la historia
+                </button>
+                <button onClick={openChSignMode}
+                  disabled={savingClinicalHistory || !clinicalHistoryLoaded}
+                  className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-[#00C4BC]/20">
+                  Nueva firma
+                </button>
+              </div>
+            ) : (
+              <div className="px-6 py-4 border-t border-app shrink-0 flex gap-3">
+                <button onClick={() => { setChMode('signatures'); setChSigSelected(null) }}
+                  className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-colors">
+                  Ver todas las firmas
+                </button>
+              </div>
+            )}
 
           </div>
         </div>
