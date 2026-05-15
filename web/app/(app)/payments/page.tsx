@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Eye, EyeOff, MoreVertical } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import {
@@ -204,9 +204,9 @@ export default function StatisticsPage() {
   const supabase = createClient()
 
   async function getToken(): Promise<string> {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { router.push('/'); return '' }
-    return session.access_token
+    const t = await getSupabaseToken()
+    if (!t) { router.push('/'); return '' }
+    return t
   }
 
   useEffect(() => {

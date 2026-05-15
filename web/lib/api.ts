@@ -1,3 +1,5 @@
+import { createClient } from './supabase'
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL!
 
 function getFriendlyApiError(message?: string, status?: number) {
@@ -11,13 +13,8 @@ function getFriendlyApiError(message?: string, status?: number) {
   return message ?? 'API error'
 }
 
-export async function apiFetch(
-  path: string,
-  options: RequestInit & { token?: string } = {}
-) {
-  const { token, ...fetchOptions } = options
-
-  const res = await fetch(`${API_URL}${path}`, {
+async function doFetch(path: string, token: string | undefined, fetchOptions: RequestInit) {
+  return fetch(`${API_URL}${path}`, {
     ...fetchOptions,
     headers: {
       'Content-Type': 'application/json',
@@ -25,6 +22,25 @@ export async function apiFetch(
       ...fetchOptions.headers,
     },
   })
+}
+
+export async function apiFetch(
+  path: string,
+  options: RequestInit & { token?: string } = {}
+) {
+  const { token, ...fetchOptions } = options
+
+  let res = await doFetch(path, token, fetchOptions)
+
+  // Token expired mid-session: refresh and retry once
+  if (res.status === 401 && token) {
+    const supabase = createClient()
+    const { data } = await supabase.auth.refreshSession()
+    const newToken = data.session?.access_token
+    if (newToken) {
+      res = await doFetch(path, newToken, fetchOptions)
+    }
+  }
 
   const text = await res.text()
   const data = text ? JSON.parse(text) : {}

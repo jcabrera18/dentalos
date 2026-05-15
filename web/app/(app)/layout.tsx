@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, AuthResponse, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
 import { useAppTheme, PlansModalProvider } from '../providers'
 import { useState, useEffect } from 'react'
@@ -109,7 +109,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Refrescar token cuando el usuario vuelve de suspensión/background
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        supabase.auth.getUser()
+        supabase.auth.getSession().then((result: Awaited<ReturnType<typeof supabase.auth.getSession>>) => {
+          const session = result.data.session
+          if (!session) return
+          const nowSecs = Math.floor(Date.now() / 1000)
+          const expiresAt = session.expires_at ?? 0
+          if (expiresAt - nowSecs < 300) {
+            supabase.auth.refreshSession()
+          }
+        })
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)

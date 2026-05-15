@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
 import { Wallet, FileText, ClipboardList } from 'lucide-react'
@@ -184,9 +184,9 @@ export default function PatientDetailPage() {
     async function syncAccountState() {
       // Solo sincronizar si el modal fue abierto al menos una vez
       if (!accountDataLoadedRef.current) return
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      await refreshAccountState(session.access_token)
+      const token = await getSupabaseToken()
+      if (!token) return
+      await refreshAccountState(token)
     }
 
     function handleWindowFocus() {
@@ -361,9 +361,9 @@ export default function PatientDetailPage() {
     setShowAccountModal(true)
     setAccountPage(0)
     accountDataLoadedRef.current = true
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    await refreshAccountState(session.access_token)
+    const token = await getSupabaseToken()
+    if (!token) return
+    await refreshAccountState(token)
   }
 
   async function addDiagnostic(diag: {
