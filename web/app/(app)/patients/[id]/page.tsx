@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
 import { Wallet, FileText, ClipboardList } from 'lucide-react'
 import { PaymentModal } from '@/components/PaymentModal'
+import { downloadAccountStatementPNG } from '@/components/generateReceipt'
 
 const EMPTY_ACCOUNT_SUMMARY = {
   total_billed: 0,
@@ -85,6 +86,8 @@ export default function PatientDetailPage() {
   const [filesLoading, setFilesLoading] = useState(true)
   const [clinicalHistory, setClinicalHistory] = useState<any>(null)
   const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(false)
+  const [clinicName, setClinicName] = useState('')
+  const [myProfessionalName, setMyProfessionalName] = useState('')
 
   // --- Consentimientos ---
   const [showConsentModal, setShowConsentModal] = useState(false)
@@ -153,6 +156,12 @@ export default function PatientDetailPage() {
         await loadFileUrls(list)
         setFilesLoading(false)
       })()
+
+      void apiFetch('/auth/me', { token }).then((me: any) => {
+        const d = me.data ?? me
+        setMyProfessionalName(`${d.first_name ?? ''} ${d.last_name ?? ''}`.trim())
+        setClinicName(d.clinics?.name ?? '')
+      }).catch(() => {})
 
       // Desbloquear render en cuanto llegan los datos del paciente
       const patientData = await apiFetch(`/patients/${params.id}`, { token })
@@ -1104,7 +1113,7 @@ export default function PatientDetailPage() {
               <div className="px-6 py-4 border-b border-app shrink-0">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-surface2 rounded-xl p-3 text-center">
-                    <div className="text-xs text-app3 mb-1">Total facturado</div>
+                    <div className="text-xs text-app3 mb-1">Total de servicios</div>
                     <div className="text-base font-bold text-app">${Number(accountSummary.total_billed).toLocaleString('es-AR')}</div>
                   </div>
                   <div className="bg-surface2 rounded-xl p-3 text-center">
@@ -1222,7 +1231,25 @@ export default function PatientDetailPage() {
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 border-t border-app shrink-0">
+              <div className="px-6 py-4 border-t border-app shrink-0 space-y-2">
+                <button
+                  onClick={() => {
+                    const sorted = [...accountPayments].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+                    downloadAccountStatementPNG({
+                      patientName: `${patient.first_name} ${patient.last_name}`,
+                      clinicName: clinicName || null,
+                      professionalName: myProfessionalName || null,
+                      totalBilled: Number(accountSummary.total_billed),
+                      totalCollected: Number(accountSummary.total_collected),
+                      balanceDue: Number(accountSummary.balance_due),
+                      recentPayments: sorted.slice(0, 5),
+                    })
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 font-semibold py-2.5 rounded-xl transition-all text-sm"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Generar estado de cuenta
+                </button>
                 <button
                   onClick={() => setShowPaymentModal(true)}
                   className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all text-sm shadow-sm shadow-[#00C4BC]/20"
@@ -1242,6 +1269,8 @@ export default function PatientDetailPage() {
           patients={patient ? [patient] : []}
           professionals={[]}
           preselectedPatientId={params.id as string}
+          clinicName={clinicName || undefined}
+          myProfessionalName={myProfessionalName || undefined}
           onClose={() => setShowPaymentModal(false)}
           onSaved={async () => {
             setShowPaymentModal(false)

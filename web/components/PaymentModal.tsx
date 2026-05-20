@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
+import { downloadReceiptPNG } from '@/components/generateReceipt'
 
 export const METODOS = [
   { value: 'cash', label: '💵 Efectivo' },
@@ -18,12 +19,14 @@ export const TIPOS = [
   'Control', 'Armonizacion facial', 'Otro',
 ]
 
-export function PaymentModal({ token, patients: initialPatients, professionals, payment, preselectedPatientId, onClose, onSaved }: {
+export function PaymentModal({ token, patients: initialPatients, professionals, payment, preselectedPatientId, clinicName, myProfessionalName, onClose, onSaved }: {
   token: string
   patients: any[]
   professionals: any[]
   payment?: any | null
   preselectedPatientId?: string | null
+  clinicName?: string
+  myProfessionalName?: string
   onClose: () => void
   onSaved: (success?: { patientName: string; amount: number; remaining: number }) => void
 }) {
@@ -40,6 +43,7 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
   }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [successData, setSuccessData] = useState<{ patientName: string; amount: number; remaining: number } | null>(null)
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
@@ -140,15 +144,89 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
         method: isEditing ? 'PATCH' : 'POST', token,
         body: JSON.stringify({ ...(isEditing ? {} : { patient_id: form.patient_id || undefined }), ...payload })
       })
-      onSaved(isEditing ? undefined : {
-        patientName: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Paciente',
-        amount: paidAmount,
-        remaining: netBalance,
-      })
+      if (isEditing) {
+        onSaved()
+      } else {
+        setSuccessData({
+          patientName: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Paciente',
+          amount: paidAmount,
+          remaining: netBalance,
+        })
+        setLoading(false)
+      }
     } catch (err: any) {
       setError(err.message)
       setLoading(false)
     }
+  }
+
+  function handleDownloadReceipt() {
+    if (!successData) return
+    const profId = form.professional_id
+    const prof = profId ? professionals.find((p: any) => p.id === profId) : null
+    const profName = prof ? `${prof.first_name} ${prof.last_name}` : (myProfessionalName ?? null)
+    downloadReceiptPNG({
+      patientName: successData.patientName,
+      date: new Date(),
+      concept: form.concept || null,
+      method: form.method,
+      amount: paidAmount,
+      totalAmount: totalAmount > 0 ? totalAmount : null,
+      notes: form.notes.trim() || null,
+      installments: form.method === 'credit_card' ? installments : null,
+      professionalName: profName,
+      clinicName: clinicName ?? null,
+      balance: successData.remaining,
+    })
+  }
+
+  if (successData) {
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+        <div className="bg-surface border border-app rounded-2xl w-full max-w-sm overflow-hidden">
+          <div className="px-6 pt-6 pb-5 text-center">
+            <div className="w-14 h-14 rounded-full bg-[#E6F8F1] dark:bg-[#00C4BC]/15 text-[#00C4BC] text-2xl font-bold flex items-center justify-center mx-auto mb-4">✓</div>
+            <h2 className="text-lg font-bold text-app">Cobro registrado</h2>
+            <p className="text-sm text-app3 mt-1">
+              {successData.patientName} abonó ${paidAmount.toLocaleString('es-AR')}
+            </p>
+            {successData.remaining > 0 && (
+              <div className="mt-4 rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3 text-left">
+                <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Saldo pendiente</div>
+                <div className="text-base font-bold text-amber-500 mt-1">${successData.remaining.toLocaleString('es-AR')}</div>
+              </div>
+            )}
+            {successData.remaining < 0 && (
+              <div className="mt-4 rounded-xl bg-[#E6F8F1] dark:bg-[#00C4BC]/10 border border-[#00C4BC]/25 px-4 py-3 text-left">
+                <div className="text-xs font-semibold text-[#00C4BC] uppercase tracking-wider">Saldo a favor</div>
+                <div className="text-base font-bold text-[#00C4BC] mt-1">${Math.abs(successData.remaining).toLocaleString('es-AR')}</div>
+              </div>
+            )}
+          </div>
+          <div className="px-6 pb-6 space-y-2.5">
+            <button
+              type="button"
+              onClick={handleDownloadReceipt}
+              className="w-full flex items-center justify-center gap-2 bg-[#00C4BC]/10 dark:bg-[#00C4BC]/15 border border-[#00C4BC]/30 text-[#00C4BC] font-semibold py-2.5 rounded-xl hover:bg-[#00C4BC]/20 transition-colors active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Descargar comprobante
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const s = successData
+                setSuccessData(null)
+                onSaved({ patientName: s.patientName, amount: paidAmount, remaining: s.remaining })
+              }}
+              className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-semibold py-2.5 rounded-xl transition-colors active:scale-95"
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

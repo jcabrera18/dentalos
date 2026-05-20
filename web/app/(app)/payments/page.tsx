@@ -12,6 +12,7 @@ import {
 import { PaymentModal, METODOS, TIPOS } from '@/components/PaymentModal'
 import { InvoiceModal } from '@/components/InvoiceModal'
 import { FileText } from 'lucide-react'
+import { downloadReceiptPNG } from '@/components/generateReceipt'
 
 const CATEGORIAS_GASTO = [
   'Materiales', 'Equipamiento', 'Alquiler', 'Servicios',
@@ -152,7 +153,6 @@ export default function StatisticsPage() {
   // Modales
   const [showPendingModal, setShowPendingModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [paymentSuccess, setPaymentSuccess] = useState<{ patientName: string; amount: number; remaining: number } | null>(null)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [editingPayment, setEditingPayment] = useState<any>(null)
   const [paymentToDelete, setPaymentToDelete] = useState<any>(null)
@@ -170,6 +170,9 @@ export default function StatisticsPage() {
   // Menú de acciones por pago
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [menuOpenUp, setMenuOpenUp] = useState(false)
+
+  const [clinicName, setClinicName] = useState('')
+  const [myProfessionalName, setMyProfessionalName] = useState('')
 
   // Facturación AFIP
   const [myAfipIvaCondition, setMyAfipIvaCondition] = useState<string>('MO')
@@ -222,6 +225,7 @@ export default function StatisticsPage() {
         fetchMovements('month', t, '', '', 'all', 1),
         fetchPatients(t),
         fetchProfessionals(t),
+        fetchMyProfile(t),
         fetchClinicalMetrics(t),
         fetchClinicalPeriodData('month', t),
         fetchAfipConfig(t),
@@ -279,6 +283,15 @@ export default function StatisticsPage() {
   async function fetchProfessionals(t: string) {
     const data = await apiFetch('/professionals', { token: t })
     setProfessionals(data.data ?? [])
+  }
+
+  async function fetchMyProfile(t: string) {
+    try {
+      const data = await apiFetch('/auth/me', { token: t })
+      const d = data.data ?? data
+      setMyProfessionalName(`${d.first_name ?? ''} ${d.last_name ?? ''}`.trim())
+      setClinicName(d.clinics?.name ?? '')
+    } catch {}
   }
 
   async function fetchAfipConfig(t: string) {
@@ -1117,6 +1130,29 @@ export default function StatisticsPage() {
                                       <p className="text-xs text-app3 mt-0.5">Configurá tus datos AFIP en <span className="text-[#00C4BC]">Configuración</span></p>
                                     </div>
                                   )}
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      const profObj = professionals.find((p: any) => p.id === item.professional_id)
+                                      const profName = profObj ? `${profObj.first_name} ${profObj.last_name}` : (myProfessionalName || null)
+                                      downloadReceiptPNG({
+                                        patientName: item.patient_name ?? 'Paciente',
+                                        date: item.date,
+                                        concept: item.concept ?? null,
+                                        method: item.method,
+                                        amount: Number(item.amount),
+                                        totalAmount: item.total_amount ? Number(item.total_amount) : null,
+                                        notes: item.notes ?? null,
+                                        installments: item.installments ?? null,
+                                        professionalName: profName,
+                                        clinicName: clinicName || null,
+                                        balance: item.patient_balance_due != null ? Number(item.patient_balance_due) : null,
+                                      })
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors cursor-pointer"
+                                  >
+                                    Descargar recibo
+                                  </button>
                                   <div className="my-1 border-t border-app" />
                                   <button
                                     onClick={() => { setOpenMenuId(null); setPaymentToDelete(item) }}
@@ -1328,64 +1364,14 @@ export default function StatisticsPage() {
           professionals={professionals}
           payment={editingPayment}
           preselectedPatientId={preselectedPatientId}
+          clinicName={clinicName || undefined}
+          myProfessionalName={myProfessionalName || undefined}
           onClose={() => { setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null) }}
           onSaved={async (success) => {
             setShowPaymentModal(false); setPreselectedPatientId(null); setEditingPayment(null)
             await refreshAll()
-            if (success) setPaymentSuccess(success)
           }}
         />
-      )}
-
-      {paymentSuccess && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={() => setPaymentSuccess(null)}
-        >
-          <div
-            className="bg-surface border border-app rounded-2xl w-full max-w-sm overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="px-6 pt-6 pb-5 text-center">
-              <div className="w-14 h-14 rounded-full bg-[#E6F8F1] text-[#00C4BC] text-2xl font-bold flex items-center justify-center mx-auto mb-4">
-                ✓
-              </div>
-              <h2 className="text-lg font-bold text-app">Cobro registrado</h2>
-              <p className="text-sm text-app3 mt-2">
-                {paymentSuccess.patientName} abonó {formatARS(paymentSuccess.amount)}.
-              </p>
-              {paymentSuccess.remaining > 0 && (
-                <div className="mt-4 rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3 text-left">
-                  <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                    Saldo pendiente
-                  </div>
-                  <div className="text-base font-bold text-amber-500 mt-1">
-                    {formatARS(paymentSuccess.remaining)}
-                  </div>
-                </div>
-              )}
-              {paymentSuccess.remaining < 0 && (
-                <div className="mt-4 rounded-xl bg-[#E6F8F1] border border-[#00C4BC]/25 px-4 py-3 text-left">
-                  <div className="text-xs font-semibold text-[#00C4BC] uppercase tracking-wider">
-                    Saldo a favor
-                  </div>
-                  <div className="text-base font-bold text-[#00C4BC] mt-1">
-                    {formatARS(Math.abs(paymentSuccess.remaining))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="px-6 pb-6">
-              <button
-                type="button"
-                onClick={() => setPaymentSuccess(null)}
-                className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-semibold py-2.5 rounded-xl transition-colors"
-              >
-                Listo
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {paymentToDelete && (
