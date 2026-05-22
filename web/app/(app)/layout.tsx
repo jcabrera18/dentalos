@@ -266,10 +266,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 key={item.href}
                 onClick={() => router.push(item.href)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
                     ? 'bg-[#E6F8F1] text-[#00C4BC]'
-                    : 'text-app2 hover:bg-surface2 hover:text-app'
+                    : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC]'
                 }`}
               >
                 <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
@@ -283,8 +283,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-3 py-4 border-t border-app space-y-1">
           <button
             onClick={() => router.push('/settings')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              isActive('/settings') ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app2 hover:bg-surface2 hover:text-app'
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+              isActive('/settings') ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC]'
             }`}
           >
             <Settings size={18} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
@@ -294,7 +294,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             onClick={handleCopyInviteLink}
             disabled={copyState === 'loading'}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-surface2 hover:text-app disabled:opacity-50 transition-all"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] disabled:opacity-50 transition-all cursor-pointer"
           >
             <UserPlus size={18} strokeWidth={1.8} />
             {copyState === 'loading' ? 'Generando...' : 'Invitar profesional'}
@@ -302,7 +302,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-surface2 hover:text-app transition-all"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] transition-all cursor-pointer"
           >
             {mounted
               ? theme === 'dark'
@@ -315,7 +315,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <button
             onClick={() => setShowLogoutModal(true)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-surface2 hover:text-app transition-all"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] transition-all cursor-pointer"
           >
             <LogOut size={18} strokeWidth={1.8} />
             Cerrar sesión
@@ -448,7 +448,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 key={item.href}
                 onClick={() => router.push(item.href)}
-                className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
                   active ? 'text-[#00C4BC]' : 'text-app3'
                 }`}
               >
@@ -459,7 +459,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
           <button
             onClick={() => router.push('/settings')}
-            className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+            className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
               isActive('/settings') ? 'text-[#00C4BC]' : 'text-app3'
             }`}
           >

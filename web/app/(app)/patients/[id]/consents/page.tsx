@@ -159,12 +159,16 @@ export default function PatientConsentsPage() {
 
   // ── Signature handlers ──────────────────────────────────────
 
+  function escapeHtml(s: string) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
+  }
+
   function renderConsentHtml(html: string) {
     if (!patient) return html
     return html
-      .replace(/\{\{patient_name\}\}/g, `${patient.first_name} ${patient.last_name}`)
-      .replace(/\{\{patient_document\}\}/g, patient.document_number ?? '')
-      .replace(/\{\{professional_name\}\}/g, professionalName)
+      .replace(/\{\{patient_name\}\}/g, escapeHtml(`${patient.first_name} ${patient.last_name}`))
+      .replace(/\{\{patient_document\}\}/g, escapeHtml(patient.document_number ?? ''))
+      .replace(/\{\{professional_name\}\}/g, escapeHtml(professionalName))
   }
 
   function onSignPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
