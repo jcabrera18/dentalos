@@ -85,9 +85,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       key: 'starter' as const,
       name: 'Starter',
-      // TODO producción: monthlyPrice: '$38.000', annualPrice: '$380.000'
-      monthlyPrice: '$100',
-      annualPrice:  '$1.000',
+      // TODO producción: '$38.000' / '$380.000'
+      monthlyPrice: '$1.000',
+      annualPrice:  '$10.000',
       description: 'Ordená tu consultorio desde el día 1',
       features: ['Agenda y turnos online', 'Historia clínica con odontograma', 'Hasta 100 pacientes', '1 profesional', 'Soporte en español'],
       highlight: false,
@@ -95,9 +95,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       key: 'growth' as const,
       name: 'Growth',
-      // TODO producción: monthlyPrice: '$58.000', annualPrice: '$580.000'
-      monthlyPrice: '$200',
-      annualPrice:  '$2.000',
+      // TODO producción: '$58.000' / '$580.000'
+      monthlyPrice: '$1.500',
+      annualPrice:  '$15.000',
       description: 'Dejá de perder pacientes y llená tu agenda',
       features: ['Todo lo de Starter', 'Pacientes ilimitados', 'Hasta 3 profesionales', '500 recordatorios WhatsApp/mes', 'Confirmación automática de turnos', 'Soporte prioritario'],
       highlight: true,
@@ -105,9 +105,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       key: 'scale' as const,
       name: 'Scale',
-      // TODO producción: monthlyPrice: '$95.000', annualPrice: '$950.000'
-      monthlyPrice: '$300',
-      annualPrice:  '$3.000',
+      // TODO producción: '$95.000' / '$950.000'
+      monthlyPrice: '$2.000',
+      annualPrice:  '$20.000',
       description: 'Gestioná tu clínica como una empresa',
       features: ['Todo lo de Growth', 'Profesionales ilimitados', '2.000 recordatorios WhatsApp/mes', 'Reportes avanzados', 'Onboarding personalizado', 'Soporte dedicado'],
       highlight: false,
