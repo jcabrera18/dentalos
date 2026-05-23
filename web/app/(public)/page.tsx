@@ -36,10 +36,11 @@ export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null)
   const [annualBilling, setAnnualBilling] = useState(false)
 
+  // annual = precio mensual equivalente cuando se factura anual (total = monthly × 10, ÷12 = ~2 meses gratis)
   const PRICES = {
-    starter: { monthly: 38000, annual: Math.round(38000 * 0.8) },
-    growth:  { monthly: 58000, annual: Math.round(58000 * 0.8) },
-    scale:   { monthly: 95000, annual: Math.round(95000 * 0.8) },
+    starter: { monthly: 38000, annual: Math.round(38000 * 10 / 12) },
+    growth:  { monthly: 58000, annual: Math.round(58000 * 10 / 12) },
+    scale:   { monthly: 95000, annual: Math.round(95000 * 10 / 12) },
   }
 
   function price(plan: keyof typeof PRICES) {
