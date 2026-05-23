@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import { UserPlus, Search, ChevronRight, Loader2 } from 'lucide-react'
+import { UserPlus, Search, ChevronRight, Loader2, ArrowRight, MessageCircle, Infinity, Users } from 'lucide-react'
 import {
   cachePatients,
   clearPatientsInFlight,
@@ -14,6 +14,8 @@ import {
   type PatientSummary,
   setPatientsInFlight,
 } from '@/lib/patients-cache'
+import { useSubscription } from '@/lib/useSubscription'
+import { usePlansModal } from '@/app/providers'
 
 function daysAgoLabel(dateStr: string): string {
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000)
@@ -37,6 +39,9 @@ export default function PatientsPage() {
   const router   = useRouter()
   const supabase = createClient()
   const requestIdRef = useRef(0)
+  const { data: sub } = useSubscription()
+  const { openPlansModal } = usePlansModal()
+  const limitReached = sub?.alerts.patientsLimitReached ?? false
 
   useEffect(() => {
     async function load() {
@@ -122,13 +127,51 @@ export default function PatientsPage() {
             <p className="text-sm text-app3 mt-0.5">Gestioná tu cartera de pacientes</p>
           </div>
           <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-sm shadow-[#00C4BC]/20"
+            onClick={() => limitReached ? openPlansModal() : setShowModal(true)}
+            className={`flex items-center gap-2 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-sm ${
+              limitReached
+                ? 'bg-surface2 border border-app text-app3 hover:border-[#00C4BC]/50 shadow-none'
+                : 'bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white shadow-[#00C4BC]/20'
+            }`}
           >
             <UserPlus size={16} />
             Nuevo paciente
           </button>
         </div>
+
+        {/* Banner límite de pacientes */}
+        {limitReached && sub && (
+          <div className="mb-5 rounded-xl border border-[#00C4BC]/30 bg-[#00C4BC]/5 p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex-1">
+                <p className="text-sm font-bold text-app mb-1">
+                  Llegaste al límite de {sub.features.maxPatients} pacientes del plan Starter
+                </p>
+                <p className="text-xs text-app3 mb-2">
+                  Pasate a Growth y desbloqueá pacientes ilimitados, recordatorios automáticos por WhatsApp para reducir ausentismo, y más.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { icon: Infinity, text: 'Pacientes ilimitados' },
+                    { icon: MessageCircle, text: 'Recordatorios por WhatsApp' },
+                    { icon: Users, text: 'Hasta 3 profesionales' },
+                  ].map(({ icon: Icon, text }, i) => (
+                    <span key={i} className="flex items-center gap-1.5 text-xs text-[#00C4BC] font-medium">
+                      <Icon size={12} />
+                      {text}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={openPlansModal}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#00C4BC] hover:bg-[#00aaa3] text-white transition-colors active:scale-95 whitespace-nowrap flex-shrink-0"
+              >
+                Ver planes <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Búsqueda */}
         <div className="mb-5 relative">

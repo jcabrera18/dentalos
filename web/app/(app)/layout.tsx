@@ -47,14 +47,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showInviteSuccess, setShowInviteSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
-  const { data: subscription, refetch: refetchSubscription } = useSubscription()
+  const { data: subscription, loading: subLoading, refetch: refetchSubscription } = useSubscription()
   const [showPlansModal, setShowPlansModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'growth' | 'scale' | null>(null)
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [qrInitPoint, setQrInitPoint] = useState<string | null>(null)
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState<string | null>(null)
+  const [qrRetry, setQrRetry] = useState(0)
+  const [qrTimeLeft, setQrTimeLeft] = useState<number | null>(null)
+  const [navePaymentRequestId, setNavePaymentRequestId] = useState<string | null>(null)
+  const [naveExternalId, setNaveExternalId] = useState<string | null>(null)
+  const [manualCheckLoading, setManualCheckLoading] = useState(false)
+  const [manualCheckMsg, setManualCheckMsg] = useState<{ type: 'info' | 'error'; text: string } | null>(null)
   const [paymentConfirmed, setPaymentConfirmed] = useState(false)
+  const [subEndsAtOnOpen, setSubEndsAtOnOpen] = useState<string | null>(null)
+  // NAVE: cambiar a 'nave' para reactivar Nave como opción de pago
+  const [paymentMethod, setPaymentMethod] = useState<'nave' | 'mercadopago'>('mercadopago')
+
+  const QR_DURATION_SECS = 25 * 60
 
   const PLAN_KEY_MAP: Record<string, 'starter' | 'growth' | 'scale'> = {
     basic: 'starter',
@@ -73,7 +85,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       key: 'starter' as const,
       name: 'Starter',
-      price: '$38.000',
+      monthlyPrice: '$100',
+      annualPrice:  '$1.000',
       description: 'Ordená tu consultorio desde el día 1',
       features: ['Agenda y turnos online', 'Historia clínica con odontograma', 'Hasta 100 pacientes', '1 profesional', 'Soporte en español'],
       highlight: false,
@@ -81,7 +94,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       key: 'growth' as const,
       name: 'Growth',
-      price: '$58.000',
+      monthlyPrice: '$200',
+      annualPrice:  '$2.000',
       description: 'Dejá de perder pacientes y llená tu agenda',
       features: ['Todo lo de Starter', 'Pacientes ilimitados', 'Hasta 3 profesionales', '500 recordatorios WhatsApp/mes', 'Confirmación automática de turnos', 'Soporte prioritario'],
       highlight: true,
@@ -89,7 +103,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     {
       key: 'scale' as const,
       name: 'Scale',
-      price: '$95.000',
+      monthlyPrice: '$300',
+      annualPrice:  '$3.000',
       description: 'Gestioná tu clínica como una empresa',
       features: ['Todo lo de Growth', 'Profesionales ilimitados', '2.000 recordatorios WhatsApp/mes', 'Reportes avanzados', 'Onboarding personalizado', 'Soporte dedicado'],
       highlight: false,
@@ -128,11 +143,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [])
 
+  // Detecta redirect de MercadoPago: limpia el cache y refresca la suscripción.
+  // MP agrega ?collection_status=approved&payment_id=xxx a la back_url tras el pago.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const collectionStatus = params.get('collection_status')
+    const status = params.get('status')
+    const paymentId = params.get('payment_id') ?? params.get('collection_id')
+    if ((collectionStatus === 'approved' || status === 'approved') && paymentId) {
+      invalidateSubscriptionCache()
+      refetchSubscription()
+      const clean = new URL(window.location.href)
+      ;['collection_id', 'collection_status', 'payment_id', 'status',
+        'external_reference', 'payment_type', 'merchant_order_id'].forEach(k => clean.searchParams.delete(k))
+      window.history.replaceState({}, '', clean.toString())
+    }
+  }, [])
+
   useEffect(() => {
     if (!selectedPlan) {
       setQrDataUrl(null)
       setQrInitPoint(null)
       setQrError(null)
+      setNavePaymentRequestId(null)
+      setNaveExternalId(null)
+      setManualCheckMsg(null)
       setPaymentConfirmed(false)
       return
     }
@@ -142,28 +177,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setQrDataUrl(null)
     setQrInitPoint(null)
     setQrError(null)
+    setNavePaymentRequestId(null)
+    setNaveExternalId(null)
+    setManualCheckMsg(null)
+    setSubEndsAtOnOpen(subscription?.subscription.endsAt ?? null)
 
     async function generateQr() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) throw new Error('Sin sesión')
 
-        const res = await apiFetch('/mercadopago/preference', {
-          method: 'POST',
-          token: session.access_token,
-          body: JSON.stringify({ plan: selectedPlan }),
-        })
-
-        const url = process.env.NODE_ENV === 'production'
-          ? res.init_point
-          : (res.sandbox_init_point ?? res.init_point)
-
-        if (!cancelled) setQrInitPoint(url)
-
-        if (res.qr_data) {
-          const QRCode = (await import('qrcode')).default
-          const dataUrl = await QRCode.toDataURL(res.qr_data, { width: 208, margin: 1 })
-          if (!cancelled) setQrDataUrl(dataUrl)
+        if (paymentMethod === 'nave') {
+          const res = await apiFetch('/nave/preference', {
+            method: 'POST',
+            token: session.access_token,
+            body: JSON.stringify({ plan: selectedPlan, billing }),
+          })
+          if (!cancelled) {
+            setQrInitPoint(res.checkout_url)
+            setNavePaymentRequestId(res.id)
+            setNaveExternalId(res.external_payment_id)
+          }
+          if (res.qr_data) {
+            const QRCode = (await import('qrcode')).default
+            const dataUrl = await QRCode.toDataURL(res.qr_data, { width: 208, margin: 1 })
+            if (!cancelled) setQrDataUrl(dataUrl)
+          }
+        } else {
+          const res = await apiFetch('/mercadopago/preference', {
+            method: 'POST',
+            token: session.access_token,
+            body: JSON.stringify({ plan: selectedPlan }),
+          })
+          if (!cancelled) setQrInitPoint(res.init_point)
+          if (res.qr_data) {
+            const QRCode = (await import('qrcode')).default
+            const dataUrl = await QRCode.toDataURL(res.qr_data, { width: 208, margin: 1 })
+            if (!cancelled) setQrDataUrl(dataUrl)
+          }
         }
       } catch (err) {
         if (!cancelled) setQrError('No se pudo generar el QR. Intentá de nuevo.')
@@ -174,9 +225,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     generateQr()
     return () => { cancelled = true }
-  }, [selectedPlan])
+  }, [selectedPlan, qrRetry, paymentMethod])
 
-  // Polling: verifica cada 4s si el pago fue confirmado mientras el modal está abierto
+  // Polling: verifica cada 4s si el pago fue confirmado mientras el modal está abierto.
+  // Compara sub_ends_at contra el valor al abrir el modal para no disparar en upgrades
+  // donde la suscripción ya está activa desde antes.
   useEffect(() => {
     if (!qrInitPoint || paymentConfirmed) return
 
@@ -185,7 +238,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) return
         const res = await apiFetch('/subscription/status', { token: session.access_token })
-        if (res.status === 'active' && !res.alerts?.accessBlocked) {
+        const newEndsAt = res.subscription?.endsAt ?? null
+        const changed = newEndsAt !== subEndsAtOnOpen
+        if (changed && !res.alerts?.accessBlocked) {
           invalidateSubscriptionCache()
           await refetchSubscription()
           setPaymentConfirmed(true)
@@ -195,7 +250,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const interval = setInterval(check, 4000)
     return () => clearInterval(interval)
-  }, [qrInitPoint, paymentConfirmed])
+  }, [qrInitPoint, paymentConfirmed, subEndsAtOnOpen])
+
+  // Countdown timer — only for Nave (MP links don't have a 25-min expiry)
+  useEffect(() => {
+    if (paymentMethod !== 'nave' || !qrInitPoint || qrError || paymentConfirmed) {
+      setQrTimeLeft(null)
+      return
+    }
+    setQrTimeLeft(QR_DURATION_SECS)
+    const interval = setInterval(() => {
+      setQrTimeLeft(prev => {
+        if (prev === null || prev <= 1) { clearInterval(interval); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [qrInitPoint, qrError, paymentConfirmed, paymentMethod])
+
+  function formatQrTime(secs: number): string {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0')
+    const s = (secs % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
+  async function handleManualCheck() {
+    if (!navePaymentRequestId || !naveExternalId || manualCheckLoading) return
+    setManualCheckLoading(true)
+    setManualCheckMsg(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Sin sesión')
+      const res = await apiFetch('/nave/payment-status', {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({ payment_request_id: navePaymentRequestId, external_payment_id: naveExternalId }),
+      })
+      if (res.activated || res.naveStatus === 'APPROVED') {
+        invalidateSubscriptionCache()
+        await refetchSubscription()
+        setPaymentConfirmed(true)
+        return
+      }
+      if (res.naveStatus === 'EXPIRED' || res.naveStatus === 'DISABLED' || res.naveStatus === 'BLOCKED') {
+        setManualCheckMsg({ type: 'info', text: 'El QR venció. Generando uno nuevo...' })
+        setTimeout(() => setQrRetry(r => r + 1), 1500)
+        return
+      }
+      const STATUS_MSG: Record<string, { type: 'info' | 'error'; text: string }> = {
+        PENDING:          { type: 'info',  text: 'Tu pago aún no fue acreditado. Esperá unos minutos e intentá de nuevo.' },
+        PROCESSED:        { type: 'info',  text: 'El pago está siendo procesado. En breve se acredita.' },
+        FAILURE_PROCESSED:{ type: 'error', text: 'El pago fue rechazado. Podés generar un nuevo QR e intentar con otro medio.' },
+        BLOCKED:          { type: 'error', text: 'La intención está bloqueada. Contactá a soporte.' },
+      }
+      setManualCheckMsg(STATUS_MSG[res.naveStatus] ?? { type: 'info', text: `Estado: ${res.naveStatus}` })
+    } catch {
+      setManualCheckMsg({ type: 'error', text: 'No se pudo verificar el pago. Intentá de nuevo.' })
+    } finally {
+      setManualCheckLoading(false)
+    }
+  }
 
   async function handleCopyInviteLink() {
     setCopyState('loading')
@@ -399,7 +513,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
 
         {/* Wall: acceso bloqueado (trial o sub vencidos) */}
-        {subscription?.alerts.accessBlocked ? (
+        {subLoading && !subscription ? (
+          <div className="flex items-center justify-center min-h-[calc(100vh-56px)]">
+            <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (subscription?.alerts.accessBlocked || subscription?.subscription.expired || subscription?.trial.expired) ? (
           <div className="flex items-center justify-center min-h-[calc(100vh-56px)] p-6">
             <div className="bg-white border border-[#E5E7EB] rounded-3xl max-w-md w-full p-10 text-center shadow-xl">
               <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5">
@@ -540,11 +658,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center justify-between px-8 pt-8 pb-4">
               <div>
                 <h2 className="text-2xl font-extrabold text-[#0F1720]">
-                  {selectedPlan ? 'Completar suscripción' : 'Elegí tu plan'}
+                  {!selectedPlan ? 'Elegí tu plan' : paymentConfirmed ? '¡Listo!' : 'Completar suscripción'}
                 </h2>
-                <p className="text-sm text-[#6B7280] mt-0.5">
-                  {selectedPlan ? 'Escaneá el QR con tu app bancaria o de pago' : 'Con solo 1 paciente recuperado por mes, DentalOS se paga solo.'}
-                </p>
+                {!paymentConfirmed && (
+                  <p className="text-sm text-[#6B7280] mt-0.5">
+                    {!selectedPlan
+                      ? 'Con solo 1 paciente recuperado por mes, DentalOS se paga solo.'
+                      : paymentMethod === 'nave'
+                      ? 'Escaneá el QR con tu app bancaria o de pago'
+                      : 'Serás redirigido a MercadoPago para completar el pago'}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => { setShowPlansModal(false); setSelectedPlan(null) }}
@@ -557,6 +681,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Step 1: selección de plan */}
             {!selectedPlan && (
               <div className="px-8 pb-8">
+                {/* Toggle mensual / anual */}
+                <div className="flex items-center justify-center gap-3 mb-6">
+                  <span className={`text-sm font-medium ${billing === 'monthly' ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>Mensual</span>
+                  <button
+                    onClick={() => setBilling(b => b === 'monthly' ? 'annual' : 'monthly')}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${billing === 'annual' ? 'bg-[#00C4BC]' : 'bg-[#D1D5DB]'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${billing === 'annual' ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                  <span className={`text-sm font-medium ${billing === 'annual' ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
+                    Anual
+                    <span className="ml-1.5 text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-1.5 py-0.5 rounded-full">2 meses gratis</span>
+                  </span>
+                </div>
                 <div className="grid md:grid-cols-3 gap-4">
                   {PLANS.map(plan => (
                     <button
@@ -574,8 +712,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </span>
                       )}
                       <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-0.5">{plan.name}</p>
-                      <p className="text-3xl font-extrabold text-[#0F1720] mb-0.5">{plan.price}</p>
-                      <p className="text-xs text-[#6B7280] mb-4">ARS / mes</p>
+                      <p className="text-3xl font-extrabold text-[#0F1720] mb-0.5">
+                        {billing === 'annual' ? plan.annualPrice : plan.monthlyPrice}
+                      </p>
+                      <p className="text-xs text-[#6B7280] mb-4">{billing === 'annual' ? 'ARS / año' : 'ARS / mes'}</p>
                       <p className="text-xs text-[#6B7280] italic mb-4">{plan.description}</p>
                       <ul className="space-y-2">
                         {plan.features.map((f, i) => (
@@ -620,7 +760,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <p className="text-sm text-[#6B7280] mt-1">Tu plan <span className="font-semibold text-[#0F1720]">{plan.name}</span> ya está activo.</p>
                       </div>
                       <button
-                        onClick={() => { setShowPlansModal(false); setSelectedPlan(null) }}
+                        onClick={() => window.location.reload()}
                         className="mt-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-8 py-3 rounded-xl transition-colors"
                       >
                         Continuar
@@ -630,13 +770,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                   {!paymentConfirmed && (
                   <>
+                  {/* NAVE: descomentar este bloque para reactivar el selector de método de pago */}
+                  {/* <div className="flex gap-3 mb-6">
+                    <button
+                      onClick={() => setPaymentMethod('nave')}
+                      className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all text-left ${
+                        paymentMethod === 'nave'
+                          ? 'border-[#FF6600] bg-orange-50 text-[#FF6600]'
+                          : 'border-[#E5E7EB] text-[#6B7280] hover:border-orange-200'
+                      }`}
+                    >
+                      Nave
+                      <span className="block text-xs font-normal mt-0.5 text-current">QR interoperable</span>
+                    </button>
+                    <button
+                      onClick={() => setPaymentMethod('mercadopago')}
+                      className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all text-left ${
+                        paymentMethod === 'mercadopago'
+                          ? 'border-[#009EE3] bg-blue-50 text-[#009EE3]'
+                          : 'border-[#E5E7EB] text-[#6B7280] hover:border-blue-200'
+                      }`}
+                    >
+                      MercadoPago
+                      <span className="block text-xs font-normal mt-0.5 text-current">Tarjeta, QR, transferencia</span>
+                    </button>
+                  </div> */}
                   <div className="flex flex-col md:flex-row gap-8 items-start">
 
                     {/* Resumen del plan elegido */}
                     <div className="flex-1 bg-[#F3F4F6] rounded-2xl p-6">
                       <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">{plan.name}</p>
-                      <p className="text-3xl font-extrabold text-[#0F1720] mb-0.5">{plan.price}</p>
-                      <p className="text-xs text-[#6B7280] mb-4">ARS / mes</p>
+                      <p className="text-3xl font-extrabold text-[#0F1720] mb-0.5">
+                        {billing === 'annual' ? plan.annualPrice : plan.monthlyPrice}
+                      </p>
+                      <p className="text-xs text-[#6B7280] mb-4">{billing === 'annual' ? 'ARS / año' : 'ARS / mes'}</p>
                       <ul className="space-y-2">
                         {plan.features.map((f, i) => (
                           <li key={i} className="flex items-start gap-2 text-xs text-[#0F1720]">
@@ -647,13 +814,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </ul>
                     </div>
 
-                    {/* QR MercadoPago */}
+                    {/* QR / pago */}
                     <div className="flex-1 flex flex-col items-center text-center">
-                      {/* QR — solo desktop, solo si hay qr_data */}
-                      {(qrLoading || qrDataUrl) && (
+
+                      {/* ── QR expirado (Nave only) ── */}
+                      {paymentMethod === 'nave' && qrTimeLeft === 0 && !qrLoading && !qrError && (
+                        <div className="flex flex-col items-center gap-4 py-2">
+                          <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center">
+                            <svg className="w-7 h-7 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[#0F1720] mb-1">El QR expiró</p>
+                            <p className="text-xs text-[#6B7280]">Generá uno nuevo para continuar con el pago.</p>
+                          </div>
+                          <button
+                            onClick={() => setQrRetry(r => r + 1)}
+                            className="inline-flex items-center gap-2 bg-[#FF6600] hover:bg-[#e55a00] active:scale-95 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all"
+                          >
+                            Generar nuevo QR
+                          </button>
+                        </div>
+                      )}
+
+                      {/* ── Estado de error ── */}
+                      {qrError && !qrLoading && (
+                        <div className="flex flex-col items-center gap-4 py-2">
+                          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+                            <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[#0F1720] mb-1">No se pudo generar el link de pago</p>
+                            <p className="text-xs text-[#6B7280]">Puede ser un problema temporal con el servicio de pago.</p>
+                          </div>
+                          <button
+                            onClick={() => setQrRetry(r => r + 1)}
+                            className={`inline-flex items-center gap-2 active:scale-95 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all ${
+                              paymentMethod === 'nave' ? 'bg-[#FF6600] hover:bg-[#e55a00]' : 'bg-[#009EE3] hover:bg-[#0088cc]'
+                            }`}
+                          >
+                            Reintentar
+                          </button>
+                          <a
+                            href="mailto:soporte.dentalos@gmail.com"
+                            className="text-xs text-[#6B7280] hover:text-[#0F1720] underline underline-offset-2 transition-colors"
+                          >
+                            ¿Sigue fallando? Contactanos
+                          </a>
+                        </div>
+                      )}
+
+                      {/* ── QR desktop (Nave only) ── */}
+                      {paymentMethod === 'nave' && !qrError && qrTimeLeft !== 0 && (qrLoading || qrDataUrl) && (
                         <div className="hidden md:flex flex-col items-center">
                           <p className="text-sm font-semibold text-[#0F1720] mb-4">
-                            Escaneá con tu app bancaria o de pago
+                            Escaneá con cualquier aplicación de pago
                           </p>
                           <div className="w-52 h-52 bg-[#F3F4F6] border-2 border-[#D1D5DB] rounded-2xl flex flex-col items-center justify-center gap-2 mb-4 overflow-hidden">
                             {qrLoading && (
@@ -663,37 +881,68 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                               </div>
                             )}
                             {qrDataUrl && !qrLoading && (
-                              <img src={qrDataUrl} alt="QR de pago MercadoPago" className="w-full h-full object-contain" />
+                              <img src={qrDataUrl} alt="QR de pago Nave" className="w-full h-full object-contain" />
                             )}
                           </div>
-                          <p className="text-xs text-[#6B7280] mb-4">
-                            Cualquier billetera virtual o app bancaria
+                          {/* Timer */}
+                          {qrTimeLeft !== null && qrTimeLeft > 0 && (
+                            <p className={`text-xs font-semibold mb-3 tabular-nums ${
+                              qrTimeLeft <= 60  ? 'text-red-500' :
+                              qrTimeLeft <= 300 ? 'text-amber-500' :
+                              'text-[#6B7280]'
+                            }`}>
+                              Válido por {formatQrTime(qrTimeLeft)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── Mobile: título ── */}
+                      {!qrError && (paymentMethod !== 'nave' || qrTimeLeft !== 0) && (
+                        <div className="flex md:hidden flex-col items-center mb-4">
+                          <p className="text-sm font-semibold text-[#0F1720] mb-1">
+                            {paymentMethod === 'nave' ? 'Completá tu pago con Nave' : 'Completá tu pago con MercadoPago'}
+                          </p>
+                          <p className="text-xs text-[#6B7280]">
+                            Serás redirigido de forma segura
                           </p>
                         </div>
                       )}
 
-                      {/* Mobile: título sin QR */}
-                      <div className="flex md:hidden flex-col items-center mb-4">
-                        <p className="text-sm font-semibold text-[#0F1720] mb-1">
-                          Completá tu pago en MercadoPago
-                        </p>
-                        <p className="text-xs text-[#6B7280]">
-                          Serás redirigido de forma segura
-                        </p>
-                      </div>
-
-                      {/* Botón de redirección — siempre visible */}
-                      {qrInitPoint && !qrLoading && (
-                        <a
-                          href={qrInitPoint}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 bg-[#009EE3] hover:bg-[#0088cc] text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
-                        >
-                          Pagar en MercadoPago
-                        </a>
+                      {/* ── Botón de redirección ── */}
+                      {!qrError && (paymentMethod !== 'nave' || qrTimeLeft !== 0) && qrInitPoint && !qrLoading && (
+                        <div className="flex flex-col items-center gap-2 w-full">
+                          <a
+                            href={qrInitPoint}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center gap-2 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors ${
+                              paymentMethod === 'nave'
+                                ? 'bg-[#FF6600] hover:bg-[#e55a00]'
+                                : 'bg-[#009EE3] hover:bg-[#0088cc]'
+                            }`}
+                          >
+                            {paymentMethod === 'nave' ? 'Pagar con Nave' : 'Pagar en MercadoPago'}
+                          </a>
+                          {paymentMethod === 'nave' && (
+                            <>
+                              <button
+                                onClick={handleManualCheck}
+                                disabled={manualCheckLoading}
+                                className="text-xs text-[#6B7280] hover:text-[#0F1720] disabled:opacity-50 transition-colors py-1"
+                              >
+                                {manualCheckLoading ? 'Verificando...' : 'Ya pagué'}
+                              </button>
+                              {manualCheckMsg && (
+                                <p className={`text-xs text-center max-w-[200px] ${manualCheckMsg.type === 'error' ? 'text-red-500' : 'text-[#6B7280]'}`}>
+                                  {manualCheckMsg.text}
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
                       )}
-                      {qrLoading && (
+                      {!qrError && (paymentMethod !== 'nave' || qrTimeLeft !== 0) && qrLoading && (
                         <div className="h-10 w-48 bg-[#F3F4F6] rounded-xl animate-pulse" />
                       )}
                     </div>

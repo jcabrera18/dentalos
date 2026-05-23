@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal } from '@/app/providers'
-import { Upload, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity } from 'lucide-react'
 
 const DAYS = [
   { key: 0, label: 'Lunes' },
@@ -167,14 +167,100 @@ function PlanCard() {
         </div>
       )}
 
-      <div className="mt-4 flex justify-end">
-        <button
-          onClick={openPlansModal}
-          className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#00C4BC] hover:bg-[#00aaa3] text-white transition-colors active:scale-95"
-        >
-          {sub.trial.active || sub.status === 'trialing' ? 'Ver planes' : 'Cambiar plan'}
-        </button>
-      </div>
+      {sub.plan === 'basic' && !sub.trial.expired && !sub.subscription.expired && (
+        <div className="mt-4 rounded-xl border border-[#00C4BC]/25 bg-[#00C4BC]/5 p-4">
+          <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-wider mb-3">
+            Pasate a Growth y desbloqueá todo
+          </p>
+          <div className="space-y-2 mb-4">
+            {[
+              { icon: Infinity, text: 'Pacientes ilimitados — sin el techo de 100' },
+              { icon: MessageCircle, text: 'Recordatorios automáticos por WhatsApp — reducí ausentismo hasta un 40%' },
+              { icon: Users, text: 'Hasta 3 profesionales con agenda propia' },
+              { icon: CheckCircle2, text: 'Confirmación automática de turnos' },
+            ].map(({ icon: Icon, text }, i) => (
+              <div key={i} className="flex items-start gap-2.5">
+                <Icon size={13} className="text-[#00C4BC] flex-shrink-0 mt-0.5" />
+                <span className="text-xs text-app2">{text}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={openPlansModal}
+            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#00C4BC] hover:bg-[#00aaa3] text-white transition-colors active:scale-95"
+          >
+            Ver planes <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+
+      {sub.plan === 'pro' && !sub.trial.expired && !sub.subscription.expired && (() => {
+        const waWarning  = sub.alerts.waMsgQuotaWarning || sub.alerts.waMsgQuotaExceeded
+        const profLimit  = sub.alerts.professionalsLimitReached
+
+        const heading = waWarning
+          ? 'Te estás quedando sin mensajes WhatsApp'
+          : profLimit
+          ? 'Llegaste al límite de profesionales'
+          : 'Llevá tu clínica al siguiente nivel con Scale'
+
+        const items = [
+          waWarning && {
+            icon: MessageCircle,
+            text: '2.000 recordatorios WhatsApp/mes — 4× más que en Growth',
+            highlight: true,
+          },
+          profLimit && {
+            icon: Users,
+            text: 'Hasta 10 profesionales con agenda y permisos propios',
+            highlight: true,
+          },
+          !waWarning && {
+            icon: MessageCircle,
+            text: '2.000 recordatorios WhatsApp/mes — enviá más sin pensar en el límite',
+            highlight: false,
+          },
+          !profLimit && {
+            icon: Users,
+            text: 'Hasta 10 profesionales — sumá todo el equipo',
+            highlight: false,
+          },
+          { icon: ArrowRight, text: 'Reportes avanzados de ocupación, cancelaciones y rendimiento', highlight: false },
+        ].filter(Boolean) as { icon: React.ElementType; text: string; highlight: boolean }[]
+
+        return (
+          <div className="mt-4 rounded-xl border border-[#00C4BC]/25 bg-[#00C4BC]/5 p-4">
+            <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-wider mb-3">
+              {heading}
+            </p>
+            <div className="space-y-2 mb-4">
+              {items.map(({ icon: Icon, text, highlight }, i) => (
+                <div key={i} className={`flex items-start gap-2.5 ${highlight ? 'font-semibold' : ''}`}>
+                  <Icon size={13} className="text-[#00C4BC] flex-shrink-0 mt-0.5" />
+                  <span className={`text-xs ${highlight ? 'text-app font-medium' : 'text-app2'}`}>{text}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={openPlansModal}
+              className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#00C4BC] hover:bg-[#00aaa3] text-white transition-colors active:scale-95"
+            >
+              Ver plan Scale <ArrowRight size={14} />
+            </button>
+          </div>
+        )
+      })()}
+
+      {(sub.plan !== 'basic' && sub.plan !== 'pro') && (
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={openPlansModal}
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#00C4BC] hover:bg-[#00aaa3] text-white transition-colors active:scale-95"
+          >
+            {sub.trial.active || sub.status === 'trialing' ? 'Ver planes' : 'Cambiar plan'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
