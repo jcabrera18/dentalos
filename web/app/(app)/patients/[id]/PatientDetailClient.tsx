@@ -57,15 +57,11 @@ export default function PatientDetailClient({
   initialPatient,
   initialToken,
   patientId: _patientId,
-  initialClinicName,
-  initialProfessionalName,
   initialClinicalHistory = null,
 }: {
   initialPatient: any
   initialToken: string
   patientId: string
-  initialClinicName: string
-  initialProfessionalName: string
   initialClinicalHistory?: any
 }) {
   const [patient, setPatient] = useState<any>(initialPatient)
@@ -92,8 +88,8 @@ export default function PatientDetailClient({
   const [odontogramLoading, setOdontogramLoading] = useState(true)
   const [clinicalHistory, setClinicalHistory] = useState<any>(initialClinicalHistory)
   const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(initialClinicalHistory !== null)
-  const [clinicName] = useState(initialClinicName)
-  const [myProfessionalName] = useState(initialProfessionalName)
+  const [clinicName, setClinicName] = useState('')
+  const [myProfessionalName, setMyProfessionalName] = useState('')
 
   // --- Consentimientos ---
   const [showConsentModal, setShowConsentModal] = useState(false)
@@ -149,10 +145,19 @@ export default function PatientDetailClient({
     void Promise.all([
       apiFetch(`/treatments/odontogram/${params.id}`, { token }),
       apiFetch(`/treatments/tooth-diagnostics/${params.id}`, { token }),
-    ]).then(([odontogramData, diagData]) => {
+      apiFetch('/auth/me', { token }),
+    ]).then(([odontogramData, diagData, meData]) => {
       setOdontogram(odontogramData.data ?? [])
       setToothDiagnostics(diagData.data ?? [])
       setOdontogramLoading(false)
+      const me = meData?.data
+      if (me) {
+        setClinicName((me.clinics as any)?.name ?? me.clinic_name ?? '')
+        setMyProfessionalName(
+          me.full_name ??
+          (me.first_name && me.last_name ? `${me.first_name} ${me.last_name}` : me.name ?? '')
+        )
+      }
     })
   }, [])
 

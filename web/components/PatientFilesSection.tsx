@@ -1,61 +1,77 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
+
+type PatientFile = {
+  name: string
+  path: string
+  signed_url: string | null
+  metadata?: { size?: number }
+  created_at?: string
+}
 
 export function PatientFilesSection({ patientId }: { patientId: string }) {
-  const [files, setFiles] = useState<any[]>([])
-  const [fileUrls, setFileUrls] = useState<Record<string, string>>({})
+  const [files, setFiles] = useState<PatientFile[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
   const supabase = createClient()
 
+  async function getToken(): Promise<string | undefined> {
+    const { data } = await supabase.auth.getSession()
+    return data.session?.access_token
+  }
+
+  async function loadFiles() {
+    const token = await getToken()
+    const { data } = await apiFetch(`/patients/${patientId}/files`, { token })
+    setFiles(data ?? [])
+  }
+
   useEffect(() => {
     void (async () => {
-      const { data: fileList } = await supabase.storage.from('patient-files').list(`${patientId}/`)
-      const list = fileList ?? []
-      setFiles(list)
-      await loadUrls(list)
+      await loadFiles()
       setLoading(false)
     })()
   }, [patientId])
-
-  async function loadUrls(fileList: any[]) {
-    if (fileList.length === 0) { setFileUrls({}); return }
-    const paths = fileList.map(f => `${patientId}/${f.name}`)
-    const { data } = await supabase.storage.from('patient-files').createSignedUrls(paths, 3600)
-    const urls: Record<string, string> = {}
-    data?.forEach((item: { path?: string; signedUrl: string }) => {
-      const name = item.path?.split('/').pop()
-      if (name && item.signedUrl) urls[name] = item.signedUrl
-    })
-    setFileUrls(urls)
-  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
     try {
-      const ext = file.name.split('.').pop()
+      const token = await getToken()
       const isOdontograma = (e.target as any).dataset?.type === 'odontograma'
-      const fileName = isOdontograma ? `foto_odontograma_${Date.now()}.${ext}` : `${Date.now()}.${ext}`
-      await supabase.storage.from('patient-files').upload(`${patientId}/${fileName}`, file)
-      const { data: fileList } = await supabase.storage.from('patient-files').list(`${patientId}/`)
-      const list = fileList ?? []
-      setFiles(list)
-      await loadUrls(list)
+      const ext = file.name.split('.').pop()
+      const uploadFile = isOdontograma
+        ? new File([file], `foto_odontograma.${ext}`, { type: file.type })
+        : file
+
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/patients/${patientId}/files`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!res.ok) throw new Error('Error al subir el archivo')
+      await loadFiles()
     } finally {
       setUploading(false)
+      e.target.value = ''
     }
   }
 
-  async function handleDelete(fileName: string) {
-    await supabase.storage.from('patient-files').remove([`${patientId}/${fileName}`])
-    const { data: fileList } = await supabase.storage.from('patient-files').list(`${patientId}/`)
-    const list = fileList ?? []
-    setFiles(list)
-    await loadUrls(list)
+  async function handleDelete(path: string) {
+    const token = await getToken()
+    await apiFetch(`/patients/${patientId}/files`, {
+      method: 'DELETE',
+      token,
+      body: JSON.stringify({ path }),
+    })
+    setFiles(prev => prev.filter(f => f.path !== path))
   }
 
   return (
@@ -88,16 +104,16 @@ export function PatientFilesSection({ patientId }: { patientId: string }) {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-4">
-            {files.map((file: any) => {
+            {files.map((file) => {
               const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name)
               const isPdf = /\.pdf$/i.test(file.name)
-              const url = fileUrls[file.name]
+              const url = file.signed_url
               const size = file.metadata?.size ? `${(file.metadata.size / 1024).toFixed(0)} KB` : ''
               const date = file.created_at
                 ? new Date(file.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
                 : ''
               return (
-                <div key={file.name} className="group relative bg-surface2 rounded-xl overflow-hidden border border-app">
+                <div key={file.path} className="group relative bg-surface2 rounded-xl overflow-hidden border border-app">
                   <button
                     className="w-full aspect-square flex items-center justify-center overflow-hidden bg-surface3"
                     onClick={() => { if (url) { if (isImage) setPreview({ url, name: file.name }); else window.open(url, '_blank') } }}
@@ -111,7 +127,7 @@ export function PatientFilesSection({ patientId }: { patientId: string }) {
                     <div className="text-xs font-medium truncate text-app">{file.name}</div>
                     <div className="text-xs text-app3">{date} {size}</div>
                     <button
-                      onClick={() => handleDelete(file.name)}
+                      onClick={() => handleDelete(file.path)}
                       className="mt-1.5 w-full text-xs bg-red-900/20 hover:bg-red-900/40 active:scale-95 cursor-pointer text-red-400 py-1 rounded-lg transition-all"
                     >
                       Borrar
