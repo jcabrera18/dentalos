@@ -19,8 +19,10 @@ import {
   AlertTriangle,
   Clock,
   Settings,
+  Loader2,
 } from 'lucide-react'
 import { useSubscription, invalidateSubscriptionCache } from '@/lib/useSubscription'
+import { NavigationProgress } from '@/components/NavigationProgress'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -41,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
   const { theme, setTheme } = useAppTheme()
   const [mounted, setMounted] = useState(false)
+  const [navLoading, setNavLoading] = useState<string | null>(null)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [copyState, setCopyState] = useState<'idle' | 'loading' | 'copied' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -353,6 +356,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push('/')
   }
 
+  useEffect(() => { setNavLoading(null) }, [pathname])
+
+  function navigateTo(href: string) {
+    setNavLoading(href)
+    window.dispatchEvent(new Event('navigation-start'))
+    router.push(href)
+  }
+
   function isActive(href: string) {
     if (href === '/dashboard') return pathname === '/dashboard'
     return pathname.startsWith(href)
@@ -361,6 +372,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <PlansModalProvider openPlansModal={() => { setSelectedPlan(null); setShowPlansModal(true) }}>
     <div className={`${jakarta.className} min-h-screen bg-app flex`}>
+      <NavigationProgress />
 
       {/* ── SIDEBAR — desktop ───────────────────────────────────── */}
       <aside className="hidden md:flex flex-col w-56 flex-shrink-0 bg-surface border-r border-app sticky top-0 h-screen">
@@ -376,17 +388,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {NAV_ITEMS.map(item => {
             const Icon = item.icon
             const active = isActive(item.href)
+            const loading = navLoading === item.href
             return (
               <button
                 key={item.href}
-                onClick={() => router.push(item.href)}
+                onClick={() => navigateTo(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
                     ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
                     : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
                 }`}
               >
-                <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
+                {loading
+                  ? <Loader2 size={18} className="animate-spin text-[#00C4BC] shrink-0" />
+                  : <Icon size={18} strokeWidth={active ? 2.2 : 1.8} className="shrink-0" />
+                }
                 {item.label}
               </button>
             )
@@ -396,12 +412,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Bottom actions */}
         <div className="px-3 py-4 border-t border-app space-y-1">
           <button
-            onClick={() => router.push('/settings')}
+            onClick={() => navigateTo('/settings')}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
               isActive('/settings') ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15' : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
             }`}
           >
-            <Settings size={18} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
+            {navLoading === '/settings'
+              ? <Loader2 size={18} className="animate-spin text-[#00C4BC] shrink-0" />
+              : <Settings size={18} strokeWidth={isActive('/settings') ? 2.2 : 1.8} className="shrink-0" />
+            }
             Configuración
           </button>
 
@@ -562,26 +581,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {NAV_ITEMS.map(item => {
             const Icon = item.icon
             const active = isActive(item.href)
+            const loading = navLoading === item.href
             return (
               <button
                 key={item.href}
-                onClick={() => router.push(item.href)}
+                onClick={() => navigateTo(item.href)}
                 className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
                   active ? 'text-[#00C4BC]' : 'text-app3'
                 }`}
               >
-                <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+                {loading
+                  ? <Loader2 size={22} className="animate-spin text-[#00C4BC]" />
+                  : <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+                }
                 <span>{item.label}</span>
               </button>
             )
           })}
           <button
-            onClick={() => router.push('/settings')}
+            onClick={() => navigateTo('/settings')}
             className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
               isActive('/settings') ? 'text-[#00C4BC]' : 'text-app3'
             }`}
           >
-            <Settings size={22} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
+            {navLoading === '/settings'
+              ? <Loader2 size={22} className="animate-spin text-[#00C4BC]" />
+              : <Settings size={22} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
+            }
             <span>Config.</span>
           </button>
         </div>

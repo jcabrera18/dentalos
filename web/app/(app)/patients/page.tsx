@@ -31,11 +31,12 @@ const SEARCH_DEBOUNCE_MS = 300
 const PATIENTS_LIMIT = 10
 
 export default function PatientsPage() {
-  const [patients, setPatients]   = useState<PatientSummary[]>([])
-  const [search, setSearch]       = useState('')
-  const [searching, setSearching] = useState(false)
-  const [token, setToken]         = useState('')
-  const [showModal, setShowModal] = useState(false)
+  const [patients, setPatients]     = useState<PatientSummary[]>([])
+  const [search, setSearch]         = useState('')
+  const [searching, setSearching]   = useState(false)
+  const [token, setToken]           = useState('')
+  const [showModal, setShowModal]   = useState(false)
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
   const router   = useRouter()
   const supabase = createClient()
   const requestIdRef = useRef(0)
@@ -241,8 +242,16 @@ export default function PatientsPage() {
                 {patients.map((p) => (
                   <div
                     key={p.id}
-                    onClick={() => router.push(`/patients/${p.id}`)}
-                    className="px-5 py-3.5 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 hover:bg-[#00C4BC]/5 hover:border-l-2 hover:border-l-[#00C4BC] transition-all cursor-pointer group border-l-2 border-l-transparent"
+                    onClick={() => {
+                      setNavigatingTo(p.id)
+                      window.dispatchEvent(new Event('navigation-start'))
+                      router.push(`/patients/${p.id}`)
+                    }}
+                    className={`px-5 py-3.5 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 transition-all cursor-pointer group border-l-2 ${
+                      navigatingTo === p.id
+                        ? 'bg-[#00C4BC]/8 border-l-[#00C4BC]'
+                        : 'hover:bg-[#00C4BC]/5 hover:border-l-[#00C4BC] border-l-transparent'
+                    }`}
                   >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
                       p.gender === 'F'
@@ -274,7 +283,10 @@ export default function PatientsPage() {
                         <span className="text-xs text-app3">—</span>
                       )}
                     </div>
-                    <ChevronRight size={16} className="text-app3 group-hover:text-[#00C4BC] transition-colors flex-shrink-0" />
+                    {navigatingTo === p.id
+                      ? <Loader2 size={16} className="text-[#00C4BC] animate-spin flex-shrink-0" />
+                      : <ChevronRight size={16} className="text-app3 group-hover:text-[#00C4BC] transition-colors flex-shrink-0" />
+                    }
                   </div>
                 ))}
               </div>

@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
-import { Wallet, FileText, ClipboardList } from 'lucide-react'
+import { Wallet, FileText, ClipboardList, Loader2 } from 'lucide-react'
 import { PaymentModal } from '@/components/PaymentModal'
 import { downloadAccountStatementPNG } from '@/components/generateReceipt'
 import { PatientNotesSection } from '@/components/PatientNotesSection'
@@ -110,6 +110,14 @@ export default function PatientDetailClient({
   const [isDrawing, setIsDrawing] = useState(false)
   const [hasSignature, setHasSignature] = useState(false)
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
+
+  const [navLoading, setNavLoading] = useState<string | null>(null)
+
+  function navigateTo(path: string, key: string) {
+    setNavLoading(key)
+    window.dispatchEvent(new Event('navigation-start'))
+    router.push(path)
+  }
 
   const router = useRouter()
   const params = useParams()
@@ -450,7 +458,7 @@ export default function PatientDetailClient({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
           {/* Columna izquierda — info del paciente */}
-          <div className="space-y-4">
+          <div className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0ms' }}>
             {/* Avatar + nombre */}
             <div className="bg-surface border border-app rounded-xl p-6 text-center relative">
               <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-3 ${
@@ -559,19 +567,18 @@ export default function PatientDetailClient({
 
             {/* Historia clínica */}
             <button
-              onClick={() => router.push(`/patients/${params.id}/clinical-history`)}
+              onClick={() => navigateTo(`/patients/${params.id}/clinical-history`, 'clinical-history')}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
             >
               <span className="flex items-center gap-2">🩺  Historia clínica</span>
-              {clinicalHistory?.risk_level === 'high' && (
-                <span className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded-md">Alto riesgo</span>
-              )}
-              {clinicalHistory?.risk_level === 'medium' && (
-                <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">Riesgo medio</span>
-              )}
-              {(!clinicalHistory || clinicalHistory.risk_level === 'low') && (
-                <span className="text-app3">›</span>
-              )}
+              {navLoading === 'clinical-history'
+                ? <Loader2 size={14} className="animate-spin text-[#00C4BC]" />
+                : clinicalHistory?.risk_level === 'high'
+                ? <span className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded-md">Alto riesgo</span>
+                : clinicalHistory?.risk_level === 'medium'
+                ? <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">Riesgo medio</span>
+                : <span className="text-app3">›</span>
+              }
             </button>
 
             <button
@@ -583,23 +590,27 @@ export default function PatientDetailClient({
             </button>
 
             <button
-              onClick={() => router.push(`/patients/${params.id}/consents`)}
+              onClick={() => navigateTo(`/patients/${params.id}/consents`, 'consents')}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
             >
               <span className="flex items-center gap-2"><FileText size={15} strokeWidth={2} /> Consentimientos</span>
-              {existingConsents.length > 0 ? (
-                <span className="text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-2 py-0.5 rounded-md">{existingConsents.length}</span>
-              ) : (
-                <span className="text-app3">›</span>
-              )}
+              {navLoading === 'consents'
+                ? <Loader2 size={14} className="animate-spin text-[#00C4BC]" />
+                : existingConsents.length > 0
+                ? <span className="text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-2 py-0.5 rounded-md">{existingConsents.length}</span>
+                : <span className="text-app3">›</span>
+              }
             </button>
 
             <button
-              onClick={() => router.push(`/patients/${params.id}/quotes`)}
+              onClick={() => navigateTo(`/patients/${params.id}/quotes`, 'quotes')}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
             >
               <span className="flex items-center gap-2"><ClipboardList size={15} strokeWidth={2} /> Presupuestos</span>
-              <span className="text-app3">›</span>
+              {navLoading === 'quotes'
+                ? <Loader2 size={14} className="animate-spin text-[#00C4BC]" />
+                : <span className="text-app3">›</span>
+              }
             </button>
 
             {/* Notas del paciente */}
@@ -612,7 +623,7 @@ export default function PatientDetailClient({
           </div>
 
           {/* Columna derecha — historial + tratamientos */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="md:col-span-2 space-y-6 animate-fade-in-up" style={{ animationDelay: '80ms' }}>
 
             {/* Odontograma */}
             <div className="bg-surface border border-app rounded-xl overflow-hidden">
