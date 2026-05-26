@@ -41,18 +41,16 @@ export default function DashboardPage() {
 
       const token = activeSession.access_token
 
-      // Cargar perfil + agenda + stats en paralelo
-      const [meData, agendaData, statsData, inactiveData] = await Promise.all([
+      // 2 requests en vez de 4 — /appointments/dashboard combina agenda + stats + inactivos
+      const [meData, dashData] = await Promise.all([
         apiFetch('/auth/me', { token }),
-        apiFetch('/appointments/today', { token }),
-        apiFetch('/appointments/stats/today', { token }),
-        apiFetch('/patients/alerts/inactive?days=90', { token }),
+        apiFetch('/appointments/dashboard', { token }),
       ])
 
       setUser(meData.data)
-      setAgenda(agendaData.data ?? [])
-      setStats(statsData.data ?? {})
-      setInactive(inactiveData.data ?? [])
+      setAgenda(dashData.data?.agenda ?? [])
+      setStats(dashData.data?.stats ?? {})
+      setInactive(dashData.data?.inactive ?? [])
       setLoading(false)
 
       // Identificar usuario en PostHog
@@ -172,12 +170,9 @@ export default function DashboardPage() {
       token: session.access_token,
       body: JSON.stringify({ status })
     })
-    const [agendaData, statsData] = await Promise.all([
-      apiFetch('/appointments/today', { token: session.access_token }),
-      apiFetch('/appointments/stats/today', { token: session.access_token }),
-    ])
-    setAgenda(agendaData.data ?? [])
-    setStats(statsData.data ?? {})
+    const dashData = await apiFetch('/appointments/dashboard', { token: session.access_token })
+    setAgenda(dashData.data?.agenda ?? [])
+    setStats(dashData.data?.stats ?? {})
     setActionLoading(null)
   }
 
@@ -237,12 +232,9 @@ export default function DashboardPage() {
       })
     }
 
-    const [agendaData, statsData] = await Promise.all([
-      apiFetch('/appointments/today', { token: session.access_token }),
-      apiFetch('/appointments/stats/today', { token: session.access_token }),
-    ])
-    setAgenda(agendaData.data ?? [])
-    setStats(statsData.data ?? {})
+    const dashData = await apiFetch('/appointments/dashboard', { token: session.access_token })
+    setAgenda(dashData.data?.agenda ?? [])
+    setStats(dashData.data?.stats ?? {})
     setConfirmLoading(false)
     setAttendedDone(true)
   }

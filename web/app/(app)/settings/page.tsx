@@ -582,19 +582,15 @@ export default function SettingsPage() {
     }
   }
 
-  async function loadScheduleConfig(profId: string) {
-    const { data } = await supabase
-      .from('professionals')
-      .select('schedule_config')
-      .eq('id', profId)
-      .single()
-    setWorkingHours(data?.schedule_config?.working_hours ?? { ...DEFAULT_WORKING_HOURS })
+  function loadScheduleConfig(profId: string) {
+    const prof = professionals.find((p: any) => p.id === profId)
+    setWorkingHours(prof?.schedule_config?.working_hours ?? { ...DEFAULT_WORKING_HOURS })
   }
 
   useEffect(() => {
-    if (!selectedProfId) return
-    void loadScheduleConfig(selectedProfId)
-  }, [selectedProfId])
+    if (!selectedProfId || professionals.length === 0) return
+    loadScheduleConfig(selectedProfId)
+  }, [selectedProfId, professionals])
 
   function setDayField(day: number, field: keyof DayHours, value: string | boolean) {
     setWorkingHours(prev => ({
@@ -607,21 +603,18 @@ export default function SettingsPage() {
     setSaving(true)
     setError('')
     try {
-      // Leer el schedule_config actual para no pisar otros campos
-      const { data: current } = await supabase
-        .from('professionals')
-        .select('schedule_config')
-        .eq('id', selectedProfId)
-        .single()
-
+      const current = professionals.find((p: any) => p.id === selectedProfId)
       const updatedConfig = { ...(current?.schedule_config ?? {}), working_hours: workingHours }
 
-      const { error: sbError } = await supabase
-        .from('professionals')
-        .update({ schedule_config: updatedConfig })
-        .eq('id', selectedProfId)
+      await apiFetch(`/professionals/${selectedProfId}`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({ schedule_config: updatedConfig }),
+      })
 
-      if (sbError) throw new Error(sbError.message)
+      setProfessionals((prev: any[]) =>
+        prev.map(p => p.id === selectedProfId ? { ...p, schedule_config: updatedConfig } : p)
+      )
 
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)

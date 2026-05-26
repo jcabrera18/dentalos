@@ -59,12 +59,14 @@ export default function PatientDetailClient({
   patientId: _patientId,
   initialClinicName,
   initialProfessionalName,
+  initialClinicalHistory = null,
 }: {
   initialPatient: any
   initialToken: string
   patientId: string
   initialClinicName: string
   initialProfessionalName: string
+  initialClinicalHistory?: any
 }) {
   const [patient, setPatient] = useState<any>(initialPatient)
   const [accountSummary, setAccountSummary] = useState(EMPTY_ACCOUNT_SUMMARY)
@@ -88,8 +90,8 @@ export default function PatientDetailClient({
     (initialPatient?.odontogram_type as 'adult' | 'child') ?? 'adult'
   )
   const [odontogramLoading, setOdontogramLoading] = useState(true)
-  const [clinicalHistory, setClinicalHistory] = useState<any>(null)
-  const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(false)
+  const [clinicalHistory, setClinicalHistory] = useState<any>(initialClinicalHistory)
+  const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(initialClinicalHistory !== null)
   const [clinicName] = useState(initialClinicName)
   const [myProfessionalName] = useState(initialProfessionalName)
 

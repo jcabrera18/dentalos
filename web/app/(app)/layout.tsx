@@ -382,8 +382,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => router.push(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
-                    ? 'bg-[#E6F8F1] text-[#00C4BC]'
-                    : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC]'
+                    ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
+                    : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
                 }`}
               >
                 <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
@@ -398,7 +398,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             onClick={() => router.push('/settings')}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-              isActive('/settings') ? 'bg-[#E6F8F1] text-[#00C4BC]' : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC]'
+              isActive('/settings') ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15' : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
             }`}
           >
             <Settings size={18} strokeWidth={isActive('/settings') ? 2.2 : 1.8} />
@@ -408,7 +408,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button
             onClick={handleCopyInviteLink}
             disabled={copyState === 'loading'}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] disabled:opacity-50 transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10 disabled:opacity-50 transition-all cursor-pointer"
           >
             <UserPlus size={18} strokeWidth={1.8} />
             {copyState === 'loading' ? 'Generando...' : 'Invitar profesional'}
@@ -416,7 +416,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10 transition-all cursor-pointer"
           >
             {mounted
               ? theme === 'dark'
@@ -429,7 +429,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <button
             onClick={() => setShowLogoutModal(true)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] transition-all cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10 transition-all cursor-pointer"
           >
             <LogOut size={18} strokeWidth={1.8} />
             Cerrar sesión

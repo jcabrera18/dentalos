@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -104,7 +103,6 @@ export default function BookingPage() {
   const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const supabase = createClient()
 
   const [step, setStep] = useState<Step>('date')
 
@@ -131,19 +129,16 @@ export default function BookingPage() {
 
   // ── Load professional info ──────────────────────────
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_URL}/public/booking/${professionalId}`).then(r => r.json()),
-      supabase
-        .from('professionals')
-        .select('schedule_config')
-        .eq('id', professionalId)
-        .maybeSingle(),
-    ])
-      .then(([res, { data: profRow }]) => {
-        if (res.data) setProfessional(res.data)
-        else setNotFound(true)
-        if (profRow?.schedule_config?.working_hours) {
-          setWorkingHours(profRow.schedule_config.working_hours)
+    fetch(`${API_URL}/public/booking/${professionalId}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.data) {
+          setProfessional(res.data)
+          if (res.data.schedule_config?.working_hours) {
+            setWorkingHours(res.data.schedule_config.working_hours)
+          }
+        } else {
+          setNotFound(true)
         }
       })
       .catch(() => setNotFound(true))

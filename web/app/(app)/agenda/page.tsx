@@ -176,12 +176,9 @@ export default function AgendaPage() {
   }, [selectedAppt])
 
   async function fetchCalendarData(t: string) {
-    const [apptData, blockData] = await Promise.all([
-      apiFetch(`/appointments?from=${from}&to=${to}`, { token: t }),
-      apiFetch(`/schedule-blocks?from=${from}&to=${to}`, { token: t }),
-    ])
-    setAppointments(apptData.data ?? [])
-    setBlocks(blockData.data ?? [])
+    const calData = await apiFetch(`/appointments/calendar?from=${from}&to=${to}`, { token: t })
+    setAppointments(calData.data?.appointments ?? [])
+    setBlocks(calData.data?.blocks ?? [])
   }
 
   async function loadAuxiliaryData(t: string) {
