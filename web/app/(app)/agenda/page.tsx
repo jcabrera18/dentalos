@@ -5,13 +5,37 @@ import { createClient } from '@/lib/supabase'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle } from 'lucide-react'
+import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const HOURS = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const SLOT_H = 48 // px por hora — alta densidad
 const GRID_START_H = 6  // primera hora visible (06:00)
 const GRID_END_H   = 24 // hora de fin del grid (exclusive)
+
+const START_SLOTS = Array.from({ length: 96 }, (_, i) => {
+  const h = Math.floor(i / 4)
+  const m = (i % 4) * 15
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+})
+
+function buildCalDays(year: number, month: number): (number | null)[] {
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const offset = (firstDay + 6) % 7
+  const days: (number | null)[] = Array(offset).fill(null)
+  for (let d = 1; d <= daysInMonth; d++) days.push(d)
+  return days
+}
+
+function formatDateLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  return d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function getTodayStr(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
 
 type WorkingDayHours = { enabled: boolean; start: string; end: string }
 type WorkingHours = Record<number, WorkingDayHours>
@@ -110,7 +134,11 @@ export default function AgendaPage() {
   const [weekOffset, setWeekOffset]     = useState(0)
   const [selectedDay, setSelectedDay]   = useState(todayArg())
   const [selectedAppt, setSelectedAppt] = useState<any>(null)
-  const [showNewAppt, setShowNewAppt]   = useState(false)
+  const [showPanel, setShowPanel]       = useState(false)
+  const [panelTab, setPanelTab]         = useState<'appt' | 'block'>('appt')
+  const [panelSide, setPanelSide]       = useState<'right' | 'left'>('right')
+  const [previewDuration, setPreviewDuration] = useState(45)
+  const [blockPreview, setBlockPreview] = useState({ startDate: '', startTime: '09:00', endTime: '10:00', allDay: false })
   const [newApptSlot, setNewApptSlot]   = useState<{ date: string; time: string } | null>(null)
 
   const [professionals, setProfessionals] = useState<any[]>([])
@@ -118,7 +146,6 @@ export default function AgendaPage() {
   const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [editingAppt, setEditingAppt]   = useState<any>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [showNewBlock, setShowNewBlock] = useState(false)
   const [newBlockDate, setNewBlockDate] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<any>(null)
   const router   = useRouter()
@@ -368,7 +395,18 @@ export default function AgendaPage() {
               Ver ficha del paciente →
             </button>
             {isActionable && (
-              <button onClick={() => { setEditingAppt(selectedAppt); setSelectedAppt(null) }}
+              <button onClick={() => {
+                const appt = selectedAppt
+                setSelectedAppt(null)
+                const apptDate = new Date(appt.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+                const apptTime = new Date(appt.starts_at).toLocaleString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+                setPanelTab('appt')
+                setPanelSide('right')
+                setNewApptSlot({ date: apptDate, time: apptTime })
+                setPreviewDuration(appt.duration_minutes ?? 45)
+                setEditingAppt(appt)
+                setShowPanel(true)
+              }}
                 className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 py-2.5 rounded-xl text-sm font-medium transition-all">
                 Editar turno
               </button>
@@ -697,7 +735,7 @@ export default function AgendaPage() {
               {refreshing ? 'Actualizando...' : 'Actualizar'}
             </button>
             <button
-              onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
+              onClick={() => { setNewBlockDate(selectedDay); setPanelTab('block'); setPanelSide('right'); setShowPanel(true) }}
               className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
               🔒 Bloquear horario
             </button>
@@ -777,8 +815,13 @@ export default function AgendaPage() {
                       const y = e.clientY - rect.top
                       const hourIndex = Math.floor(y / SLOT_H)
                       const hour = 6 + hourIndex
+                      const side = e.clientX > window.innerWidth * 0.55 ? 'left' : 'right'
+                      setPanelSide(side)
+                      setPanelTab('appt')
                       setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:00` })
-                      setShowNewAppt(true)
+                      setPreviewDuration(45)
+                      setEditingAppt(null)
+                      setShowPanel(true)
                     }
                   }}>
                   {HOURS.map((_, i) => (
@@ -814,6 +857,48 @@ export default function AgendaPage() {
                       <div className="text-[10px] font-bold text-slate-500 truncate">Bloqueado</div>
                     </div>
                   ))}
+
+                  {/* Preview block — bloqueo */}
+                  {showPanel && panelTab === 'block' && blockPreview.startDate && blockPreview.startDate <= dateStr && (newBlockDate ?? selectedDay) >= dateStr && blockPreview.startDate <= (newBlockDate ?? selectedDay) && (() => {
+                    if (blockPreview.allDay) {
+                      return (
+                        <div className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 pointer-events-none z-10 overflow-hidden"
+                          style={{ top: 0, height: HOURS.length * SLOT_H, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.12) 3px, rgba(100,116,139,0.12) 6px)', backgroundColor: 'rgba(100,116,139,0.08)' }}>
+                          <div className="text-[11px] font-semibold text-slate-500 truncate leading-tight px-1.5 py-0.5">Bloqueado</div>
+                        </div>
+                      )
+                    }
+                    const ps = `${dateStr}T${blockPreview.startTime}:00-03:00`
+                    const pe = `${dateStr}T${blockPreview.endTime}:00-03:00`
+                    if (new Date(pe) <= new Date(ps)) return null
+                    const bH = getSlotHeight(ps, pe)
+                    return (
+                      <div className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 pointer-events-none z-10 overflow-hidden px-1.5 py-0.5"
+                        style={{ top: getSlotTop(ps), height: bH, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.12) 3px, rgba(100,116,139,0.12) 6px)', backgroundColor: 'rgba(100,116,139,0.08)' }}>
+                        <div className="text-[11px] font-semibold text-slate-500 truncate leading-tight">Bloqueado</div>
+                        {bH >= 28 && <div className="text-[10px] text-slate-400 truncate leading-tight">{blockPreview.startTime} – {blockPreview.endTime}</div>}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Preview block while creating / editing an appointment */}
+                  {showPanel && panelTab === 'appt' && newApptSlot && newApptSlot.date === dateStr && (() => {
+                    const previewStart = `${newApptSlot.date}T${newApptSlot.time}:00-03:00`
+                    const previewEndMs = new Date(previewStart).getTime() + previewDuration * 60000
+                    const previewEnd = new Date(previewEndMs).toISOString()
+                    const blockH = getSlotHeight(previewStart, previewEnd)
+                    return (
+                      <div
+                        className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-[#00C4BC] bg-[#00C4BC]/15 border border-dashed border-[#00C4BC]/50 px-1.5 py-0.5 pointer-events-none z-10 overflow-hidden"
+                        style={{ top: getSlotTop(previewStart), height: blockH }}
+                      >
+                        {!editingAppt && <div className="text-[11px] font-semibold text-[#00C4BC] truncate leading-tight">Nuevo turno</div>}
+                        {!editingAppt && blockH >= 28 && (
+                          <div className="text-[10px] text-[#00C4BC]/80 truncate leading-tight">{fmt24(previewStart)} – {fmt24(previewEnd)}</div>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Appointments */}
                   {dayApts.map(appt => {
@@ -891,13 +976,13 @@ export default function AgendaPage() {
 
       {/* FABs */}
       <button
-        onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setShowNewAppt(true) }}
+        onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setPreviewDuration(45); setEditingAppt(null); setPanelTab('appt'); setPanelSide('right'); setShowPanel(true) }}
         className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-[#00C4BC] hover:bg-[#00aaa3] rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
       >
         +
       </button>
       <button
-        onClick={() => { setNewBlockDate(selectedDay); setShowNewBlock(true) }}
+        onClick={() => { setNewBlockDate(selectedDay); setPanelTab('block'); setPanelSide('right'); setShowPanel(true) }}
         className="md:hidden fixed bottom-24 right-24 w-12 h-12 bg-slate-500 hover:bg-slate-600 rounded-full flex items-center justify-center text-lg shadow-lg transition-colors z-30"
         title="Bloquear horario"
       >
@@ -921,11 +1006,13 @@ export default function AgendaPage() {
         {linkCopied ? '✓' : '📋'}
       </button>
 
-      {showNewAppt && newApptSlot && (
-        <NewAppointmentModal
+      {showPanel && (
+        <AgendaPanel
           token={token}
-          date={newApptSlot.date}
-          time={newApptSlot.time}
+          defaultTab={panelTab}
+          side={panelSide}
+          apptSlot={newApptSlot}
+          blockDate={newBlockDate ?? selectedDay}
           professionals={professionals}
           defaultProfessionalId={
             selectedProfId ||
@@ -933,23 +1020,24 @@ export default function AgendaPage() {
             professionals[0]?.id ||
             ''
           }
-          onClose={() => setShowNewAppt(false)}
-          onCreated={async (professionalId) => {
-            setShowNewAppt(false)
+          editingAppt={editingAppt}
+          onClose={() => { setShowPanel(false); setEditingAppt(null) }}
+          onApptCreated={async (professionalId) => {
+            setShowPanel(false)
+            setEditingAppt(null)
             setSelectedProfId(prev => prev && prev !== professionalId ? professionalId : prev)
             await fetchCalendarData(token)
           }}
-        />
-      )}
-
-      {showNewBlock && (
-        <BlockModal
-          token={token}
-          defaultDate={newBlockDate ?? selectedDay}
-          onClose={() => setShowNewBlock(false)}
-          onCreated={async () => {
-            setShowNewBlock(false)
+          onBlockCreated={async () => {
+            setShowPanel(false)
             await fetchCalendarData(token)
+          }}
+          onDurationChange={setPreviewDuration}
+          onSlotChange={(date, time) => setNewApptSlot({ date, time })}
+          onBlockPreviewChange={setBlockPreview}
+          onTabChange={(t) => {
+            setPanelTab(t)
+            if (t === 'block' && newApptSlot) setNewBlockDate(newApptSlot.date)
           }}
         />
       )}
@@ -997,79 +1085,6 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {editingAppt && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={() => setEditingAppt(null)}>
-          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
-            <h3 className="font-bold text-lg text-app mb-4">Editar turno</h3>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const date = (document.getElementById('edit-date') as HTMLInputElement).value
-                const time = (document.getElementById('edit-time') as HTMLInputElement).value
-                const type = (document.getElementById('edit-type') as HTMLInputElement).value
-                const duration = Number((document.getElementById('edit-duration') as HTMLSelectElement).value)
-                const startsAt = `${date}T${time}:00-03:00`
-                const endsAt = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString()
-                await apiFetch(`/appointments/${editingAppt.id}`, {
-                  method: 'PATCH', token,
-                  body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, duration_minutes: duration, appointment_type: type || undefined })
-                })
-                await fetchCalendarData(token)
-                setEditingAppt(null)
-              }}
-              className="space-y-3"
-            >
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Fecha</label>
-                <input type="date" id="edit-date"
-                  defaultValue={new Date(editingAppt.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Hora</label>
-                <input type="time" id="edit-time"
-                  defaultValue={(() => {
-                    const d = new Date(editingAppt.starts_at)
-                    return d.toLocaleString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
-                  })()}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Duración</label>
-                <select id="edit-duration"
-                  defaultValue={String(editingAppt.duration_minutes ?? 45)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
-                  <option value="15">15m</option>
-                  <option value="30">30m</option>
-                  <option value="45">45m</option>
-                  <option value="60">1h</option>
-                  <option value="90">1h 30m</option>
-                  <option value="120">2h</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Tipo de consulta</label>
-                <input type="text" id="edit-type"
-                  defaultValue={editingAppt.appointment_type ?? ''}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
-              </div>
-              <div className="flex gap-3 mt-5">
-                <button type="button" onClick={() => setEditingAppt(null)}
-                  className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors">
-                  Cancelar
-                </button>
-                <button type="submit"
-                  className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all">
-                  Guardar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1098,150 +1113,157 @@ export default function AgendaPage() {
   )
 }
 
-function BlockModal({ token, defaultDate, onClose, onCreated }: {
+function AgendaPanel({
+  token, defaultTab, side, apptSlot, blockDate, professionals, defaultProfessionalId, editingAppt,
+  onClose, onApptCreated, onBlockCreated, onDurationChange, onSlotChange, onBlockPreviewChange, onTabChange,
+}: {
   token: string
-  defaultDate: string
+  defaultTab: 'appt' | 'block'
+  side: 'right' | 'left'
+  apptSlot: { date: string; time: string } | null
+  blockDate: string
+  professionals: any[]
+  defaultProfessionalId: string
+  editingAppt?: any
   onClose: () => void
-  onCreated: () => void
+  onApptCreated: (professionalId: string) => void
+  onBlockCreated: () => void
+  onDurationChange: (minutes: number) => void
+  onSlotChange: (date: string, time: string) => void
+  onBlockPreviewChange: (p: { startDate: string; startTime: string; endTime: string; allDay: boolean }) => void
+  onTabChange: (tab: 'appt' | 'block') => void
 }) {
-  const [date, setDate]       = useState(defaultDate)
-  const [allDay, setAllDay]   = useState(false)
-  const [startTime, setStartTime] = useState('09:00')
-  const [endTime, setEndTime]     = useState('10:00')
-  const [reason, setReason]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [tab, setTab] = useState<'appt' | 'block'>(defaultTab)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    const startsAt = allDay
-      ? `${date}T00:00:00-03:00`
-      : `${date}T${startTime}:00-03:00`
-    const endsAt = allDay
-      ? `${date}T23:59:59-03:00`
-      : `${date}T${endTime}:00-03:00`
+  function changeTab(t: 'appt' | 'block') { setTab(t); onTabChange(t) }
 
-    if (new Date(endsAt) <= new Date(startsAt)) {
-      setError('La hora de fin debe ser posterior a la de inicio.')
-      return
-    }
+  useEffect(() => { setTab(defaultTab) }, [defaultTab])
 
-    setLoading(true)
-    try {
-      await apiFetch('/schedule-blocks', {
-        method: 'POST', token,
-        body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, reason: reason || undefined }),
-      })
-      onCreated()
-    } catch (err: any) {
-      setError(err.message ?? 'Error al crear el bloqueo.')
-      setLoading(false)
-    }
-  }
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose])
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-      onClick={onClose}>
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="p-6">
-        <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
-        <div className="flex items-center gap-2 mb-5">
-          <span className="text-xl">🔒</span>
-          <h2 className="text-lg font-bold text-app">Bloquear horario</h2>
-        </div>
+    <div className={`fixed top-0 bottom-0 w-[390px] z-40 bg-surface flex flex-col shadow-2xl ${
+      side === 'right' ? 'right-0 border-l border-app' : 'left-0 border-r border-app'
+    }`}>
+      <div className="flex items-center border-b border-app px-3 shrink-0">
+        <button onClick={onClose} className="p-2 mr-2 text-app3 hover:text-app transition-colors rounded-lg hover:bg-surface2 cursor-pointer">
+          <X size={16} />
+        </button>
+        {editingAppt ? (
+          <span className="px-3 py-3.5 text-sm font-semibold text-app">Editar turno</span>
+        ) : (
+          <>
+            <button
+              onClick={() => changeTab('appt')}
+              className={`px-3 py-3.5 text-sm font-semibold border-b-2 transition-colors mr-1 cursor-pointer ${
+                tab === 'appt' ? 'border-[#00C4BC] text-[#00C4BC]' : 'border-transparent text-app3 hover:text-app'
+              }`}
+            >Nuevo turno</button>
+            <button
+              onClick={() => changeTab('block')}
+              className={`px-3 py-3.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                tab === 'block' ? 'border-slate-500 text-slate-600 dark:text-slate-300' : 'border-transparent text-app3 hover:text-app'
+              }`}
+            ><Lock size={12} /> Bloquear</button>
+          </>
+        )}
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Fecha</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button type="button"
-              onClick={() => setAllDay(v => !v)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${allDay ? 'bg-slate-500' : 'bg-surface3'}`}>
-              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${allDay ? 'left-5' : 'left-0.5'}`} />
-            </button>
-            <span className="text-sm text-app2">Todo el día</span>
-          </div>
-
-          {!allDay && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Desde</label>
-                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">Hasta</label>
-                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1">
-              Motivo <span className="text-app3 font-normal normal-case">(opcional)</span>
-            </label>
-            <input type="text" value={reason} onChange={e => setReason(e.target.value)}
-              placeholder="Ej: Congreso, Vacaciones..."
-              className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-slate-400" />
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
-          )}
-
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors">
-              Cancelar
-            </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
-              {loading ? 'Bloqueando...' : 'Bloquear'}
-            </button>
-          </div>
-        </form>
-        </div>
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'appt' || editingAppt
+          ? <PanelApptForm
+              token={token}
+              date={apptSlot?.date ?? blockDate}
+              time={apptSlot?.time ?? '09:00'}
+              professionals={professionals}
+              defaultProfessionalId={defaultProfessionalId}
+              editingAppt={editingAppt}
+              onClose={onClose}
+              onCreated={onApptCreated}
+              onDurationChange={onDurationChange}
+              onSlotChange={onSlotChange}
+            />
+          : <PanelBlockForm
+              token={token}
+              defaultDate={blockDate}
+              defaultTime={apptSlot?.time ?? '09:00'}
+              onClose={onClose}
+              onCreated={onBlockCreated}
+              onBlockPreviewChange={onBlockPreviewChange}
+            />
+        }
       </div>
     </div>
   )
 }
 
-function NewAppointmentModal({ token, date, time, professionals, defaultProfessionalId, onClose, onCreated }: {
+function PanelApptForm({ token, date, time, professionals, defaultProfessionalId, editingAppt, onClose, onCreated, onDurationChange, onSlotChange }: {
   token: string
   date: string
   time: string
   professionals: any[]
   defaultProfessionalId: string
+  editingAppt?: any
   onClose: () => void
   onCreated: (professionalId: string) => void
+  onDurationChange: (minutes: number) => void
+  onSlotChange: (date: string, time: string) => void
 }) {
-  const [search, setSearch]               = useState('')
+  const initDate = editingAppt
+    ? new Date(editingAppt.starts_at).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    : date
+  const initTime = editingAppt
+    ? new Date(editingAppt.starts_at).toLocaleString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+    : time
+
+  const [search, setSearch]               = useState(editingAppt?.patient_name ?? '')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching]         = useState(false)
-  const [selectedPatientData, setSelectedPatientData] = useState<any>(null)
-  const [patientId, setPatientId]         = useState('')
-  const [professionalId, setProfessionalId] = useState(defaultProfessionalId)
+  const [selectedPatientData, setSelectedPatientData] = useState<any>(
+    editingAppt ? { id: editingAppt.patient_id, full_name: editingAppt.patient_name } : null
+  )
+  const [patientId, setPatientId]         = useState(editingAppt?.patient_id ?? '')
+  const [professionalId, setProfessionalId] = useState(editingAppt?.professional_id ?? defaultProfessionalId)
   const [newPatientMode, setNewPatientMode] = useState(false)
   const [newPatientName, setNewPatientName] = useState('')
   const [newPatientLastName, setNewPatientLastName] = useState('')
   const [newPatientPhone, setNewPatientPhone] = useState('')
   const [creatingPatient, setCreatingPatient] = useState(false)
   const [form, setForm] = useState({
-    date, time, duration_minutes: '45', appointment_type: '', chief_complaint: ''
+    date: initDate, time: initTime,
+    duration_minutes: String(editingAppt?.duration_minutes ?? 45),
+    appointment_type: editingAppt?.appointment_type ?? '',
+    chief_complaint: editingAppt?.chief_complaint ?? '',
   })
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState('')
+  const [showDatePicker, setShowDatePicker]   = useState(false)
+  const [showStartPicker, setShowStartPicker] = useState(false)
+  const [showEndPicker, setShowEndPicker]     = useState(false)
+  const startSelectedRef = useRef<HTMLButtonElement>(null)
+  const [calMonth, setCalMonth] = useState(() => {
+    const d = new Date(form.date + 'T12:00:00')
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
   }
+
+  function addMinutes(t: string, mins: number): string {
+    const [h, m] = t.split(':').map(Number)
+    const total = h * 60 + m + mins
+    return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  }
+
+  useEffect(() => {
+    if (editingAppt) return
+    setForm(f => ({ ...f, date, time }))
+  }, [date, time, editingAppt])
 
   useEffect(() => {
     if (professionalId || !defaultProfessionalId) return
@@ -1259,12 +1281,31 @@ function NewAppointmentModal({ token, date, time, professionals, defaultProfessi
       .finally(() => setSearching(false))
   }, [search, token])
 
-const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
-const DURACIONES = [
-    { value: '30', label: '30m' },
-    { value: '45', label: '45m' },
-    { value: '60', label: '1h' },
-    { value: '90', label: '1h30' },
+  useEffect(() => {
+    const d = new Date(form.date + 'T12:00:00')
+    setCalMonth({ year: d.getFullYear(), month: d.getMonth() })
+  }, [form.date])
+
+  const endTime = addMinutes(form.time, Number(form.duration_minutes))
+
+  useEffect(() => {
+    if (showStartPicker) startSelectedRef.current?.scrollIntoView({ block: 'center' })
+  }, [showStartPicker])
+
+  const todayStr = getTodayStr()
+
+  const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
+  const DURACIONES = [
+    { value: '15',  label: '15 min' },
+    { value: '20',  label: '20 min' },
+    { value: '30',  label: '30 min' },
+    { value: '45',  label: '45 min' },
+    { value: '60',  label: '1 h' },
+    { value: '75',  label: '1 h 15 min' },
+    { value: '90',  label: '1 h 30 min' },
+    { value: '120', label: '2 h' },
+    { value: '150', label: '2 h 30 min' },
+    { value: '180', label: '3 h' },
   ]
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1275,17 +1316,31 @@ const DURACIONES = [
     setError('')
     try {
       const startsAt = `${form.date}T${form.time}:00-03:00`
-      await apiFetch('/appointments', {
-        method: 'POST', token,
-        body: JSON.stringify({
-          patient_id:       patientId,
-          professional_id:  professionalId,
-          starts_at:        startsAt,
-          duration_minutes: Number(form.duration_minutes),
-          appointment_type: form.appointment_type || undefined,
-          chief_complaint:  form.chief_complaint  || undefined,
+      const endsAt = new Date(new Date(startsAt).getTime() + Number(form.duration_minutes) * 60000).toISOString()
+      if (editingAppt) {
+        await apiFetch(`/appointments/${editingAppt.id}`, {
+          method: 'PATCH', token,
+          body: JSON.stringify({
+            starts_at:        startsAt,
+            ends_at:          endsAt,
+            duration_minutes: Number(form.duration_minutes),
+            appointment_type: form.appointment_type || undefined,
+            chief_complaint:  form.chief_complaint  || undefined,
+          })
         })
-      })
+      } else {
+        await apiFetch('/appointments', {
+          method: 'POST', token,
+          body: JSON.stringify({
+            patient_id:       patientId,
+            professional_id:  professionalId,
+            starts_at:        startsAt,
+            duration_minutes: Number(form.duration_minutes),
+            appointment_type: form.appointment_type || undefined,
+            chief_complaint:  form.chief_complaint  || undefined,
+          })
+        })
+      }
       onCreated(professionalId)
     } catch (err: any) {
       setError(err.message)
@@ -1319,161 +1374,511 @@ const DURACIONES = [
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-      onClick={onClose}>
-      <div className="bg-surface border border-app rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="p-6">
-          <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
-          <h2 className="text-lg font-bold text-app mb-5">Nuevo turno</h2>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Paciente</label>
-              {selectedPatient ? (
-                <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
-                  <div className="font-medium text-app">{selectedPatient.first_name} {selectedPatient.last_name}</div>
-                  <button type="button" onClick={() => { setPatientId(''); setSelectedPatientData(null); setNewPatientMode(false) }}
-                    className="text-app3 hover:text-app text-sm">✕</button>
-                </div>
-              ) : newPatientMode ? (
-                <div className="bg-surface2 rounded-xl p-3 border border-[#00C4BC]/30">
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-2">Nuevo paciente rápido</div>
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <input type="text" value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
-                      placeholder="Nombre"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
-                    <input type="text" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)}
-                      placeholder="Apellido"
-                      className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
-                  </div>
-                  <input type="tel" value={newPatientPhone} onChange={e => setNewPatientPhone(e.target.value)}
-                    placeholder="Teléfono"
-                    className="w-full bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2" />
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => { setNewPatientMode(false); setNewPatientPhone('') }}
-                      className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors">
-                      Cancelar
-                    </button>
-                    <button type="button" onClick={handleCreatePatient}
-                      disabled={!newPatientName || !newPatientPhone.trim() || creatingPatient}
-                      className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors">
-                      {creatingPatient ? 'Creando...' : 'Crear y usar'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Buscar por nombre o teléfono..."
-                    className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2"
-                    autoFocus />
-                  {search && (
-                    <div className="bg-surface2 border border-app rounded-xl overflow-hidden mb-2">
-                      {searching && <div className="px-4 py-3 text-app3 text-sm">Buscando...</div>}
-                      {!searching && searchResults.map(p => (
-                        <div key={p.id} onClick={() => { setPatientId(p.id); setSelectedPatientData(p); setSearch('') }}
-                          className="px-4 py-3 hover:bg-surface3 cursor-pointer text-sm border-b border-app last:border-0 text-app">
-                          <span className="font-medium">{p.first_name} {p.last_name}</span>
-                          <span className="text-app2 ml-2">{p.phone}</span>
-                        </div>
-                      ))}
-                      {!searching && searchResults.length === 0 && <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>}
-                    </div>
-                  )}
-                  <button type="button" onClick={() => setNewPatientMode(true)}
-                    className="w-full bg-surface2 hover:bg-surface3 border border-dashed border-app2 text-app2 hover:text-app text-xs font-semibold py-2.5 rounded-xl transition-colors">
-                    + Crear nuevo paciente
-                  </button>
-                </div>
+    <div className="p-5">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Paciente</label>
+          {selectedPatient ? (
+            <div className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">
+              <div className="font-medium text-app">
+                {selectedPatient.full_name ?? `${selectedPatient.first_name ?? ''} ${selectedPatient.last_name ?? ''}`.trim()}
+              </div>
+              {!editingAppt && (
+                <button type="button" onClick={() => { setPatientId(''); setSelectedPatientData(null); setNewPatientMode(false) }}
+                  className="text-app3 hover:text-app text-sm cursor-pointer">✕</button>
               )}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha</label>
-                <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+          ) : newPatientMode ? (
+            <div className="bg-surface2 rounded-xl p-3 border border-[#00C4BC]/30">
+              <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mb-2">Nuevo paciente rápido</div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <input type="text" value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
+                  placeholder="Nombre"
+                  className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                <input type="text" value={newPatientLastName} onChange={e => setNewPatientLastName(e.target.value)}
+                  placeholder="Apellido"
+                  className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Hora</label>
-                <input type="time" value={form.time} onChange={e => set('time', e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+              <input type="tel" value={newPatientPhone} onChange={e => setNewPatientPhone(e.target.value)}
+                placeholder="Teléfono"
+                className="w-full bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2" />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setNewPatientMode(false); setNewPatientPhone('') }}
+                  className="flex-1 bg-surface3 text-app2 text-xs font-semibold py-2 rounded-lg transition-colors cursor-pointer">
+                  Cancelar
+                </button>
+                <button type="button" onClick={handleCreatePatient}
+                  disabled={!newPatientName || !newPatientPhone.trim() || creatingPatient}
+                  className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold py-2 rounded-lg transition-colors cursor-pointer">
+                  {creatingPatient ? 'Creando...' : 'Crear y usar'}
+                </button>
               </div>
             </div>
-
-            {professionals.length > 1 && (
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Profesional</label>
-                <select
-                  value={professionalId}
-                  onChange={e => setProfessionalId(e.target.value)}
-                  className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
-                >
-                  <option value="" disabled>Seleccionar profesional</option>
-                  {professionals.map(p => (
-                    <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+          ) : (
+            <div className="relative">
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o teléfono..."
+                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                autoFocus />
+              {search && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-app rounded-xl shadow-xl z-50 overflow-hidden max-h-56 overflow-y-auto">
+                  {searching && <div className="px-4 py-3 text-app3 text-sm">Buscando...</div>}
+                  {!searching && searchResults.map(p => (
+                    <div key={p.id} onClick={() => { setPatientId(p.id); setSelectedPatientData(p); setSearch('') }}
+                      className="px-4 py-3 hover:bg-surface2 cursor-pointer text-sm border-b border-app last:border-0 text-app">
+                      <span className="font-medium">{p.first_name} {p.last_name}</span>
+                      <span className="text-app2 ml-2">{p.phone}</span>
+                    </div>
                   ))}
-                </select>
-              </div>
-            )}
-
-            {professionals.length === 0 && (
-              <div className="rounded-xl border border-app bg-surface2 px-4 py-3 text-sm text-app3">
-                Cargando profesionales...
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Duración</label>
-              <div className="grid grid-cols-4 gap-2">
-                {DURACIONES.map(d => (
-                  <button key={d.value} type="button" onClick={() => set('duration_minutes', d.value)}
-                    className={`py-2 rounded-xl text-sm font-semibold transition-colors ${
-                      form.duration_minutes === d.value
-                        ? 'bg-[#00C4BC] text-white'
-                        : 'bg-surface2 border border-app text-app2'
-                    }`}>
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Tipo de consulta</label>
-              <select value={form.appointment_type} onChange={e => set('appointment_type', e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
-                {TIPOS.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Motivo (opcional)</label>
-              <input type="text" value={form.chief_complaint} onChange={e => set('chief_complaint', e.target.value)}
-                placeholder="Descripción..."
-                className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={onClose}
-                className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={loading || professionals.length === 0}
-                className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
-                {loading ? 'Agendando...' : 'Confirmar turno'}
+                  {!searching && searchResults.length === 0 && <div className="px-4 py-3 text-app3 text-sm">Sin resultados</div>}
+                </div>
+              )}
+              <button type="button" onClick={() => setNewPatientMode(true)}
+                className="w-full mt-2 bg-surface2 hover:bg-surface3 border border-dashed border-app2 text-app2 hover:text-app text-xs font-semibold py-2.5 rounded-xl transition-colors cursor-pointer">
+                + Crear nuevo paciente
               </button>
             </div>
-          </form>
+          )}
         </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha y horario</label>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={() => { setShowDatePicker(v => !v); setShowStartPicker(false); setShowEndPicker(false) }}
+                className="w-full flex items-center justify-between gap-1.5 bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm hover:border-[#00C4BC] transition-colors cursor-pointer"
+              >
+                <span className="truncate capitalize">{formatDateLabel(form.date)}</span>
+                <ChevronDown size={14} className="text-app3 shrink-0" />
+              </button>
+              {showDatePicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />
+                  <div className="absolute top-full left-0 mt-1 bg-surface border border-app rounded-2xl shadow-xl z-50 p-4 w-72">
+                    <div className="flex items-center justify-between mb-3">
+                      <button type="button"
+                        onClick={() => setCalMonth(c => {
+                          const d = new Date(c.year, c.month - 1)
+                          return { year: d.getFullYear(), month: d.getMonth() }
+                        })}
+                        className="p-1.5 rounded-lg hover:bg-surface2 text-app3 hover:text-app transition-colors cursor-pointer">
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className="text-sm font-semibold text-app capitalize">
+                        {new Date(calMonth.year, calMonth.month).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+                      </span>
+                      <button type="button"
+                        onClick={() => setCalMonth(c => {
+                          const d = new Date(c.year, c.month + 1)
+                          return { year: d.getFullYear(), month: d.getMonth() }
+                        })}
+                        className="p-1.5 rounded-lg hover:bg-surface2 text-app3 hover:text-app transition-colors cursor-pointer">
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 mb-1">
+                      {['L','M','Mi','J','V','S','D'].map(d => (
+                        <div key={d} className="text-center text-[10px] font-semibold text-app3 uppercase py-1">{d}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-y-0.5">
+                      {buildCalDays(calMonth.year, calMonth.month).map((day, i) => {
+                        if (!day) return <div key={i} />
+                        const ds = `${calMonth.year}-${String(calMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                        const isSelected = form.date === ds
+                        const isToday = todayStr === ds
+                        return (
+                          <button key={i} type="button"
+                            onClick={() => { set('date', ds); onSlotChange(ds, form.time); setShowDatePicker(false) }}
+                            className={`h-8 w-full flex items-center justify-center rounded-lg text-sm transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#00C4BC] text-white font-semibold'
+                                : isToday
+                                ? 'bg-[#00C4BC]/10 text-[#00C4BC] font-semibold hover:bg-[#00C4BC]/20'
+                                : 'text-app hover:bg-surface2'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => { setShowStartPicker(v => !v); setShowEndPicker(false); setShowDatePicker(false) }}
+                className="w-[86px] flex items-center justify-between gap-1.5 bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm hover:border-[#00C4BC] transition-colors cursor-pointer"
+              >
+                <span>{form.time}</span>
+                <ChevronDown size={14} className="text-app3 shrink-0" />
+              </button>
+              {showStartPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowStartPicker(false)} />
+                  <div className="absolute top-full left-0 mt-1 bg-surface border border-app rounded-xl shadow-xl z-50 overflow-hidden w-28 max-h-60 overflow-y-auto">
+                    {START_SLOTS.map(t => {
+                      const selected = form.time === t
+                      return (
+                        <button key={t} type="button"
+                          ref={selected ? startSelectedRef : undefined}
+                          onClick={() => { set('time', t); onSlotChange(form.date, t); setShowStartPicker(false) }}
+                          className={`w-full px-4 py-2.5 text-sm text-left transition-colors cursor-pointer ${
+                            selected ? 'bg-[#00C4BC]/10 text-[#00C4BC] font-semibold' : 'text-app hover:bg-surface2'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+            <span className="text-app3 shrink-0 text-sm">—</span>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => { setShowEndPicker(v => !v); setShowStartPicker(false); setShowDatePicker(false) }}
+                className="w-[86px] flex items-center justify-between gap-1.5 bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm hover:border-[#00C4BC] transition-colors cursor-pointer"
+              >
+                <span>{endTime}</span>
+                <ChevronDown size={14} className="text-app3 shrink-0" />
+              </button>
+              {showEndPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowEndPicker(false)} />
+                  <div className="absolute top-full right-0 mt-1 bg-surface border border-app rounded-xl shadow-xl z-50 overflow-hidden w-44 max-h-64 overflow-y-auto">
+                    {DURACIONES.map(d => {
+                      const opt = addMinutes(form.time, Number(d.value))
+                      const selected = form.duration_minutes === d.value
+                      return (
+                        <button key={d.value} type="button"
+                          onClick={() => { set('duration_minutes', d.value); onDurationChange(Number(d.value)); setShowEndPicker(false) }}
+                          className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors cursor-pointer ${
+                            selected ? 'bg-[#00C4BC]/10 text-[#00C4BC] font-semibold' : 'text-app hover:bg-surface2'
+                          }`}
+                        >
+                          <span className="font-medium">{opt}</span>
+                          <span className={`text-xs ${selected ? 'text-[#00C4BC]/70' : 'text-app3'}`}>{d.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {professionals.length > 1 && (
+          <div>
+            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Profesional</label>
+            <select
+              value={professionalId}
+              onChange={e => setProfessionalId(e.target.value)}
+              className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+            >
+              <option value="" disabled>Seleccionar profesional</option>
+              {professionals.map(p => (
+                <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {professionals.length === 0 && (
+          <div className="rounded-xl border border-app bg-surface2 px-4 py-3 text-sm text-app3">
+            Cargando profesionales...
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Tipo de consulta</label>
+          <select value={form.appointment_type} onChange={e => set('appointment_type', e.target.value)}
+            className="w-full bg-surface2 border border-app rounded-xl px-4 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
+            {TIPOS.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Motivo (opcional)</label>
+          <input type="text" value={form.chief_complaint} onChange={e => set('chief_complaint', e.target.value)}
+            placeholder="Descripción..."
+            className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+        </div>
+
+        {error && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <button type="button" onClick={onClose}
+            className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors cursor-pointer">
+            Cancelar
+          </button>
+          <button type="submit" disabled={loading || professionals.length === 0}
+            className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors cursor-pointer">
+            {loading ? (editingAppt ? 'Guardando...' : 'Agendando...') : (editingAppt ? 'Guardar cambios' : 'Confirmar turno')}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function PanelBlockForm({ token, defaultDate, defaultTime, onClose, onCreated, onBlockPreviewChange }: {
+  token: string
+  defaultDate: string
+  defaultTime: string
+  onClose: () => void
+  onCreated: () => void
+  onBlockPreviewChange: (p: { startDate: string; startTime: string; endTime: string; allDay: boolean }) => void
+}) {
+  function endFromStart(t: string) {
+    const [h, m] = t.split(':').map(Number)
+    const total = h * 60 + m + 60
+    return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  }
+
+  const CHIPS = ['Almuerzo', 'Reunión', 'Vacaciones', 'Congreso']
+  const [reason, setReason]       = useState('')
+  const [startDate, setStartDate] = useState(defaultDate)
+  const [endDate, setEndDate]     = useState(defaultDate)
+  const [allDay, setAllDay]       = useState(false)
+  const [startTime, setStartTime] = useState(defaultTime)
+  const [endTime, setEndTime]     = useState(() => endFromStart(defaultTime))
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState('')
+
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false)
+  const [showEndDatePicker, setShowEndDatePicker]     = useState(false)
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false)
+  const [showEndTimePicker, setShowEndTimePicker]     = useState(false)
+  const startTimeRef = useRef<HTMLButtonElement>(null)
+  const endTimeRef   = useRef<HTMLButtonElement>(null)
+
+  const [calStart, setCalStart] = useState(() => { const d = new Date(defaultDate + 'T12:00:00'); return { year: d.getFullYear(), month: d.getMonth() } })
+  const [calEnd, setCalEnd]     = useState(() => { const d = new Date(defaultDate + 'T12:00:00'); return { year: d.getFullYear(), month: d.getMonth() } })
+
+  const todayStr = getTodayStr()
+
+  useEffect(() => {
+    setStartDate(defaultDate)
+    setEndDate(defaultDate)
+    const d = new Date(defaultDate + 'T12:00:00')
+    const cal = { year: d.getFullYear(), month: d.getMonth() }
+    setCalStart(cal)
+    setCalEnd(cal)
+  }, [defaultDate])
+
+  useEffect(() => {
+    setStartTime(defaultTime)
+    setEndTime(endFromStart(defaultTime))
+  }, [defaultTime])
+
+  useEffect(() => {
+    onBlockPreviewChange({ startDate, startTime, endTime, allDay })
+  }, [startDate, startTime, endTime, allDay])
+
+  useEffect(() => {
+    if (showStartTimePicker) startTimeRef.current?.scrollIntoView({ block: 'center' })
+  }, [showStartTimePicker])
+
+  useEffect(() => {
+    if (showEndTimePicker) endTimeRef.current?.scrollIntoView({ block: 'center' })
+  }, [showEndTimePicker])
+
+  function closeAll() { setShowStartDatePicker(false); setShowEndDatePicker(false); setShowStartTimePicker(false); setShowEndTimePicker(false) }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    const startsAt = allDay ? `${startDate}T00:00:00-03:00` : `${startDate}T${startTime}:00-03:00`
+    const endsAt   = allDay ? `${endDate}T23:59:59-03:00`   : `${endDate}T${endTime}:00-03:00`
+    if (new Date(endsAt) <= new Date(startsAt)) { setError('La fecha/hora de fin debe ser posterior a la de inicio.'); return }
+    setLoading(true)
+    try {
+      await apiFetch('/schedule-blocks', { method: 'POST', token, body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, reason: reason || undefined }) })
+      onCreated()
+    } catch (err: any) {
+      setError(err.message ?? 'Error al crear el bloqueo.')
+      setLoading(false)
+    }
+  }
+
+  function DateBtn({ value, calState, setCalState, onChange, showPicker, setShowPicker, minDate }: {
+    value: string; calState: { year: number; month: number }; setCalState: (c: { year: number; month: number }) => void
+    onChange: (d: string) => void; showPicker: boolean; setShowPicker: (v: boolean) => void; minDate?: string
+  }) {
+    return (
+      <div className="relative">
+        <button type="button" onClick={() => { closeAll(); setShowPicker(!showPicker) }}
+          className="w-full flex items-center justify-between gap-1.5 bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm hover:border-slate-400 transition-colors cursor-pointer">
+          <span className="truncate capitalize">{formatDateLabel(value)}</span>
+          <ChevronDown size={14} className="text-app3 shrink-0" />
+        </button>
+        {showPicker && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowPicker(false)} />
+            <div className="absolute top-full left-0 mt-1 bg-surface border border-app rounded-2xl shadow-xl z-50 p-4 w-72">
+              <div className="flex items-center justify-between mb-3">
+                <button type="button" onClick={() => setCalState({ year: new Date(calState.year, calState.month - 1).getFullYear(), month: new Date(calState.year, calState.month - 1).getMonth() })}
+                  className="p-1.5 rounded-lg hover:bg-surface2 text-app3 hover:text-app transition-colors cursor-pointer"><ChevronLeft size={16} /></button>
+                <span className="text-sm font-semibold text-app capitalize">
+                  {new Date(calState.year, calState.month).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+                </span>
+                <button type="button" onClick={() => setCalState({ year: new Date(calState.year, calState.month + 1).getFullYear(), month: new Date(calState.year, calState.month + 1).getMonth() })}
+                  className="p-1.5 rounded-lg hover:bg-surface2 text-app3 hover:text-app transition-colors cursor-pointer"><ChevronRight size={16} /></button>
+              </div>
+              <div className="grid grid-cols-7 mb-1">
+                {['L','M','Mi','J','V','S','D'].map(d => <div key={d} className="text-center text-[10px] font-semibold text-app3 uppercase py-1">{d}</div>)}
+              </div>
+              <div className="grid grid-cols-7 gap-y-0.5">
+                {buildCalDays(calState.year, calState.month).map((day, i) => {
+                  if (!day) return <div key={i} />
+                  const ds = `${calState.year}-${String(calState.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                  const isSelected = value === ds
+                  const isToday = todayStr === ds
+                  const disabled = minDate ? ds < minDate : false
+                  return (
+                    <button key={i} type="button" disabled={disabled}
+                      onClick={() => { onChange(ds); setShowPicker(false) }}
+                      className={`h-8 w-full flex items-center justify-center rounded-lg text-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${
+                        isSelected ? 'bg-slate-500 text-white font-semibold'
+                        : isToday  ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300 font-semibold hover:bg-slate-500/20'
+                        : 'text-app hover:bg-surface2'
+                      }`}>{day}</button>
+                  )
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
+    )
+  }
+
+  function TimeBtn({ value, refEl, showPicker, setShowPicker, onChange }: {
+    value: string; refEl: React.RefObject<HTMLButtonElement | null>; showPicker: boolean; setShowPicker: (v: boolean) => void; onChange: (t: string) => void
+  }) {
+    return (
+      <div className="relative">
+        <button type="button" onClick={() => { closeAll(); setShowPicker(!showPicker) }}
+          className="w-[86px] flex items-center justify-between gap-1.5 bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm hover:border-slate-400 transition-colors cursor-pointer">
+          <span>{value}</span>
+          <ChevronDown size={14} className="text-app3 shrink-0" />
+        </button>
+        {showPicker && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowPicker(false)} />
+            <div className="absolute top-full left-0 mt-1 bg-surface border border-app rounded-xl shadow-xl z-50 overflow-hidden w-28 max-h-60 overflow-y-auto">
+              {START_SLOTS.map(t => {
+                const selected = value === t
+                return (
+                  <button key={t} type="button"
+                    ref={selected ? refEl : undefined}
+                    onClick={() => { onChange(t); setShowPicker(false) }}
+                    className={`w-full px-4 py-2.5 text-sm text-left transition-colors cursor-pointer ${selected ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300 font-semibold' : 'text-app hover:bg-surface2'}`}>
+                    {t}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Motivo del bloqueo</label>
+          <input type="text" value={reason} onChange={e => setReason(e.target.value)}
+            placeholder="¿Por qué bloqueás este horario?" autoFocus
+            className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-slate-400" />
+          <div className="flex flex-wrap gap-2 mt-2.5">
+            {CHIPS.map(chip => (
+              <button key={chip} type="button" onClick={() => setReason(chip)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors border cursor-pointer ${
+                  reason === chip ? 'bg-slate-500 text-white border-slate-500' : 'bg-surface2 border-app text-app3 hover:text-app hover:border-slate-400'
+                }`}>{chip}</button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha y horario</label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <DateBtn value={startDate} calState={calStart} setCalState={setCalStart}
+                onChange={d => { setStartDate(d); if (d > endDate) { setEndDate(d); setCalEnd(calStart) } }}
+                showPicker={showStartDatePicker} setShowPicker={setShowStartDatePicker} />
+            </div>
+            {!allDay && (
+              <>
+                <TimeBtn value={startTime} refEl={startTimeRef} showPicker={showStartTimePicker} setShowPicker={setShowStartTimePicker} onChange={setStartTime} />
+                <span className="text-app3 shrink-0 text-sm">—</span>
+                <TimeBtn value={endTime} refEl={endTimeRef} showPicker={showEndTimePicker} setShowPicker={setShowEndTimePicker} onChange={setEndTime} />
+              </>
+            )}
+          </div>
+          {endDate !== startDate && (
+            <div className="mt-2">
+              <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Fecha fin</label>
+              <DateBtn value={endDate} calState={calEnd} setCalState={setCalEnd}
+                onChange={setEndDate} showPicker={showEndDatePicker} setShowPicker={setShowEndDatePicker} minDate={startDate} />
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setAllDay(v => !v)}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 cursor-pointer ${allDay ? 'bg-slate-500' : 'bg-surface3'}`}>
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${allDay ? 'left-5' : 'left-0.5'}`} />
+          </button>
+          <span className="text-sm text-app2">Todo el día</span>
+          {startDate !== endDate && allDay && (
+            <button type="button" onClick={() => setEndDate(startDate)} className="ml-auto text-xs text-app3 hover:text-app underline cursor-pointer">
+              solo {formatDateLabel(startDate).split(' ').slice(1).join(' ')}
+            </button>
+          )}
+        </div>
+
+        {!allDay && endDate !== startDate && (
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-xs text-app3 shrink-0">Fin:</span>
+            <div className="flex-1 min-w-0">
+              <DateBtn value={endDate} calState={calEnd} setCalState={setCalEnd}
+                onChange={setEndDate} showPicker={showEndDatePicker} setShowPicker={setShowEndDatePicker} minDate={startDate} />
+            </div>
+            <TimeBtn value={endTime} refEl={endTimeRef} showPicker={showEndTimePicker} setShowPicker={setShowEndTimePicker} onChange={setEndTime} />
+          </div>
+        )}
+
+        {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>}
+
+        <div className="flex gap-3 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors cursor-pointer">
+            Cancelar
+          </button>
+          <button type="submit" disabled={loading}
+            className="flex-1 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer">
+            <Lock size={14} />
+            {loading ? 'Bloqueando...' : 'Bloquear'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
