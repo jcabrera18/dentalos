@@ -273,13 +273,15 @@ export default function LoginPage() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then((result) => {
-      if (result.data.session) {
+    async function check() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
         router.replace('/dashboard')
       } else {
         setChecking(false)
       }
-    })
+    }
+    check()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
