@@ -20,6 +20,11 @@ import {
   Clock,
   Settings,
   Loader2,
+  BarChart2,
+  ChevronDown,
+  ChevronRight,
+  TrendingUp,
+  Activity,
 } from 'lucide-react'
 import { useSubscription, invalidateSubscriptionCache } from '@/lib/useSubscription'
 import { NavigationProgress } from '@/components/NavigationProgress'
@@ -34,7 +39,11 @@ const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
   { href: '/agenda', icon: CalendarDays, label: 'Agenda' },
   { href: '/patients', icon: Users, label: 'Pacientes' },
-  { href: '/payments', icon: CreditCard, label: 'Estadísticas' },
+]
+
+const STATS_ITEMS = [
+  { href: '/stats/financial', icon: TrendingUp, label: 'Financieras' },
+  { href: '/stats/clinical', icon: Activity, label: 'Clínicas' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -50,6 +59,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showInviteSuccess, setShowInviteSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(() => pathname.startsWith('/stats/'))
+  const [statsSheetOpen, setStatsSheetOpen] = useState(false)
   const { data: subscription, loading: subLoading, refetch: refetchSubscription } = useSubscription()
   const [showPlansModal, setShowPlansModal] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'growth' | 'scale' | null>(null)
@@ -407,6 +418,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )
           })}
+
+          {/* Estadísticas — expandible */}
+          <div>
+            <button
+              onClick={() => setStatsOpen(o => !o)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                STATS_ITEMS.some(s => isActive(s.href))
+                  ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
+                  : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
+              }`}
+            >
+              <BarChart2 size={18} strokeWidth={1.8} className="shrink-0" />
+              <span className="flex-1 text-left">Estadísticas</span>
+              {statsOpen
+                ? <ChevronDown size={14} className="shrink-0 opacity-60" />
+                : <ChevronRight size={14} className="shrink-0 opacity-60" />
+              }
+            </button>
+
+            {statsOpen && (
+              <div className="ml-3 mt-1 space-y-0.5 border-l-2 border-[#00C4BC]/20 pl-3">
+                {STATS_ITEMS.map(item => {
+                  const Icon = item.icon
+                  const active = isActive(item.href)
+                  const loading = navLoading === item.href
+                  return (
+                    <button
+                      key={item.href}
+                      onClick={() => navigateTo(item.href)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        active
+                          ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
+                          : 'text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
+                      }`}
+                    >
+                      {loading
+                        ? <Loader2 size={16} className="animate-spin text-[#00C4BC] shrink-0" />
+                        : <Icon size={16} strokeWidth={active ? 2.2 : 1.8} className="shrink-0" />
+                      }
+                      {item.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Bottom actions */}
@@ -598,6 +655,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )
           })}
+          <button
+            onClick={() => setStatsSheetOpen(true)}
+            className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
+              STATS_ITEMS.some(s => isActive(s.href)) ? 'text-[#00C4BC]' : 'text-app3'
+            }`}
+          >
+            {STATS_ITEMS.some(s => navLoading === s.href)
+              ? <Loader2 size={22} className="animate-spin text-[#00C4BC]" />
+              : <BarChart2 size={22} strokeWidth={STATS_ITEMS.some(s => isActive(s.href)) ? 2.2 : 1.8} />
+            }
+            <span>Estadísticas</span>
+          </button>
           <button
             onClick={() => navigateTo('/settings')}
             className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
@@ -997,6 +1066,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               )
             })()}
 
+          </div>
+        </div>
+      )}
+
+      {/* ── BOTTOM SHEET: Estadísticas mobile ───────────────── */}
+      {statsSheetOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setStatsSheetOpen(false)}
+          />
+          <div className="relative bg-surface rounded-t-2xl border-t border-app px-4 pt-3 pb-8 animate-in slide-in-from-bottom duration-200">
+            <div className="w-10 h-1 bg-app3/40 rounded-full mx-auto mb-5" />
+            <p className="text-xs font-semibold text-app3 uppercase tracking-widest mb-3 px-1">Estadísticas</p>
+            {STATS_ITEMS.map(item => {
+              const Icon = item.icon
+              const active = isActive(item.href)
+              return (
+                <button
+                  key={item.href}
+                  onClick={() => { setStatsSheetOpen(false); navigateTo(item.href) }}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all cursor-pointer mb-1 ${
+                    active
+                      ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
+                      : 'text-app hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10'
+                  }`}
+                >
+                  <Icon size={20} strokeWidth={active ? 2.2 : 1.8} className="shrink-0" />
+                  {item.label}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

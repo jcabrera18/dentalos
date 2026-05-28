@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText } from 'lucide-react'
+import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
+import { InvoiceModal } from '@/components/InvoiceModal'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
@@ -12,6 +13,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<any>({})
   const [inactive, setInactive] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState('')
   const [showNotesModal, setShowNotesModal] = useState(false)
   const [pendingAppt, setPendingAppt] = useState<any>(null)
   const [clinicalNotes, setClinicalNotes] = useState('')
@@ -22,6 +24,10 @@ export default function DashboardPage() {
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [attendedDone, setAttendedDone] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [myAfipIvaCondition, setMyAfipIvaCondition] = useState('MO')
+  const [myAfipConfigured, setMyAfipConfigured] = useState(false)
+  const [createdPayment, setCreatedPayment] = useState<any>(null)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -39,18 +45,23 @@ export default function DashboardPage() {
         return
       }
 
-      const token = activeSession.access_token
+      const t = activeSession.access_token
+      setToken(t)
 
       // 2 requests en vez de 4 — /appointments/dashboard combina agenda + stats + inactivos
-      const [meData, dashData] = await Promise.all([
-        apiFetch('/auth/me', { token }),
-        apiFetch('/appointments/dashboard', { token }),
+      const [meData, dashData, afipData] = await Promise.all([
+        apiFetch('/auth/me', { token: t }),
+        apiFetch('/appointments/dashboard', { token: t }),
+        apiFetch('/professionals/me/afip-config', { token: t }).catch(() => null),
       ])
 
       setUser(meData.data)
       setAgenda(dashData.data?.agenda ?? [])
       setStats(dashData.data?.stats ?? {})
       setInactive(dashData.data?.inactive ?? [])
+      const afip = afipData?.data
+      if (afip?.iva_condition) setMyAfipIvaCondition(afip.iva_condition)
+      setMyAfipConfigured(!!(afip?.cuit && afip?.has_cert && afip?.has_key && afip?.afip_punto_venta))
       setLoading(false)
 
       // Identificar usuario en PostHog
@@ -189,6 +200,8 @@ export default function DashboardPage() {
     setPaymentAmount('')
     setPaymentMethod('cash')
     setAttendedDone(false)
+    setCreatedPayment(null)
+    setShowInvoiceModal(false)
   }
 
   async function confirmAttended() {
@@ -206,7 +219,7 @@ export default function DashboardPage() {
     const amount = parseFloat(paymentAmount)
     const total = parseFloat(paymentTotal)
     if (!isNaN(amount) && amount > 0) {
-      await apiFetch('/payments', {
+      const payRes = await apiFetch('/payments', {
         method: 'POST',
         token: session.access_token,
         body: JSON.stringify({
@@ -217,6 +230,7 @@ export default function DashboardPage() {
           ...(!isNaN(total) && total > 0 ? { total_amount: total } : {}),
         })
       })
+      setCreatedPayment(payRes?.data ?? null)
     } else if (!isNaN(total) && total > 0) {
       // Registra deuda sin pago inicial
       await apiFetch('/payments', {
@@ -308,7 +322,7 @@ export default function DashboardPage() {
                 <div className="flex gap-2 flex-shrink-0">
                   <button
                     onClick={() => router.push(`/patients/${appt.patient_id}`)}
-                    className="flex items-center gap-1.5 bg-surface2 hover:bg-surface3 text-app2 text-sm font-semibold px-3 py-2 rounded-xl transition-all active:scale-95"
+                    className="flex items-center gap-1.5 bg-surface2 hover:bg-surface3 text-app2 text-sm font-semibold px-3 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
                   >
                     <FileText size={15} />
                     Ver ficha
@@ -316,7 +330,7 @@ export default function DashboardPage() {
                   <button
                     disabled={actionLoading === `${appt.id}:completed`}
                     onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
-                    className="flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all active:scale-95"
+                    className="flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
                   >
                     <CheckCircle size={15} />
                     Atendido
@@ -440,7 +454,7 @@ export default function DashboardPage() {
                           <button
                             disabled={!!actionLoading}
                             onClick={() => setOpenDropdown(openDropdown === appt.id ? null : appt.id)}
-                            className="p-1.5 rounded-lg bg-surface2 text-app2 hover:bg-surface3 disabled:opacity-40 transition-colors"
+                            className="p-1.5 rounded-lg bg-surface2 text-app2 hover:bg-surface3 disabled:opacity-40 transition-colors cursor-pointer"
                           >
                             <MoreHorizontal size={15} />
                           </button>
@@ -451,14 +465,14 @@ export default function DashboardPage() {
                                   <button
                                     disabled={!!actionLoading}
                                     onClick={() => { markStatus(appt.id, 'confirmed'); setOpenDropdown(null) }}
-                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[#00C4BC] hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[#00C4BC] hover:bg-surface2 disabled:opacity-40 transition-colors cursor-pointer"
                                   >
                                     <UserCheck size={14} /> Confirmar
                                   </button>
                                   <button
                                     disabled={!!actionLoading}
                                     onClick={() => { markStatus(appt.id, 'absent'); setOpenDropdown(null) }}
-                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-surface2 disabled:opacity-40 transition-colors cursor-pointer"
                                   >
                                     <XCircle size={14} /> No vino
                                   </button>
@@ -469,14 +483,14 @@ export default function DashboardPage() {
                                   <button
                                     disabled={!!actionLoading}
                                     onClick={() => { markStatus(appt.id, 'in_progress'); setOpenDropdown(null) }}
-                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-violet-400 hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-violet-400 hover:bg-surface2 disabled:opacity-40 transition-colors cursor-pointer"
                                   >
                                     <Play size={14} /> Iniciar
                                   </button>
                                   <button
                                     disabled={!!actionLoading}
                                     onClick={() => { markStatus(appt.id, 'absent'); setOpenDropdown(null) }}
-                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-surface2 disabled:opacity-40 transition-colors cursor-pointer"
                                   >
                                     <XCircle size={14} /> No vino
                                   </button>
@@ -486,7 +500,7 @@ export default function DashboardPage() {
                                 <button
                                   disabled={!!actionLoading}
                                   onClick={() => { setPendingAppt(appt); setShowNotesModal(true); setOpenDropdown(null) }}
-                                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[#00C4BC] hover:bg-surface2 disabled:opacity-40 transition-colors"
+                                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[#00C4BC] hover:bg-surface2 disabled:opacity-40 transition-colors cursor-pointer"
                                 >
                                   <CheckCircle size={14} /> Atendido
                                 </button>
@@ -502,14 +516,14 @@ export default function DashboardPage() {
                           <button
                             disabled={!!actionLoading}
                             onClick={() => markStatus(appt.id, 'confirmed')}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white disabled:opacity-40 transition-all active:scale-95"
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
                           >
                             <UserCheck size={13} /> Confirmar
                           </button>
                           <button
                             disabled={!!actionLoading}
                             onClick={() => markStatus(appt.id, 'absent')}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app2 hover:bg-red-400/10 hover:text-red-400 disabled:opacity-40 transition-all active:scale-95"
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app2 hover:bg-red-400/10 hover:text-red-400 disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
                           >
                             <XCircle size={13} /> No vino
                           </button>
@@ -521,14 +535,14 @@ export default function DashboardPage() {
                           <button
                             disabled={!!actionLoading}
                             onClick={() => markStatus(appt.id, 'in_progress')}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white disabled:opacity-40 transition-all active:scale-95"
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
                           >
                             <Play size={13} /> Iniciar
                           </button>
                           <button
                             disabled={!!actionLoading}
                             onClick={() => markStatus(appt.id, 'absent')}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app2 hover:bg-red-400/10 hover:text-red-400 disabled:opacity-40 transition-all active:scale-95"
+                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-surface2 text-app2 hover:bg-red-400/10 hover:text-red-400 disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
                           >
                             <XCircle size={13} /> No vino
                           </button>
@@ -539,7 +553,7 @@ export default function DashboardPage() {
                         <button
                           disabled={!!actionLoading}
                           onClick={() => { setPendingAppt(appt); setShowNotesModal(true) }}
-                          className="hidden sm:flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#00C4BC] text-white hover:bg-[#00aaa3] disabled:opacity-40 transition-all active:scale-95"
+                          className="hidden sm:flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#00C4BC] text-white hover:bg-[#00aaa3] disabled:opacity-40 transition-all active:scale-95 cursor-pointer"
                         >
                           <CheckCircle size={13} /> Atendido
                         </button>
@@ -611,14 +625,23 @@ export default function DashboardPage() {
                 <div className="space-y-2">
                   <button
                     onClick={() => router.push('/agenda')}
-                    className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2"
+                    className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <CalendarDays size={16} />
                     Coordinar próximo turno
                   </button>
+                  {myAfipConfigured && createdPayment?.id && (
+                    <button
+                      onClick={() => setShowInvoiceModal(true)}
+                      className="w-full bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <FileText size={15} />
+                      Emitir factura AFIP
+                    </button>
+                  )}
                   <button
                     onClick={closeNotesModal}
-                    className="w-full bg-surface2 hover:bg-surface3 text-app2 font-semibold py-3 rounded-xl transition-colors text-sm"
+                    className="w-full bg-surface2 hover:bg-surface3 text-app2 font-semibold py-3 rounded-xl transition-colors text-sm cursor-pointer"
                   >
                     Cerrar
                   </button>
@@ -664,7 +687,7 @@ export default function DashboardPage() {
                             value={paymentTotal}
                             onChange={e => setPaymentTotal(e.target.value)}
                             placeholder="0"
-                            className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                            className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       </div>
@@ -678,15 +701,16 @@ export default function DashboardPage() {
                             value={paymentAmount}
                             onChange={e => setPaymentAmount(e.target.value)}
                             placeholder="0"
-                            className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                            className="w-full bg-surface border border-app rounded-lg pl-7 pr-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       </div>
                     </div>
+                    <div className="relative">
                     <select
                       value={paymentMethod}
                       onChange={e => setPaymentMethod(e.target.value)}
-                      className="w-full bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                      className="w-full bg-surface border border-app rounded-lg px-3 py-2 pr-8 text-app text-sm focus:outline-none focus:border-[#00C4BC] appearance-none"
                     >
                       <option value="cash">Efectivo</option>
                       <option value="debit_card">Débito</option>
@@ -696,6 +720,8 @@ export default function DashboardPage() {
                       <option value="insurance">Obra social</option>
                       <option value="other">Otro</option>
                     </select>
+                    <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-app3" />
+                    </div>
                     {(() => {
                       const total = parseFloat(paymentTotal)
                       const paid = parseFloat(paymentAmount)
@@ -720,14 +746,14 @@ export default function DashboardPage() {
                   <button
                     onClick={closeNotesModal}
                     disabled={confirmLoading}
-                    className="flex-1 bg-surface2 hover:bg-surface3 disabled:opacity-50 text-app font-semibold py-3 rounded-xl transition-colors text-sm"
+                    className="flex-1 bg-surface2 hover:bg-surface3 disabled:opacity-50 text-app font-semibold py-3 rounded-xl transition-colors text-sm cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={confirmAttended}
                     disabled={confirmLoading}
-                    className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all text-sm"
+                    className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all text-sm cursor-pointer"
                   >
                     {confirmLoading ? 'Guardando...' : 'Confirmar'}
                   </button>
@@ -736,6 +762,21 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      )}
+
+      {showInvoiceModal && createdPayment && pendingAppt && (
+        <InvoiceModal
+          payment={{
+            id:           createdPayment.id,
+            amount:       parseFloat(paymentAmount) || 0,
+            patient_name: pendingAppt.patient_name,
+            concept:      pendingAppt.appointment_type || undefined,
+          }}
+          profesionalIvaCondition={myAfipIvaCondition}
+          token={token}
+          onClose={() => setShowInvoiceModal(false)}
+          onSuccess={() => {}}
+        />
       )}
     </div>
   )

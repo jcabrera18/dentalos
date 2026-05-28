@@ -90,6 +90,8 @@ export default function PatientDetailClient({
   const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(initialClinicalHistory !== null)
   const [clinicName, setClinicName] = useState('')
   const [myProfessionalName, setMyProfessionalName] = useState('')
+  const [myAfipIvaCondition, setMyAfipIvaCondition] = useState('MO')
+  const [myAfipConfigured, setMyAfipConfigured] = useState(false)
 
   // --- Consentimientos ---
   const [showConsentModal, setShowConsentModal] = useState(false)
@@ -146,7 +148,8 @@ export default function PatientDetailClient({
       apiFetch(`/treatments/odontogram/${params.id}`, { token }),
       apiFetch(`/treatments/tooth-diagnostics/${params.id}`, { token }),
       apiFetch('/auth/me', { token }),
-    ]).then(([odontogramData, diagData, meData]) => {
+      apiFetch('/professionals/me/afip-config', { token }).catch(() => null),
+    ]).then(([odontogramData, diagData, meData, afipData]) => {
       setOdontogram(odontogramData.data ?? [])
       setToothDiagnostics(diagData.data ?? [])
       setOdontogramLoading(false)
@@ -158,6 +161,9 @@ export default function PatientDetailClient({
           (me.first_name && me.last_name ? `${me.first_name} ${me.last_name}` : me.name ?? '')
         )
       }
+      const afip = afipData?.data
+      if (afip?.iva_condition) setMyAfipIvaCondition(afip.iva_condition)
+      setMyAfipConfigured(!!(afip?.cuit && afip?.has_cert && afip?.has_key && afip?.afip_punto_venta))
     })
   }, [])
 
@@ -909,6 +915,8 @@ export default function PatientDetailClient({
           preselectedPatientId={params.id as string}
           clinicName={clinicName || undefined}
           myProfessionalName={myProfessionalName || undefined}
+          profesionalIvaCondition={myAfipIvaCondition}
+          hasAfipConfig={myAfipConfigured}
           onClose={() => setShowPaymentModal(false)}
           onSaved={async () => {
             setShowPaymentModal(false)

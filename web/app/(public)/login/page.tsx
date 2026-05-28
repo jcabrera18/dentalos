@@ -268,6 +268,29 @@ function LoginForm() {
 
 // ── Page ───────────────────────────────────────────────────────
 export default function LoginPage() {
+  const router = useRouter()
+  const supabase = createClient()
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace('/dashboard')
+      } else {
+        setChecking(false)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="w-8 h-8 border-4 border-[#00C4BC]/30 border-t-[#00C4BC] rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className={`${jakarta.className} flex min-h-screen bg-white`}>
       {/* Left panel */}
