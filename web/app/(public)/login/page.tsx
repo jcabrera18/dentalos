@@ -273,9 +273,8 @@ export default function LoginPage() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const session = data.session
-      if (session) {
+    supabase.auth.getSession().then((result) => {
+      if (result.data.session) {
         router.replace('/dashboard')
       } else {
         setChecking(false)
