@@ -54,9 +54,9 @@ type UseSubscriptionResult = {
   refetch: () => void
 }
 
-// Module-level cache so the data survives re-renders without extra fetches
 let cache: { data: SubscriptionStatus; fetchedAt: number } | null = null
-const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+let inflight: Promise<SubscriptionStatus> | null = null
 
 export function useSubscription(): UseSubscriptionResult {
   const [data, setData] = useState<SubscriptionStatus | null>(cache?.data ?? null)
@@ -65,7 +65,6 @@ export function useSubscription(): UseSubscriptionResult {
   const fetchCountRef = useRef(0)
 
   async function fetch() {
-    // Use cache if fresh
     if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
       setData(cache.data)
       setLoading(false)
@@ -77,29 +76,29 @@ export function useSubscription(): UseSubscriptionResult {
     const currentFetch = ++fetchCountRef.current
 
     try {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
+      if (!inflight) {
+        inflight = (async () => {
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
 
-      let activeSession = session
-      if (!activeSession) {
-        const { data: { session: refreshed } } = await supabase.auth.refreshSession()
-        activeSession = refreshed
+          let activeSession = session
+          if (!activeSession) {
+            const { data: { session: refreshed } } = await supabase.auth.refreshSession()
+            activeSession = refreshed
+          }
+
+          if (!activeSession) throw new Error('No session')
+
+          const res = await apiFetch('/subscription/status', {
+            token: activeSession.access_token,
+          })
+          cache = { data: res, fetchedAt: Date.now() }
+          return res
+        })().finally(() => { inflight = null })
       }
 
-      if (!activeSession) {
-        setError('No session')
-        setLoading(false)
-        return
-      }
-
-      const res = await apiFetch('/subscription/status', {
-        token: activeSession.access_token,
-      })
-
-      // Ignore stale responses if refetch was called again
+      const res = await inflight
       if (currentFetch !== fetchCountRef.current) return
-
-      cache = { data: res, fetchedAt: Date.now() }
       setData(res)
     } catch (err) {
       if (currentFetch !== fetchCountRef.current) return
@@ -118,7 +117,7 @@ export function useSubscription(): UseSubscriptionResult {
   return { data, loading, error, refetch: fetch }
 }
 
-// Call this when the user upgrades / changes plan to bust the cache
 export function invalidateSubscriptionCache() {
   cache = null
+  inflight = null
 }

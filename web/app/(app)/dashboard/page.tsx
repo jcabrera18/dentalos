@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
@@ -49,19 +49,18 @@ export default function DashboardPage() {
       setToken(t)
 
       // 2 requests en vez de 4 — /appointments/dashboard combina agenda + stats + inactivos
-      const [meData, dashData, afipData] = await Promise.all([
+      const [meData, dashData] = await Promise.all([
         apiFetch('/auth/me', { token: t }),
         apiFetch('/appointments/dashboard', { token: t }),
-        apiFetch('/professionals/me/afip-config', { token: t }).catch(() => null),
       ])
 
-      setUser(meData.data)
+      const me = meData.data
+      setUser(me)
       setAgenda(dashData.data?.agenda ?? [])
       setStats(dashData.data?.stats ?? {})
       setInactive(dashData.data?.inactive ?? [])
-      const afip = afipData?.data
-      if (afip?.iva_condition) setMyAfipIvaCondition(afip.iva_condition)
-      setMyAfipConfigured(!!(afip?.cuit && afip?.has_cert && afip?.has_key && afip?.afip_punto_venta))
+      if (me?.iva_condition) setMyAfipIvaCondition(me.iva_condition)
+      setMyAfipConfigured(!!(me?.cuit && me?.afip_cert && me?.afip_key && me?.afip_punto_venta))
       setLoading(false)
 
       // Identificar usuario en PostHog
@@ -77,6 +76,48 @@ export default function DashboardPage() {
 
     load()
   }, [])
+
+  // Realtime + visibilidad: se activa una vez que el usuario está cargado
+  useEffect(() => {
+    if (!user) return
+
+    async function refreshAgenda() {
+      const t = await getToken()
+      if (!t) return
+      const dashData = await apiFetch('/appointments/dashboard', { token: t })
+      setAgenda(dashData.data?.agenda ?? [])
+      setStats(dashData.data?.stats ?? {})
+      setInactive(dashData.data?.inactive ?? [])
+    }
+
+    const channel = supabase
+      .channel('dashboard-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, (payload: any) => {
+        const record = (payload.eventType === 'DELETE' ? payload.old : payload.new) as any
+        // Ignorar turnos de otros días
+        const startsAt = record?.starts_at
+        if (startsAt) {
+          const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+          const apptDay = new Date(startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+          if (apptDay !== today) return
+        }
+        // Update directo del payload — no llamar al API porque tiene Redis cache de 2 min
+        if (record?.id && record?.status) {
+          setAgenda(prev => prev.map(a => a.id === record.id ? { ...a, ...record } : a))
+        }
+      })
+      .subscribe()
+
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') void refreshAgenda()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      void supabase.removeChannel(channel)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [user])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -173,18 +214,30 @@ export default function DashboardPage() {
   }
 
   async function markStatus(id: string, status: string) {
+    setAgenda(prev => prev.map(a => a.id === id ? { ...a, status } : a))
     setActionLoading(`${id}:${status}`)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { setActionLoading(null); return }
-    await apiFetch(`/appointments/${id}`, {
-      method: 'PATCH',
-      token: session.access_token,
-      body: JSON.stringify({ status })
-    })
-    const dashData = await apiFetch('/appointments/dashboard', { token: session.access_token })
-    setAgenda(dashData.data?.agenda ?? [])
-    setStats(dashData.data?.stats ?? {})
-    setActionLoading(null)
+    try {
+      const t = await getToken()
+      if (!t) return
+      await apiFetch(`/appointments/${id}`, {
+        method: 'PATCH',
+        token: t,
+        body: JSON.stringify({ status })
+      })
+      const dashData = await apiFetch('/appointments/dashboard', { token: t })
+      setAgenda(dashData.data?.agenda ?? [])
+      setStats(dashData.data?.stats ?? {})
+    } catch {
+      const t = await getToken()
+      if (!t) return
+      const dashData = await apiFetch('/appointments/dashboard', { token: t }).catch(() => null)
+      if (dashData) {
+        setAgenda(dashData.data?.agenda ?? [])
+        setStats(dashData.data?.stats ?? {})
+      }
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   function formatDuration(min: number) {

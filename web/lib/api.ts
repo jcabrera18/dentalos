@@ -16,6 +16,7 @@ function getFriendlyApiError(message?: string, status?: number) {
 async function doFetch(path: string, token: string | undefined, fetchOptions: RequestInit) {
   return fetch(`${API_URL}${path}`, {
     ...fetchOptions,
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

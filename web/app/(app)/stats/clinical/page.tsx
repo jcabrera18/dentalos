@@ -90,6 +90,7 @@ export default function ClinicalStatsPage() {
   const [appointmentsByMonth, setAppointmentsByMonth] = useState<{ month: string; total: number }[]>([])
   const [topTypes, setTopTypes] = useState<{ type: string; count: number }[]>([])
   const [byProfessional, setByProfessional] = useState<{ name: string; color: string; count: number }[]>([])
+  const [totalPatients, setTotalPatients] = useState<number | null>(null)
 
   // Period KPIs
   const [periodKpis, setPeriodKpis] = useState({ total: 0, active: 0, attended: 0, absent: 0 })
@@ -112,8 +113,12 @@ export default function ClinicalStatsPage() {
       const from = ninetyDaysAgoAR()
       const to   = todayAR()
 
-      const res = await apiFetch(`/appointments/stats/clinical?from=${from}&to=${to}`, { token: t })
+      const [res, patientsRes] = await Promise.all([
+        apiFetch(`/appointments/stats/clinical?from=${from}&to=${to}`, { token: t }),
+        apiFetch(`/patients?limit=1`, { token: t }),
+      ])
       const d = res.data ?? {}
+      setTotalPatients(patientsRes.meta?.total ?? null)
 
       // Static charts
       const rawByMonth: { month: string; total: number }[] =
@@ -270,7 +275,14 @@ export default function ClinicalStatsPage() {
         {/* ── Section 2: Appointments by month (90d static) ── */}
         {appointmentsByMonth.length > 0 && (
           <section className="bg-surface border border-app rounded-xl p-5">
-            <h3 className="font-semibold text-sm mb-0.5">Pacientes atendidos por mes</h3>
+            <div className="flex items-center justify-between mb-0.5">
+              <h3 className="font-semibold text-sm">Pacientes atendidos por mes</h3>
+              {totalPatients !== null && (
+                <span className="text-xs font-semibold text-[#6366f1] bg-[#6366f1]/10 px-2.5 py-1 rounded-full">
+                  {totalPatients} pacientes en la clínica
+                </span>
+              )}
+            </div>
             <div className="text-xs text-app3 mb-4">Últimos 90 días · excluye cancelados</div>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={appointmentsByMonth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>

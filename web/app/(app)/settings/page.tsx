@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal } from '@/app/providers'
-import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity } from 'lucide-react'
+import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown } from 'lucide-react'
 
 const DAYS = [
   { key: 0, label: 'Lunes' },
@@ -18,17 +18,106 @@ const DAYS = [
   { key: 6, label: 'Domingo' },
 ]
 
-export type DayHours = { enabled: boolean; start: string; end: string }
+export type TimeBlock   = { start: string; end: string }
+export type DayHours    = { enabled: boolean; blocks: TimeBlock[] }
 export type WorkingHours = Record<number, DayHours>
 
 export const DEFAULT_WORKING_HOURS: WorkingHours = {
-  0: { enabled: true,  start: '09:00', end: '18:00' },
-  1: { enabled: true,  start: '09:00', end: '18:00' },
-  2: { enabled: true,  start: '09:00', end: '18:00' },
-  3: { enabled: true,  start: '09:00', end: '18:00' },
-  4: { enabled: true,  start: '09:00', end: '18:00' },
-  5: { enabled: false, start: '09:00', end: '13:00' },
-  6: { enabled: false, start: '09:00', end: '13:00' },
+  0: { enabled: true,  blocks: [{ start: '09:00', end: '18:00' }] },
+  1: { enabled: true,  blocks: [{ start: '09:00', end: '18:00' }] },
+  2: { enabled: true,  blocks: [{ start: '09:00', end: '18:00' }] },
+  3: { enabled: true,  blocks: [{ start: '09:00', end: '18:00' }] },
+  4: { enabled: true,  blocks: [{ start: '09:00', end: '18:00' }] },
+  5: { enabled: false, blocks: [{ start: '09:00', end: '13:00' }] },
+  6: { enabled: false, blocks: [{ start: '09:00', end: '13:00' }] },
+}
+
+const TIME_SLOTS = Array.from({ length: 96 }, (_, i) => {
+  const h = Math.floor(i / 4)
+  const m = (i % 4) * 15
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+})
+
+function TimeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const selectedRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (open) selectedRef.current?.scrollIntoView({ block: 'center' })
+  }, [open])
+
+  const slots = TIME_SLOTS.includes(value) ? TIME_SLOTS : [...TIME_SLOTS, value].sort()
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-[86px] flex items-center justify-between gap-1.5 bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm hover:border-[#00C4BC] transition-colors cursor-pointer"
+      >
+        <span>{value}</span>
+        <ChevronDown size={14} className="text-app3 shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 bg-surface border border-app rounded-xl shadow-xl z-50 overflow-hidden w-28 max-h-60 overflow-y-auto">
+            {slots.map(t => {
+              const selected = value === t
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  ref={selected ? selectedRef : undefined}
+                  onClick={() => { onChange(t); setOpen(false) }}
+                  className={`w-full px-4 py-2.5 text-sm text-left transition-colors cursor-pointer ${
+                    selected ? 'bg-[#00C4BC]/10 text-[#00C4BC] font-semibold' : 'text-app hover:bg-surface2'
+                  }`}
+                >
+                  {t}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function toMinutes(time: string) {
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+function fromMinutes(total: number) {
+  const rounded = Math.round(total / 15) * 15
+  return `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}`
+}
+
+function migrateDay(raw: any): DayHours {
+  if (raw && Array.isArray(raw.blocks)) return raw as DayHours
+  return {
+    enabled: raw?.enabled ?? false,
+    blocks:  [{ start: raw?.start ?? '09:00', end: raw?.end ?? '18:00' }],
+  }
+}
+
+function hasOverlap(blocks: TimeBlock[]): boolean {
+  if (blocks.length < 2) return false
+  const sorted = [...blocks].sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (toMinutes(sorted[i].end) > toMinutes(sorted[i + 1].start)) return true
+  }
+  return false
+}
+
+function nextBlockDefault(blocks: TimeBlock[], duration: number): TimeBlock {
+  if (blocks.length === 0) return { start: '09:00', end: '18:00' }
+  const maxEnd = blocks.reduce((m, b) => toMinutes(b.end) > toMinutes(m) ? b.end : m, '00:00')
+  const start  = Math.min(toMinutes(maxEnd), 22 * 60)
+  const end    = Math.min(start + duration, 23 * 60)
+  return { start: fromMinutes(start), end: fromMinutes(end) }
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -99,7 +188,7 @@ function PlanCard() {
     : null
 
   return (
-    <div className="bg-surface border border-app rounded-2xl p-5 mb-8">
+    <div className="bg-surface border border-app rounded-2xl p-5">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <div className="flex items-center gap-2 mb-0.5">
@@ -346,7 +435,7 @@ function AfipConfigSection({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="bg-surface border border-app rounded-2xl overflow-hidden mt-8 animate-pulse">
+      <div className="bg-surface border border-app rounded-2xl overflow-hidden animate-pulse">
         <div className="px-5 py-4 border-b border-app">
           <div className="h-5 bg-surface2 rounded w-40 mb-1" />
           <div className="h-3 bg-surface2 rounded w-64" />
@@ -359,7 +448,7 @@ function AfipConfigSection({ token }: { token: string }) {
   }
 
   return (
-    <div className="bg-surface border border-app rounded-2xl overflow-hidden mt-8">
+    <div className="bg-surface border border-app rounded-2xl overflow-hidden">
       <div className="px-5 py-4 border-b border-app">
         <h2 className="font-semibold text-app">Facturación electrónica AFIP</h2>
         <p className="text-xs text-app3 mt-0.5">
@@ -537,8 +626,8 @@ export default function SettingsPage() {
   const [token, setToken]               = useState('')
   const [professionals, setProfessionals] = useState<any[]>([])
   const [myId, setMyId]                 = useState('')
-  const [selectedProfId, setSelectedProfId] = useState('')
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS)
+  const [defaultDuration, setDefaultDuration] = useState(45)
   const [loading, setLoading]           = useState(true)
   const [saving, setSaving]             = useState(false)
   const [saved, setSaved]               = useState(false)
@@ -575,45 +664,78 @@ export default function SettingsPage() {
       const self = profs.find(p => p.id === myUserId) ?? profs[0]
       if (!self) return
 
-      setSelectedProfId(self.id)
-      await loadScheduleConfig(self.id)
+      loadScheduleConfig(self.id, profs)
     } finally {
       setLoading(false)
     }
   }
 
-  function loadScheduleConfig(profId: string) {
-    const prof = professionals.find((p: any) => p.id === profId)
-    setWorkingHours(prof?.schedule_config?.working_hours ?? { ...DEFAULT_WORKING_HOURS })
+  function loadScheduleConfig(profId: string, profs = professionals) {
+    const prof = profs.find((p: any) => p.id === profId)
+    const raw  = prof?.schedule_config?.working_hours
+    const migrated: WorkingHours = raw
+      ? Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, migrateDay(v)]))
+      : { ...DEFAULT_WORKING_HOURS }
+    setWorkingHours(migrated)
+    setDefaultDuration(prof?.default_duration_minutes ?? 45)
   }
 
-  useEffect(() => {
-    if (!selectedProfId || professionals.length === 0) return
-    loadScheduleConfig(selectedProfId)
-  }, [selectedProfId, professionals])
+  function toggleDay(day: number) {
+    setWorkingHours(prev => ({ ...prev, [day]: { ...prev[day], enabled: !prev[day].enabled } }))
+  }
 
-  function setDayField(day: number, field: keyof DayHours, value: string | boolean) {
-    setWorkingHours(prev => ({
-      ...prev,
-      [day]: { ...prev[day], [field]: value },
-    }))
+  function updateBlock(day: number, index: number, field: keyof TimeBlock, value: string) {
+    setWorkingHours(prev => {
+      const blocks = prev[day].blocks.map((b, i) => i === index ? { ...b, [field]: value } : b)
+      return { ...prev, [day]: { ...prev[day], blocks } }
+    })
+  }
+
+  function addBlock(day: number) {
+    setWorkingHours(prev => {
+      const blocks = [...prev[day].blocks, nextBlockDefault(prev[day].blocks, defaultDuration)]
+      return { ...prev, [day]: { ...prev[day], blocks } }
+    })
+  }
+
+  function removeBlock(day: number, index: number) {
+    setWorkingHours(prev => {
+      const blocks = prev[day].blocks.filter((_, i) => i !== index)
+      return { ...prev, [day]: { ...prev[day], blocks } }
+    })
   }
 
   async function handleSave() {
     setSaving(true)
     setError('')
+
+    const overlapErrors: string[] = []
+    DAYS.forEach(({ key, label }) => {
+      const day = workingHours[key]
+      if (!day?.enabled) return
+      if (day.blocks.some(b => toMinutes(b.start) >= toMinutes(b.end)))
+        overlapErrors.push(`${label}: el inicio debe ser anterior al fin`)
+      else if (hasOverlap(day.blocks))
+        overlapErrors.push(`${label}: los bloques se superponen`)
+    })
+    if (overlapErrors.length > 0) {
+      setError(overlapErrors.join(' · '))
+      setSaving(false)
+      return
+    }
+
     try {
-      const current = professionals.find((p: any) => p.id === selectedProfId)
+      const current = professionals.find((p: any) => p.id === myId)
       const updatedConfig = { ...(current?.schedule_config ?? {}), working_hours: workingHours }
 
-      await apiFetch(`/professionals/${selectedProfId}`, {
+      await apiFetch(`/professionals/${myId}`, {
         method: 'PATCH',
         token,
-        body: JSON.stringify({ schedule_config: updatedConfig }),
+        body: JSON.stringify({ schedule_config: updatedConfig, default_duration_minutes: defaultDuration }),
       })
 
       setProfessionals((prev: any[]) =>
-        prev.map(p => p.id === selectedProfId ? { ...p, schedule_config: updatedConfig } : p)
+        prev.map(p => p.id === myId ? { ...p, schedule_config: updatedConfig, default_duration_minutes: defaultDuration } : p)
       )
 
       setSaved(true)
@@ -627,149 +749,190 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 animate-pulse">
+      <div className="px-6 py-8 animate-pulse">
         <div className="h-7 bg-surface2 rounded-lg w-40 mb-2" />
         <div className="h-4 bg-surface2 rounded w-64 mb-8" />
-        <div className="bg-surface border border-app rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-app">
-            <div className="h-5 bg-surface2 rounded w-48 mb-2" />
-            <div className="h-3 bg-surface2 rounded w-80" />
-          </div>
-          <div className="divide-y divide-app">
-            {[...Array(7)].map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-5 py-4">
-                <div className="w-10 h-5 bg-surface2 rounded-full flex-shrink-0" />
-                <div className="w-24 h-4 bg-surface2 rounded" />
-                <div className="flex items-center gap-2 flex-1">
-                  <div className="w-36 h-8 bg-surface2 rounded-lg" />
-                  <div className="w-3 h-3 bg-surface2 rounded" />
-                  <div className="w-36 h-8 bg-surface2 rounded-lg" />
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <div className="space-y-6">
+            <div className="bg-surface border border-app rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-app">
+                <div className="h-5 bg-surface2 rounded w-48 mb-2" />
+                <div className="h-3 bg-surface2 rounded w-80" />
               </div>
-            ))}
+              <div className="divide-y divide-app">
+                {[...Array(7)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-4">
+                    <div className="w-10 h-5 bg-surface2 rounded-full flex-shrink-0" />
+                    <div className="w-24 h-4 bg-surface2 rounded" />
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="w-36 h-8 bg-surface2 rounded-lg" />
+                      <div className="w-3 h-3 bg-surface2 rounded" />
+                      <div className="w-36 h-8 bg-surface2 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <div className="w-36 h-11 bg-surface2 rounded-xl" />
+            </div>
           </div>
-        </div>
-        <div className="mt-6 flex justify-end">
-          <div className="w-36 h-11 bg-surface2 rounded-xl" />
+          <div className="space-y-6">
+            <div className="bg-surface border border-app rounded-2xl p-5">
+              <div className="h-5 bg-surface2 rounded w-32 mb-3" />
+              <div className="h-3 bg-surface2 rounded w-48 mb-4" />
+              <div className="h-2 bg-surface2 rounded-full w-full" />
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
+    <div className="px-6 py-8">
       <h1 className="text-2xl font-bold text-app mb-1">Configuración</h1>
-      <p className="text-app3 text-sm mb-8">Gestioná los horarios laborales de cada profesional.</p>
+      <p className="text-app3 text-sm mb-8">Gestioná los horarios y la facturación de tu clínica.</p>
 
-      <PlanCard />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-      {/* Professional selector */}
-      {professionals.length > 1 && (
-        <div className="mb-6">
-          <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">
-            Profesional
-          </label>
-          <select
-            value={selectedProfId}
-            onChange={e => setSelectedProfId(e.target.value)}
-            className="bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
-          >
-            {professionals.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.first_name} {p.last_name}{p.id === myId ? ' (yo)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Working hours editor */}
-      <div className="bg-surface border border-app rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-app">
-          <h2 className="font-semibold text-app">Horarios de atención</h2>
-          <p className="text-xs text-app3 mt-0.5">
-            Los horarios fuera de este rango aparecerán bloqueados en la agenda y no se ofrecerán en el booking online.
-          </p>
+        {/* Left column: account & billing */}
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-app">Cuenta y facturación</h2>
+          <PlanCard />
+          {token && <AfipConfigSection token={token} />}
         </div>
 
-        <div className="divide-y divide-app">
-          {DAYS.map(({ key, label }) => {
-            const day = workingHours[key] ?? DEFAULT_WORKING_HOURS[key]
-            return (
-              <div
-                key={key}
-                className={`flex items-center gap-4 px-5 py-4 transition-colors ${!day.enabled ? 'bg-surface2/40' : ''}`}
-              >
-                {/* Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setDayField(key, 'enabled', !day.enabled)}
-                  className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                    day.enabled ? 'bg-[#00C4BC]' : 'bg-surface3'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-                      day.enabled ? 'left-5' : 'left-0.5'
+        {/* Right column: agenda */}
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-app">Agenda</h2>
+
+          {/* Unified agenda card: duration + working hours + save */}
+          <div className="bg-surface border border-app rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-app">
+              <h3 className="font-semibold text-app">Horarios de atención</h3>
+              <p className="text-xs text-app3 mt-0.5">
+                Configurá la duración de los turnos y los días y horarios de trabajo.
+              </p>
+            </div>
+
+            {/* Duration */}
+            <div className="px-5 py-4 border-b border-app">
+              <p className="text-xs font-semibold text-app3 uppercase tracking-wider mb-3">Duración por defecto del turno</p>
+              <div className="flex flex-wrap gap-2">
+                {[15, 20, 30, 45, 60, 90].map(min => (
+                  <button
+                    key={min}
+                    type="button"
+                    onClick={() => setDefaultDuration(min)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                      defaultDuration === min
+                        ? 'bg-[#00C4BC] text-white border-[#00C4BC]'
+                        : 'bg-surface2 text-app2 border-app hover:border-[#00C4BC]/50'
                     }`}
-                  />
-                </button>
-
-                {/* Day name */}
-                <span className={`w-24 text-sm font-medium flex-shrink-0 ${day.enabled ? 'text-app' : 'text-app3'}`}>
-                  {label}
-                </span>
-
-                {/* Time range */}
-                {day.enabled ? (
-                  <div className="flex items-center gap-2 flex-1 flex-wrap">
-                    <input
-                      type="time"
-                      value={day.start}
-                      onChange={e => setDayField(key, 'start', e.target.value)}
-                      className="bg-surface2 border border-app rounded-lg px-2 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] w-36"
-                    />
-                    <span className="text-app3 text-sm">–</span>
-                    <input
-                      type="time"
-                      value={day.end}
-                      onChange={e => setDayField(key, 'end', e.target.value)}
-                      className="bg-surface2 border border-app rounded-lg px-2 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] w-36"
-                    />
-                  </div>
-                ) : (
-                  <span className="text-app3 text-sm italic">No trabaja</span>
-                )}
+                  >
+                    {min} min
+                  </button>
+                ))}
               </div>
-            )
-          })}
+            </div>
+
+            {/* Days */}
+            <div className="divide-y divide-app">
+              {DAYS.map(({ key, label }) => {
+                const day = workingHours[key] ?? DEFAULT_WORKING_HOURS[key]
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-start gap-4 px-5 py-4 transition-colors ${!day.enabled ? 'bg-surface2/40' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleDay(key)}
+                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 ${
+                        day.enabled ? 'bg-[#00C4BC]' : 'bg-surface3'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          day.enabled ? 'left-5' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+
+                    <span className={`w-20 text-sm font-medium flex-shrink-0 mt-0.5 ${day.enabled ? 'text-app' : 'text-app3'}`}>
+                      {label}
+                    </span>
+
+                    {day.enabled ? (
+                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                        {day.blocks.map((block, bi) => (
+                          <div key={bi} className="flex items-center gap-2 flex-wrap">
+                            <TimeSelect
+                              value={block.start}
+                              onChange={v => updateBlock(key, bi, 'start', v)}
+                            />
+                            <span className="text-app3 text-sm">–</span>
+                            <TimeSelect
+                              value={block.end}
+                              onChange={v => updateBlock(key, bi, 'end', v)}
+                            />
+                            {day.blocks.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeBlock(key, bi)}
+                                className="p-1 rounded-lg text-app3 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => addBlock(key)}
+                          className="flex items-center gap-1 text-xs font-medium text-[#00C4BC] hover:text-[#00aaa3] transition-colors w-fit mt-0.5"
+                        >
+                          <Plus size={12} /> Agregar bloque
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-app3 text-sm italic mt-0.5">No trabaja</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Footer: error + save */}
+            {error && (
+              <div className="px-5 pt-4">
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">
+                  {error}
+                </div>
+              </div>
+            )}
+            <div className="px-5 py-4 border-t border-app flex items-center justify-between gap-4">
+              <p className="text-xs text-app3">
+                Los cambios se reflejarán en la agenda y en el link de booking online.
+              </p>
+              <button
+                onClick={handleSave}
+                disabled={saving || !myId}
+                className={`shrink-0 px-6 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 ${
+                  saved
+                    ? 'bg-[#E6F8F1] text-[#00C4BC] border border-[#00C4BC]/30'
+                    : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
+                }`}
+              >
+                {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
         </div>
+
+
       </div>
-
-      {error && (
-        <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">
-          {error}
-        </div>
-      )}
-
-      <div className="mt-6 flex items-center justify-between">
-        <p className="text-xs text-app3 max-w-xs">
-          Los cambios se reflejarán en la agenda y en el link de booking online del profesional.
-        </p>
-        <button
-          onClick={handleSave}
-          disabled={saving || !selectedProfId}
-          className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 ${
-            saved
-              ? 'bg-[#E6F8F1] text-[#00C4BC] border border-[#00C4BC]/30'
-              : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
-          }`}
-        >
-          {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}
-        </button>
-      </div>
-
-      {token && <AfipConfigSection token={token} />}
     </div>
   )
 }

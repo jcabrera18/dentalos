@@ -1,16 +1,16 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken } from '@/lib/supabase'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 
-const HOURS = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
+const HOURS = ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-const SLOT_H = 48 // px por hora — alta densidad
-const GRID_START_H = 6  // primera hora visible (06:00)
+const SLOT_H = 80 // px por hora — 4 slots de 15 min × 20 px cada uno
+const GRID_START_H = 0  // primera hora visible (00:00)
 const GRID_END_H   = 24 // hora de fin del grid (exclusive)
 
 const START_SLOTS = Array.from({ length: 96 }, (_, i) => {
@@ -50,25 +50,42 @@ function weekdayIndex(dateStr: string): number {
 function nonWorkingBlocks(dateStr: string, wh: WorkingHours | null): { top: number; height: number }[] {
   if (!wh) return []
   const idx = weekdayIndex(dateStr)
-  const day = wh[idx]
+  const day = wh[idx] as any
   if (!day) return []
 
   if (!day.enabled) {
     return [{ top: 0, height: (GRID_END_H - GRID_START_H) * SLOT_H }]
   }
 
-  const [sh, sm] = day.start.split(':').map(Number)
-  const [eh, em] = day.end.split(':').map(Number)
-  const blocks: { top: number; height: number }[] = []
+  const toH = (time: string) => { const [h, m] = time.split(':').map(Number); return h + m / 60 }
 
-  const beforeH = (sh - GRID_START_H + sm / 60) * SLOT_H
-  if (beforeH > 0) blocks.push({ top: 0, height: beforeH })
+  // Soporta formato viejo { start, end } y nuevo { blocks: [...] }
+  const timeBlocks: { start: string; end: string }[] = Array.isArray(day.blocks)
+    ? [...day.blocks].sort((a: any, b: any) => toH(a.start) - toH(b.start))
+    : [{ start: day.start, end: day.end }]
 
-  const afterTop = (eh - GRID_START_H + em / 60) * SLOT_H
-  const afterH = (GRID_END_H - GRID_START_H) * SLOT_H - afterTop
-  if (afterH > 0) blocks.push({ top: afterTop, height: afterH })
+  const result: { top: number; height: number }[] = []
+  const gridTotal = (GRID_END_H - GRID_START_H) * SLOT_H
 
-  return blocks
+  // Antes del primer bloque
+  const firstStart = toH(timeBlocks[0].start)
+  const beforeH = (firstStart - GRID_START_H) * SLOT_H
+  if (beforeH > 0) result.push({ top: 0, height: beforeH })
+
+  // Huecos entre bloques (ej. almuerzo)
+  for (let i = 0; i < timeBlocks.length - 1; i++) {
+    const gapTop  = (toH(timeBlocks[i].end)       - GRID_START_H) * SLOT_H
+    const gapH    = (toH(timeBlocks[i + 1].start) - GRID_START_H) * SLOT_H - gapTop
+    if (gapH > 0) result.push({ top: gapTop, height: gapH })
+  }
+
+  // Después del último bloque
+  const lastEnd  = toH(timeBlocks[timeBlocks.length - 1].end)
+  const afterTop = (lastEnd - GRID_START_H) * SLOT_H
+  const afterH   = gridTotal - afterTop
+  if (afterH > 0) result.push({ top: afterTop, height: afterH })
+
+  return result
 }
 
 function getWeekDates(offset = 0) {
@@ -105,7 +122,7 @@ function formatDuration(min: number) {
 
 function getSlotTop(startsAt: string): number {
   const [h, m] = fmt24(startsAt).split(':').map(Number)
-  return Math.max(0, (h - 6) * SLOT_H + (m / 60) * SLOT_H)
+  return Math.max(0, (h - GRID_START_H) * SLOT_H + (m / 60) * SLOT_H)
 }
 
 function getSlotHeight(startsAt: string, endsAt: string): number {
@@ -148,11 +165,13 @@ export default function AgendaPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [newBlockDate, setNewBlockDate] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<any>(null)
+  const [showMobileBlocks, setShowMobileBlocks] = useState(false)
   const router   = useRouter()
   const supabase = createClient()
   const auxiliaryDataStartedRef = useRef(false)
   const myWorkingHoursRef = useRef<WorkingHours | null>(null)
   const hasLoadedRef = useRef(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const weekDates = getWeekDates(weekOffset)
   const from = formatDate(weekDates[0])
@@ -201,6 +220,62 @@ export default function AgendaPage() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedAppt])
+
+  // Realtime + visibilidad: se recrea si cambia el token o la semana visible
+  useEffect(() => {
+    if (!token) return
+
+    async function silentRefresh() {
+      const t = await getToken()
+      if (!t) return
+      const calData = await apiFetch(`/appointments/calendar?from=${from}&to=${to}`, { token: t })
+      setAppointments(calData.data?.appointments ?? [])
+      setBlocks(calData.data?.blocks ?? [])
+    }
+
+    const channel = supabase
+      .channel('agenda-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+        void silentRefresh()
+      })
+      .subscribe()
+
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') void silentRefresh()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      void supabase.removeChannel(channel)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [token, from, to])
+
+  // Auto-scroll al inicio del horario laboral (o 8am por defecto)
+  useEffect(() => {
+    if (loading) return // grid no está en el DOM todavía
+    const toH = (time: string) => { const [h, m] = time.split(':').map(Number); return h + m / 60 }
+    let targetHour = 8
+
+    if (workingHours) {
+      const todayIdx = weekdayIndex(todayArg())
+      const day = workingHours[todayIdx] as any
+      if (day?.enabled) {
+        const dayBlocks: { start: string }[] = Array.isArray(day.blocks)
+          ? day.blocks
+          : day.start ? [{ start: day.start }] : []
+        const sorted = [...dayBlocks].sort((a, b) => toH(a.start) - toH(b.start))
+        if (sorted[0]?.start) targetHour = toH(sorted[0].start)
+      }
+    }
+
+    const scrollTop = Math.max(0, (targetHour - GRID_START_H) * SLOT_H)
+    // rAF garantiza que el DOM ya fue pintado antes de scrollear
+    const raf = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ top: scrollTop, behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [workingHours, selectedProfId, loading])
 
   async function fetchCalendarData(t: string) {
     const calData = await apiFetch(`/appointments/calendar?from=${from}&to=${to}`, { token: t })
@@ -527,9 +602,23 @@ export default function AgendaPage() {
       <div className="md:hidden flex flex-col h-full">
         <div className="border-b border-neutral-200 dark:border-neutral-800/50 px-4 py-2">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-app2">
-              {weekDates[0].toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-app2">
+                {weekDates[0].toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })}
+              </span>
+              {dayBlocks.length > 0 && (
+                <button
+                  onClick={() => setShowMobileBlocks(v => !v)}
+                  className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                    showMobileBlocks
+                      ? 'bg-slate-400/20 border-slate-400/40 text-slate-600 dark:text-slate-300'
+                      : 'bg-surface2 border-app text-app3'
+                  }`}
+                >
+                  🔒 {dayBlocks.length}
+                </button>
+              )}
+            </div>
             <WeekNav />
           </div>
           <div className="mb-2">
@@ -600,7 +689,7 @@ export default function AgendaPage() {
               </div>
             )
           })()}
-          {dayBlocks.length === 0 && dayAppts.length === 0 ? (
+          {dayAppts.length === 0 && (dayBlocks.length === 0 || !showMobileBlocks) ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="text-4xl mb-3">📅</div>
               <div className="text-app2 font-medium">Sin turnos</div>
@@ -612,7 +701,7 @@ export default function AgendaPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {dayBlocks.map(block => (
+              {showMobileBlocks && dayBlocks.map(block => (
                 <div key={block.id} onClick={() => setSelectedBlock(block)}
                   className="rounded-xl border-l-2 border-l-slate-400/60 bg-slate-400/8 p-3 cursor-pointer active:scale-95 transition-transform">
                   <div className="flex items-start justify-between gap-2">
@@ -768,7 +857,7 @@ export default function AgendaPage() {
         </div>
 
         {/* Contenedor scroll — header sticky + grid body */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden">
           {/* Header días sticky */}
           <div className="grid sticky top-0 z-20 bg-app border-b border-neutral-200 dark:border-neutral-800/50"
             style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
@@ -795,6 +884,7 @@ export default function AgendaPage() {
               {HOURS.map(h => (
                 <div key={h} className="relative border-t border-neutral-200 dark:border-neutral-800/50" style={{ height: SLOT_H }}>
                   <span className="absolute top-1 right-1.5 text-[10px] tabular-nums text-app3 leading-none">{h}</span>
+                  <span className="absolute right-1.5 text-[9px] tabular-nums text-app3/40 leading-none" style={{ top: SLOT_H / 2 + 2 }}>:30</span>
                 </div>
               ))}
             </div>
@@ -813,20 +903,34 @@ export default function AgendaPage() {
                     if (e.target === e.currentTarget) {
                       const rect = e.currentTarget.getBoundingClientRect()
                       const y = e.clientY - rect.top
-                      const hourIndex = Math.floor(y / SLOT_H)
-                      const hour = 6 + hourIndex
+                      const snappedSlots = Math.floor((y / SLOT_H) * 4) // 4 slots de 15 min por hora
+                      const gridMins = GRID_START_H * 60 + snappedSlots * 15
+                      const hour = Math.floor(gridMins / 60)
+                      const min = gridMins % 60
                       const side = e.clientX > window.innerWidth * 0.55 ? 'left' : 'right'
                       setPanelSide(side)
                       setPanelTab('appt')
-                      setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:00` })
+                      setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}` })
                       setPreviewDuration(45)
                       setEditingAppt(null)
                       setShowPanel(true)
                     }
                   }}>
                   {HOURS.map((_, i) => (
-                    <div key={i} className="absolute w-full border-t border-neutral-200 dark:border-neutral-800/50"
-                      style={{ top: i * SLOT_H }} />
+                    <div key={i}>
+                      {/* Línea de hora */}
+                      <div className="absolute w-full border-t border-neutral-200 dark:border-neutral-800/50"
+                        style={{ top: i * SLOT_H }} />
+                      {/* Líneas de 15 min */}
+                      <div className="absolute w-full border-t border-neutral-100 dark:border-neutral-800/25"
+                        style={{ top: i * SLOT_H + SLOT_H * 0.25 }} />
+                      {/* Línea de 30 min — más visible */}
+                      <div className="absolute w-full border-t border-neutral-200/70 dark:border-neutral-800/40"
+                        style={{ top: i * SLOT_H + SLOT_H * 0.5 }} />
+                      {/* Línea de 45 min */}
+                      <div className="absolute w-full border-t border-neutral-100 dark:border-neutral-800/25"
+                        style={{ top: i * SLOT_H + SLOT_H * 0.75 }} />
+                    </div>
                   ))}
 
                   {/* Horarios no laborales — bloquean clicks */}

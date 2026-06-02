@@ -20,26 +20,30 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL
 type DayHours = { enabled: boolean; start: string; end: string }
 type WorkingHours = Record<number, DayHours>
 
-/** Filtra slots según el horario laboral del profesional */
+function toMin(time: string) {
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+/** Filtra slots según el horario laboral del profesional (soporta bloques múltiples) */
 function filterSlotsByWorkingHours(slots: string[], date: string, wh: WorkingHours | null): string[] {
   if (!wh) return slots
   const jsDay = new Date(date + 'T12:00:00').getDay() // 0=Dom
   const dayKey = jsDay === 0 ? 6 : jsDay - 1          // 0=Lun … 6=Dom
-  const day = wh[dayKey]
+  const day = wh[dayKey] as any
   if (!day || !day.enabled) return []
 
-  const [startH, startM] = day.start.split(':').map(Number)
-  const [endH,   endM]   = day.end.split(':').map(Number)
-  const startTotal = startH * 60 + startM
-  const endTotal   = endH   * 60 + endM
+  // Soporta formato viejo { start, end } y nuevo { blocks: [...] }
+  const blocks: { start: string; end: string }[] = Array.isArray(day.blocks)
+    ? day.blocks
+    : [{ start: day.start, end: day.end }]
 
   return slots.filter(slot => {
-    const d = new Date(slot)
-    const slotTotal = d.toLocaleString('en-CA', {
+    const slotTotal = new Date(slot).toLocaleString('en-CA', {
       hour: '2-digit', minute: '2-digit', hour12: false,
       timeZone: 'America/Argentina/Buenos_Aires',
     }).split(':').map(Number).reduce((h, m) => h * 60 + m)
-    return slotTotal >= startTotal && slotTotal < endTotal
+    return blocks.some(b => slotTotal >= toMin(b.start) && slotTotal < toMin(b.end))
   })
 }
 
@@ -101,6 +105,7 @@ export default function BookingPage() {
 
   const [professional, setProfessional] = useState<Professional | null>(null)
   const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
+  const [slotDuration, setSlotDuration] = useState(60)
   const [pageLoading, setPageLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -137,6 +142,9 @@ export default function BookingPage() {
           if (res.data.schedule_config?.working_hours) {
             setWorkingHours(res.data.schedule_config.working_hours)
           }
+          if (res.data.default_duration_minutes) {
+            setSlotDuration(res.data.default_duration_minutes)
+          }
         } else {
           setNotFound(true)
         }
@@ -146,11 +154,11 @@ export default function BookingPage() {
   }, [professionalId])
 
   // ── Fetch available slots for a date ───────────────
-  const fetchSlots = useCallback(async (date: string, wh: WorkingHours | null) => {
+  const fetchSlots = useCallback(async (date: string, wh: WorkingHours | null, duration: number) => {
     setSlotsLoading(true)
     setSlots([])
     try {
-      const res = await fetch(`${API_URL}/public/booking/${professionalId}/slots?date=${date}`)
+      const res = await fetch(`${API_URL}/public/booking/${professionalId}/slots?date=${date}&duration=${duration}`)
       const json = await res.json()
       const raw: string[] = json.data ?? []
       setSlots(filterSlotsByWorkingHours(raw, date, wh))
@@ -191,7 +199,7 @@ export default function BookingPage() {
     if (isDayDisabled(day)) return
     const dateStr = toDateStr(new Date(year, month, day))
     setSelectedDate(dateStr)
-    fetchSlots(dateStr, workingHours)
+    fetchSlots(dateStr, workingHours, slotDuration)
     setStep('time')
   }
 
