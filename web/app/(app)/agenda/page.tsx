@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createClient, getToken } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { useMe, useProfessionals, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -141,12 +143,7 @@ const STATUS_CONFIG: Record<string, { border: string; bg: string; dot: string; l
 }
 
 export default function AgendaPage() {
-  const [appointments, setAppointments] = useState<any[]>([])
-  const [blocks, setBlocks]             = useState<any[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [refreshing, setRefreshing]     = useState(false)
   const [token, setToken]               = useState('')
-  const [userId, setUserId]             = useState('')
   const [linkCopied, setLinkCopied]     = useState(false)
   const [weekOffset, setWeekOffset]     = useState(0)
   const [selectedDay, setSelectedDay]   = useState(todayArg())
@@ -158,9 +155,7 @@ export default function AgendaPage() {
   const [blockPreview, setBlockPreview] = useState({ startDate: '', startTime: '09:00', endTime: '10:00', allDay: false })
   const [newApptSlot, setNewApptSlot]   = useState<{ date: string; time: string } | null>(null)
 
-  const [professionals, setProfessionals] = useState<any[]>([])
   const [selectedProfId, setSelectedProfId] = useState('')
-  const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [editingAppt, setEditingAppt]   = useState<any>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [newBlockDate, setNewBlockDate] = useState<string | null>(null)
@@ -168,14 +163,36 @@ export default function AgendaPage() {
   const [showMobileBlocks, setShowMobileBlocks] = useState(false)
   const router   = useRouter()
   const supabase = createClient()
-  const auxiliaryDataStartedRef = useRef(false)
-  const myWorkingHoursRef = useRef<WorkingHours | null>(null)
-  const hasLoadedRef = useRef(false)
+  const qc = useQueryClient()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const weekDates = getWeekDates(weekOffset)
   const from = formatDate(weekDates[0])
   const to   = formatDate(weekDates[6])
+
+  // Data via React Query: pinta desde cache (IndexedDB) y revalida en background.
+  // El calendario se cachea por semana → navegar semanas es instantáneo.
+  const { data: me } = useMe()
+  const { data: professionals = [] } = useProfessionals()
+  const calendarQuery = useCalendar(from, to)
+
+  const appointments: any[] = calendarQuery.data?.appointments ?? []
+  const blocks: any[] = calendarQuery.data?.blocks ?? []
+  const loading = calendarQuery.isPending
+  const refreshing = calendarQuery.isFetching && !calendarQuery.isPending
+  const userId: string = me?.id ?? ''
+
+  // Horario laboral derivado: del profesional filtrado, o el mío si es "Todos".
+  const myWorkingHours: WorkingHours | null =
+    professionals.find((p: any) => p.id === userId)?.schedule_config?.working_hours ?? null
+  const workingHours: WorkingHours | null = selectedProfId
+    ? (professionals.find((p: any) => p.id === selectedProfId)?.schedule_config?.working_hours ?? null)
+    : myWorkingHours
+
+  // Revalida el calendario de la semana visible contra el server.
+  async function refetchCalendar() {
+    await qc.invalidateQueries({ queryKey: queryKeys.calendar(from, to) })
+  }
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
@@ -184,29 +201,6 @@ export default function AgendaPage() {
     })
     return () => subscription.unsubscribe()
   }, [router, supabase])
-
-  useEffect(() => {
-    if (!token) return
-
-    if (!hasLoadedRef.current) setLoading(true)
-    void fetchCalendarData(token).finally(() => {
-      hasLoadedRef.current = true
-      setLoading(false)
-    })
-  }, [from, to, token])
-
-  useEffect(() => {
-    if (!token || auxiliaryDataStartedRef.current) return
-
-    auxiliaryDataStartedRef.current = true
-
-    const timeoutId = window.setTimeout(() => {
-      void loadAuxiliaryData(token)
-    }, 0)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [token])
-
 
   useEffect(() => {
     if (!selectedAppt) return
@@ -221,35 +215,20 @@ export default function AgendaPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedAppt])
 
-  // Realtime + visibilidad: se recrea si cambia el token o la semana visible
+  // Realtime: invalida el cache del calendario para que React Query revalide.
+  // (refetchOnWindowFocus reemplaza el viejo handler de visibilitychange.)
   useEffect(() => {
-    if (!token) return
-
-    async function silentRefresh() {
-      const t = await getToken()
-      if (!t) return
-      const calData = await apiFetch(`/appointments/calendar?from=${from}&to=${to}`, { token: t })
-      setAppointments(calData.data?.appointments ?? [])
-      setBlocks(calData.data?.blocks ?? [])
-    }
-
     const channel = supabase
       .channel('agenda-appointments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-        void silentRefresh()
+        void qc.invalidateQueries({ queryKey: ['appointments', 'calendar'] })
       })
       .subscribe()
 
-    function handleVisibility() {
-      if (document.visibilityState === 'visible') void silentRefresh()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-
     return () => {
       void supabase.removeChannel(channel)
-      document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [token, from, to])
+  }, [qc, supabase])
 
   // Auto-scroll al inicio del horario laboral (o 8am por defecto)
   useEffect(() => {
@@ -277,71 +256,36 @@ export default function AgendaPage() {
     return () => cancelAnimationFrame(raf)
   }, [workingHours, selectedProfId, loading])
 
-  async function fetchCalendarData(t: string) {
-    const calData = await apiFetch(`/appointments/calendar?from=${from}&to=${to}`, { token: t })
-    setAppointments(calData.data?.appointments ?? [])
-    setBlocks(calData.data?.blocks ?? [])
-  }
-
-  async function loadAuxiliaryData(t: string) {
-    const [meData, profData] = await Promise.all([
-      apiFetch('/auth/me', { token: t }),
-      apiFetch('/professionals', { token: t }),
-    ])
-
-    const myId = meData.data.id
-    const profs: any[] = profData.data ?? []
-    setUserId(myId)
-    setProfessionals(profs)
-
-    const myProf = profs.find(p => p.id === myId)
-    const myWH = myProf?.schedule_config?.working_hours ?? null
-    myWorkingHoursRef.current = myWH
-    setWorkingHours(myWH)
-  }
-
-  function loadWorkingHoursForProfessional(id: string, profs: any[]) {
-    if (!id) {
-      setWorkingHours(myWorkingHoursRef.current)
-      return
-    }
-    const prof = profs.find(p => p.id === id)
-    setWorkingHours(prof?.schedule_config?.working_hours ?? null)
-  }
-
-
   async function handleRefresh() {
-    if (!token || refreshing) return
-    setRefreshing(true)
-    try {
-      await fetchCalendarData(token)
-    } finally {
-      setRefreshing(false)
-    }
+    if (refreshing) return
+    await refetchCalendar()
   }
 
   async function updateStatus(id: string, status: string) {
-    await apiFetch(`/appointments/${id}`, {
-      method: 'PATCH', token,
+    await authedApiFetch(`/appointments/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify({ status })
     })
-    await fetchCalendarData(token)
+    await refetchCalendar()
     setSelectedAppt(null)
   }
 
   async function deleteAppt(id: string) {
-    await apiFetch(`/appointments/${id}`, {
-      method: 'PATCH', token,
+    await authedApiFetch(`/appointments/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify({ status: 'cancelled' })
     })
-    setAppointments(prev => prev.filter(a => a.id !== id))
+    // Update optimista en el cache del calendario.
+    qc.setQueryData<CalendarData>(queryKeys.calendar(from, to), prev =>
+      prev ? { ...prev, appointments: prev.appointments.filter((a: any) => a.id !== id) } : prev)
     setSelectedAppt(null)
     setConfirmDelete(null)
   }
 
   async function deleteBlock(id: string) {
-    await apiFetch(`/schedule-blocks/${id}`, { method: 'DELETE', token })
-    setBlocks(prev => prev.filter(b => b.id !== id))
+    await authedApiFetch(`/schedule-blocks/${id}`, { method: 'DELETE' })
+    qc.setQueryData<CalendarData>(queryKeys.calendar(from, to), prev =>
+      prev ? { ...prev, blocks: prev.blocks.filter((b: any) => b.id !== id) } : prev)
     setSelectedBlock(null)
   }
 
@@ -635,15 +579,11 @@ export default function AgendaPage() {
             <div className="mb-2">
               <select
                 value={selectedProfId}
-                onChange={e => {
-                  const id = e.target.value
-                  setSelectedProfId(id)
-                  loadWorkingHoursForProfessional(id, professionals)
-                }}
+                onChange={e => setSelectedProfId(e.target.value)}
                 className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
-                {professionals.map(p => (
+                {professionals.map((p: any) => (
                   <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
                 ))}
               </select>
@@ -802,15 +742,11 @@ export default function AgendaPage() {
             {professionals.length > 1 && (
               <select
                 value={selectedProfId}
-                onChange={e => {
-                  const id = e.target.value
-                  setSelectedProfId(id)
-                  loadWorkingHoursForProfessional(id, professionals)
-                }}
+                onChange={e => setSelectedProfId(e.target.value)}
                 className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
-                {professionals.map(p => (
+                {professionals.map((p: any) => (
                   <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
                 ))}
               </select>
@@ -1120,7 +1056,7 @@ export default function AgendaPage() {
           professionals={professionals}
           defaultProfessionalId={
             selectedProfId ||
-            professionals.find(p => p.id === userId)?.id ||
+            professionals.find((p: any) => p.id === userId)?.id ||
             professionals[0]?.id ||
             ''
           }
@@ -1130,11 +1066,11 @@ export default function AgendaPage() {
             setShowPanel(false)
             setEditingAppt(null)
             setSelectedProfId(prev => prev && prev !== professionalId ? professionalId : prev)
-            await fetchCalendarData(token)
+            await refetchCalendar()
           }}
           onBlockCreated={async () => {
             setShowPanel(false)
-            await fetchCalendarData(token)
+            await refetchCalendar()
           }}
           onDurationChange={setPreviewDuration}
           onSlotChange={(date, time) => setNewApptSlot({ date, time })}

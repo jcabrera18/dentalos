@@ -3,6 +3,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { useMe, useAfipConfig, usePatientOdontogram, queryKeys } from '@/lib/queries'
 import { useRouter, useParams } from 'next/navigation'
 import { Wallet, FileText, ClipboardList, Loader2 } from 'lucide-react'
 import { PaymentModal } from '@/components/PaymentModal'
@@ -56,7 +58,7 @@ function buildPatientUpdatePayload(editForm: Record<string, unknown>) {
 export default function PatientDetailClient({
   initialPatient,
   initialToken,
-  patientId: _patientId,
+  patientId,
   initialClinicalHistory = null,
 }: {
   initialPatient: any
@@ -66,10 +68,8 @@ export default function PatientDetailClient({
 }) {
   const [patient, setPatient] = useState<any>(initialPatient)
   const [accountSummary, setAccountSummary] = useState(EMPTY_ACCOUNT_SUMMARY)
-  const [odontogram, setOdontogram] = useState<any[]>([])
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
   const [savingTooth, setSavingTooth] = useState(false)
-  const [toothDiagnostics, setToothDiagnostics] = useState<any[]>([])
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
@@ -85,13 +85,24 @@ export default function PatientDetailClient({
   const [odontogramActiveType, setOdontogramActiveType] = useState<'adult' | 'child'>(
     (initialPatient?.odontogram_type as 'adult' | 'child') ?? 'adult'
   )
-  const [odontogramLoading, setOdontogramLoading] = useState(true)
   const [clinicalHistory, setClinicalHistory] = useState<any>(initialClinicalHistory)
   const [clinicalHistoryLoaded, setClinicalHistoryLoaded] = useState(initialClinicalHistory !== null)
-  const [clinicName, setClinicName] = useState('')
-  const [myProfessionalName, setMyProfessionalName] = useState('')
-  const [myAfipIvaCondition, setMyAfipIvaCondition] = useState('MO')
-  const [myAfipConfigured, setMyAfipConfigured] = useState(false)
+
+  // Data de solo-lectura via React Query: cachea en IndexedDB por paciente → revisitar es instantáneo.
+  // (Los archivos/radiografías NO van por acá; los maneja PatientFilesSection aparte.)
+  const odontogramQuery = usePatientOdontogram(patientId)
+  const { data: me } = useMe()
+  const { data: afip } = useAfipConfig()
+
+  const odontogram: any[] = odontogramQuery.data ?? []
+  const odontogramLoading = odontogramQuery.isPending
+
+  const clinicName = (me?.clinics as any)?.name ?? me?.clinic_name ?? ''
+  const myProfessionalName =
+    me?.full_name ??
+    (me?.first_name && me?.last_name ? `${me.first_name} ${me.last_name}` : me?.name ?? '')
+  const myAfipIvaCondition = afip?.iva_condition || 'MO'
+  const myAfipConfigured = !!(afip?.cuit && afip?.has_cert && afip?.has_key && afip?.afip_punto_venta)
 
   // --- Consentimientos ---
   const [showConsentModal, setShowConsentModal] = useState(false)
@@ -120,6 +131,7 @@ export default function PatientDetailClient({
   const router = useRouter()
   const params = useParams()
   const supabase = createClient()
+  const qc = useQueryClient()
   const accountDataLoadedRef = useRef(false)
 
   async function refreshAccountSummary(accessToken: string) {
@@ -143,30 +155,47 @@ export default function PatientDetailClient({
     ])
   }
 
+  // Realtime: si otro dispositivo edita este paciente mientras la ficha está abierta,
+  // parcheamos el cache directo desde el payload (sin re-fetch → esquiva el Redis cache
+  // de 2 min de la API). El refetchOnReconnect/Focus de React Query cubre lo perdido offline.
   useEffect(() => {
-    void Promise.all([
-      apiFetch(`/treatments/odontogram/${params.id}`, { token }),
-      apiFetch(`/treatments/tooth-diagnostics/${params.id}`, { token }),
-      apiFetch('/auth/me', { token }),
-      apiFetch('/professionals/me/afip-config', { token }).catch(() => null),
-    ]).then(([odontogramData, diagData, meData, afipData]) => {
-      setOdontogram(odontogramData.data ?? [])
-      setToothDiagnostics(diagData.data ?? [])
-      setOdontogramLoading(false)
-      const me = meData?.data
-      if (me) {
-        setClinicName((me.clinics as any)?.name ?? me.clinic_name ?? '')
-        setMyProfessionalName(
-          me.full_name ??
-          (me.first_name && me.last_name ? `${me.first_name} ${me.last_name}` : me.name ?? '')
-        )
-      }
-      const afip = afipData?.data
-      if (afip?.iva_condition) setMyAfipIvaCondition(afip.iva_condition)
-      setMyAfipConfigured(!!(afip?.cuit && afip?.has_cert && afip?.has_key && afip?.afip_punto_venta))
-    })
-  }, [])
+    const channel = supabase
+      .channel(`patient-${patientId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'odontogram', filter: `patient_id=eq.${patientId}` },
+        (payload: any) => {
+          qc.setQueryData<any[]>(queryKeys.patientOdontogram(patientId), (prev) => {
+            const rows = prev ?? []
+            if (payload.eventType === 'DELETE') {
+              return rows.filter((r) => r.id !== payload.old?.id)
+            }
+            const row = payload.new
+            if (!row?.id) return rows
+            const idx = rows.findIndex((r) => r.id === row.id)
+            if (idx === -1) return [...rows, row]
+            const copy = rows.slice()
+            copy[idx] = { ...copy[idx], ...row }
+            return copy
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'patients', filter: `id=eq.${patientId}` },
+        (payload: any) => {
+          const row = payload.new
+          if (!row?.id) return
+          // Spread sobre prev: conserva `treatments` (viene aparte, no en la fila de patients).
+          setPatient((prev: any) => ({ ...prev, ...row }))
+        }
+      )
+      .subscribe()
 
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [patientId, qc, supabase])
 
   useEffect(() => {
     async function syncAccountState() {
@@ -346,11 +375,7 @@ export default function PatientDetailClient({
       token,
       body: JSON.stringify({ ...diag, patient_id: params.id })
     })
-    const data = await apiFetch(
-      `/treatments/tooth-diagnostics/${params.id}`,
-      { token }
-    )
-    setToothDiagnostics(data.data ?? [])
+    await qc.invalidateQueries({ queryKey: queryKeys.patientDiagnostics(patientId) })
   }
 
   async function deleteDiagnostic(id: string) {
@@ -358,7 +383,9 @@ export default function PatientDetailClient({
       method: 'DELETE',
       token,
     })
-    setToothDiagnostics(d => d.filter(x => x.id !== id))
+    // Update optimista en el cache de React Query.
+    qc.setQueryData<any[]>(queryKeys.patientDiagnostics(patientId), (d) =>
+      (d ?? []).filter((x) => x.id !== id))
   }
 
   async function handleDeletePatient() {
@@ -418,10 +445,11 @@ export default function PatientDetailClient({
           })
         })
       })
+      await qc.invalidateQueries({ queryKey: queryKeys.patientOdontogram(patientId) })
     } finally {
       setSavingTooth(false)
     }
-  }, [token, params.id])
+  }, [token, params.id, qc, patientId])
 
   const updateTooth = useCallback(async (toothNumber: number, surfaces: Record<string, string>, note: string) => {
     setSavingTooth(true)
@@ -439,11 +467,7 @@ export default function PatientDetailClient({
           notes: note || undefined,
         })
       })
-      const data = await apiFetch(
-        `/treatments/odontogram/${params.id}`,
-        { token }
-      )
-      setOdontogram(data.data ?? [])
+      await qc.invalidateQueries({ queryKey: queryKeys.patientOdontogram(patientId) })
       setSelectedTooth(null)
     } finally {
       setSavingTooth(false)

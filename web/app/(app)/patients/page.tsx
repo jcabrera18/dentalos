@@ -1,19 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { useLocalPatients } from '@/lib/useLocalPatients'
+import { filterLocalPatients } from '@/lib/patientsLocalDb'
 import { useRouter } from 'next/navigation'
 import { UserPlus, Search, ChevronRight, Loader2, ArrowRight, MessageCircle, Infinity, Users } from 'lucide-react'
-import {
-  cachePatients,
-  clearPatientsInFlight,
-  getCachedPatients,
-  getPatientsInFlight,
-  invalidatePatientsCache,
-  type PatientSummary,
-  setPatientsInFlight,
-} from '@/lib/patients-cache'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal } from '@/app/providers'
 
@@ -27,22 +20,20 @@ function daysAgoLabel(dateStr: string): string {
 }
 
 const SEARCH_MIN_LENGTH = 3
-const SEARCH_DEBOUNCE_MS = 300
-const PATIENTS_LIMIT = 10
 
 export default function PatientsPage() {
-  const [patients, setPatients]     = useState<PatientSummary[]>([])
   const [search, setSearch]         = useState('')
-  const [searching, setSearching]   = useState(false)
   const [token, setToken]           = useState('')
   const [showModal, setShowModal]   = useState(false)
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
   const router   = useRouter()
   const supabase = createClient()
-  const requestIdRef = useRef(0)
   const { data: sub } = useSubscription()
   const { openPlansModal } = usePlansModal()
   const limitReached = sub?.alerts.patientsLimitReached ?? false
+
+  // Cartera espejada en IndexedDB → búsqueda local instantánea (y offline).
+  const { patients: localPatients, syncing, resync } = useLocalPatients()
 
   useEffect(() => {
     async function load() {
@@ -53,69 +44,17 @@ export default function PatientsPage() {
     void load()
   }, [router, supabase])
 
-  async function fetchPatients(t: string, q: string, options?: { force?: boolean }) {
-    const normalizedQuery = q.trim()
-    const force = options?.force ?? false
-
-    const requestId = ++requestIdRef.current
-    const cachedPatients = !force ? getCachedPatients(t, normalizedQuery) : null
-    if (cachedPatients) {
-      setPatients(cachedPatients)
-      return
-    }
-
-    const inFlightRequest = !force ? getPatientsInFlight(t, normalizedQuery) : null
-    const request =
-      inFlightRequest ??
-      (async () => {
-        const searchParams = new URLSearchParams({ limit: String(PATIENTS_LIMIT) })
-        if (normalizedQuery) searchParams.set('q', normalizedQuery)
-        const data = await apiFetch(`/patients?${searchParams.toString()}`, { token: t })
-        const nextPatients = data.data ?? []
-        cachePatients(t, normalizedQuery, nextPatients)
-        return nextPatients
-      })()
-
-    if (!inFlightRequest) {
-      setPatientsInFlight(t, normalizedQuery, request)
-    }
-
-    try {
-      const nextPatients = await request
-      if (requestId === requestIdRef.current) {
-        setPatients(nextPatients)
-      }
-    } finally {
-      if (!inFlightRequest) {
-        clearPatientsInFlight(t, normalizedQuery)
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (!token) return
-
-    const normalizedSearch = search.trim()
-
-    if (normalizedSearch.length < SEARCH_MIN_LENGTH) {
-      setPatients([])
-      setSearching(false)
-      return
-    }
-
-    setSearching(true)
-
-    const timeoutId = window.setTimeout(() => {
-      void fetchPatients(token, normalizedSearch).finally(() => {
-        setSearching(false)
-      })
-    }, SEARCH_DEBOUNCE_MS)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [search, token])
-
   const normalizedSearch = search.trim()
   const hasQuery = normalizedSearch.length >= SEARCH_MIN_LENGTH
+
+  // Filtrado 100% local — instantáneo, sin pegarle al server por cada tecla.
+  const patients = useMemo(
+    () => (hasQuery ? filterLocalPatients(localPatients, normalizedSearch) : []),
+    [localPatients, normalizedSearch, hasQuery]
+  )
+
+  // Solo mostramos skeleton la primera vez (descarga inicial sin nada en IndexedDB todavía).
+  const searching = hasQuery && syncing && localPatients.length === 0
 
   return (
     <div className="min-h-screen bg-app text-app">
@@ -301,10 +240,8 @@ export default function PatientsPage() {
           onClose={() => setShowModal(false)}
           onCreated={async () => {
             setShowModal(false)
-            invalidatePatientsCache()
-            if (search.trim().length >= SEARCH_MIN_LENGTH) {
-              await fetchPatients(token, search, { force: true })
-            }
+            // Trae el delta (el paciente nuevo) a la cartera local.
+            await resync()
           }}
         />
       )}

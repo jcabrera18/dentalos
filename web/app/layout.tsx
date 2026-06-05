@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { Providers } from './providers'
+import { QueryProvider } from '@/lib/queryClient'
 import { PHProvider } from './providers/posthog'
 import { PostHogPageview } from './providers/pageview'
 import { Suspense } from 'react'
@@ -71,9 +72,11 @@ export default function RootLayout({
           <Suspense>
             <PostHogPageview />
           </Suspense>
-          <Providers>
-            {children}
-          </Providers>
+          <QueryProvider>
+            <Providers>
+              {children}
+            </Providers>
+          </QueryProvider>
         </PHProvider>
       </body>
     </html>

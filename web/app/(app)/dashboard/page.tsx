@@ -1,39 +1,52 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient, getToken } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
+import { useMe, useDashboard, useUpdateAppointmentStatus, queryKeys } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
 import { InvoiceModal } from '@/components/InvoiceModal'
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null)
-  const [agenda, setAgenda] = useState<any[]>([])
-  const [stats, setStats] = useState<any>({})
-  const [inactive, setInactive] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [token, setToken] = useState('')
   const [showNotesModal, setShowNotesModal] = useState(false)
   const [pendingAppt, setPendingAppt] = useState<any>(null)
   const [clinicalNotes, setClinicalNotes] = useState('')
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [paymentTotal, setPaymentTotal] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [attendedDone, setAttendedDone] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
-  const [myAfipIvaCondition, setMyAfipIvaCondition] = useState('MO')
-  const [myAfipConfigured, setMyAfipConfigured] = useState(false)
   const [createdPayment, setCreatedPayment] = useState<any>(null)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const qc = useQueryClient()
 
+  // Data via React Query: pinta desde cache (IndexedDB) y revalida en background.
+  const { data: user } = useMe()
+  const { data: dashboard } = useDashboard()
+  const updateStatus = useUpdateAppointmentStatus()
+
+  const agenda: any[] = dashboard?.agenda ?? []
+  const stats: any = dashboard?.stats ?? {}
+  const inactive: any[] = dashboard?.inactive ?? []
+  const loading = dashboard === undefined
+
+  // Mantiene el formato `${id}:${status}` que esperan los botones de la agenda.
+  const actionLoading = updateStatus.isPending
+    ? `${updateStatus.variables?.id}:${updateStatus.variables?.status}`
+    : null
+
+  const myAfipIvaCondition = user?.iva_condition || 'MO'
+  const myAfipConfigured = !!(user?.cuit && user?.afip_cert && user?.afip_key && user?.afip_punto_venta)
+
+  // Verificar sesión (redirect si no hay) y guardar token para el modal de factura.
   useEffect(() => {
-    async function load() {
-      // Verificar sesión con fallback a refresh para evitar falsos logouts
+    async function checkSession() {
       const { data: { session } } = await supabase.auth.getSession()
       let activeSession = session
       if (!activeSession) {
@@ -44,56 +57,39 @@ export default function DashboardPage() {
         router.push('/')
         return
       }
-
-      const t = activeSession.access_token
-      setToken(t)
-
-      // 2 requests en vez de 4 — /appointments/dashboard combina agenda + stats + inactivos
-      const [meData, dashData] = await Promise.all([
-        apiFetch('/auth/me', { token: t }),
-        apiFetch('/appointments/dashboard', { token: t }),
-      ])
-
-      const me = meData.data
-      setUser(me)
-      setAgenda(dashData.data?.agenda ?? [])
-      setStats(dashData.data?.stats ?? {})
-      setInactive(dashData.data?.inactive ?? [])
-      if (me?.iva_condition) setMyAfipIvaCondition(me.iva_condition)
-      setMyAfipConfigured(!!(me?.cuit && me?.afip_cert && me?.afip_key && me?.afip_punto_venta))
-      setLoading(false)
-
-      // Identificar usuario en PostHog
-      const posthog = (await import('posthog-js')).default
-      posthog.identify(meData.data.id, {
-        name: `${meData.data.first_name} ${meData.data.last_name}`,
-        email: meData.data.email,
-        clinic: meData.data.clinic_id,
-        role: meData.data.role,
-      })
-
+      setToken(activeSession.access_token)
     }
-
-    load()
+    checkSession()
   }, [])
 
-  // Realtime + visibilidad: se activa una vez que el usuario está cargado
+  // Identificar usuario en PostHog una vez cargado el perfil.
   useEffect(() => {
     if (!user) return
+    let cancelled = false
+    ;(async () => {
+      const posthog = (await import('posthog-js')).default
+      if (cancelled) return
+      posthog.identify(user.id, {
+        name: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        clinic: user.clinic_id,
+        role: user.role,
+      })
+    })()
+    return () => { cancelled = true }
+  }, [user])
 
-    async function refreshAgenda() {
-      const t = await getToken()
-      if (!t) return
-      const dashData = await apiFetch('/appointments/dashboard', { token: t })
-      setAgenda(dashData.data?.agenda ?? [])
-      setStats(dashData.data?.stats ?? {})
-      setInactive(dashData.data?.inactive ?? [])
-    }
+  // Realtime: refleja cambios de turnos hechos desde otro dispositivo.
+  // (refetchOnWindowFocus/Reconnect cubren lo que se pierda offline.)
+  useEffect(() => {
+    if (!user) return
 
     const channel = supabase
       .channel('dashboard-appointments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, (payload: any) => {
         const record = (payload.eventType === 'DELETE' ? payload.old : payload.new) as any
+        if (!record?.id) return
+
         // Ignorar turnos de otros días
         const startsAt = record?.starts_at
         if (startsAt) {
@@ -101,23 +97,32 @@ export default function DashboardPage() {
           const apptDay = new Date(startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
           if (apptDay !== today) return
         }
-        // Update directo del payload — no llamar al API porque tiene Redis cache de 2 min
-        if (record?.id && record?.status) {
-          setAgenda(prev => prev.map(a => a.id === record.id ? { ...a, ...record } : a))
+
+        const current = qc.getQueryData<typeof dashboard>(queryKeys.dashboard)
+        const inAgenda = current?.agenda?.some((a: any) => a.id === record.id) ?? false
+
+        if (payload.eventType === 'DELETE') {
+          qc.setQueryData<typeof dashboard>(queryKeys.dashboard, (prev) =>
+            prev ? { ...prev, agenda: prev.agenda.filter((a: any) => a.id !== record.id) } : prev
+          )
+        } else if (inAgenda && record?.status) {
+          // Turno ya visible → patch instantáneo desde el payload (cambio de estado).
+          // Sin refetch, así esquivamos el Redis cache de 2 min de la API.
+          qc.setQueryData<typeof dashboard>(queryKeys.dashboard, (prev) =>
+            prev ? { ...prev, agenda: prev.agenda.map((a: any) => a.id === record.id ? { ...a, ...record } : a) } : prev
+          )
+        } else {
+          // Turno NUEVO de hoy (el payload crudo no trae patient_name/etc.) → refetch.
+          // El backend ya bustó su cache de Redis al crear, así que viene fresco.
+          void qc.invalidateQueries({ queryKey: queryKeys.dashboard })
         }
       })
       .subscribe()
 
-    function handleVisibility() {
-      if (document.visibilityState === 'visible') void refreshAgenda()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-
     return () => {
       void supabase.removeChannel(channel)
-      document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [user])
+  }, [user, qc])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -213,31 +218,9 @@ export default function DashboardPage() {
     })
   }
 
-  async function markStatus(id: string, status: string) {
-    setAgenda(prev => prev.map(a => a.id === id ? { ...a, status } : a))
-    setActionLoading(`${id}:${status}`)
-    try {
-      const t = await getToken()
-      if (!t) return
-      await apiFetch(`/appointments/${id}`, {
-        method: 'PATCH',
-        token: t,
-        body: JSON.stringify({ status })
-      })
-      const dashData = await apiFetch('/appointments/dashboard', { token: t })
-      setAgenda(dashData.data?.agenda ?? [])
-      setStats(dashData.data?.stats ?? {})
-    } catch {
-      const t = await getToken()
-      if (!t) return
-      const dashData = await apiFetch('/appointments/dashboard', { token: t }).catch(() => null)
-      if (dashData) {
-        setAgenda(dashData.data?.agenda ?? [])
-        setStats(dashData.data?.stats ?? {})
-      }
-    } finally {
-      setActionLoading(null)
-    }
+  function markStatus(id: string, status: string) {
+    // La mutación hace el update optimista, revierte si falla y revalida (ver useUpdateAppointmentStatus).
+    updateStatus.mutate({ id, status })
   }
 
   function formatDuration(min: number) {
@@ -299,9 +282,7 @@ export default function DashboardPage() {
       })
     }
 
-    const dashData = await apiFetch('/appointments/dashboard', { token: session.access_token })
-    setAgenda(dashData.data?.agenda ?? [])
-    setStats(dashData.data?.stats ?? {})
+    await qc.invalidateQueries({ queryKey: queryKeys.dashboard })
     setConfirmLoading(false)
     setAttendedDone(true)
   }

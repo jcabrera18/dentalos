@@ -21,8 +21,17 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresca la sesión en cada request para que el server-side client siempre tenga un token válido
-  await supabase.auth.getUser()
+  // getSession() lee de la cookie SIN hop de red. Solo pegamos a Auth (refreshSession)
+  // cuando el token está por vencer — evita ~800ms en CADA navegación RSC.
+  // El gating de auth no depende de esto: lo hacen las páginas (getSession), RLS y la API (JWKS).
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session) {
+    const now = Math.floor(Date.now() / 1000)
+    const expiresAt = session.expires_at ?? 0
+    if (expiresAt - now < 120) {
+      await supabase.auth.refreshSession()
+    }
+  }
   return supabaseResponse
 }
 

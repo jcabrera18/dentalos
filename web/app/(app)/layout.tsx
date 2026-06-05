@@ -27,6 +27,7 @@ import {
   Activity,
 } from 'lucide-react'
 import { useSubscription, invalidateSubscriptionCache } from '@/lib/useSubscription'
+import { syncPatients } from '@/lib/patientsLocalDb'
 import { NavigationProgress } from '@/components/NavigationProgress'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -124,6 +125,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       highlight: false,
     },
   ]
+
+  // Warm-up: apenas abre la app, espejamos la cartera de pacientes a IndexedDB en
+  // background (full la 1ª vez, delta después). El listado es lo más probable que usen,
+  // así que cuando entren a /patients la búsqueda ya está lista y offline.
+  useEffect(() => {
+    supabase.auth.getSession().then((result: Awaited<ReturnType<typeof supabase.auth.getSession>>) => {
+      if (result.data.session) void syncPatients().catch(() => {})
+    })
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -370,6 +380,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => { setNavLoading(null) }, [pathname])
 
   function navigateTo(href: string) {
+    // Ya estás en esa ruta: router.push no cambia el pathname, así que los efectos
+    // que limpian el spinner (dependientes de [pathname]) nunca dispararían y el
+    // loader quedaría girando para siempre. Cortamos antes de arrancar.
+    if (href === pathname) return
     setNavLoading(href)
     window.dispatchEvent(new Event('navigation-start'))
     router.push(href)
@@ -404,6 +418,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 key={item.href}
                 onClick={() => navigateTo(item.href)}
+                onMouseEnter={() => router.prefetch(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   active
                     ? 'bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
@@ -643,6 +658,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 key={item.href}
                 onClick={() => navigateTo(item.href)}
+                onMouseEnter={() => router.prefetch(item.href)}
                 className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
                   active ? 'text-[#00C4BC]' : 'text-app3'
                 }`}
