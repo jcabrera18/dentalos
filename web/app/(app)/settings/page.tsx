@@ -222,7 +222,7 @@ function PlanCard() {
               </div>
             )}
           </div>
-          {sub.features.waMsgMonthlyQuota !== null && (
+          {sub.features.whatsapp && sub.features.waMsgMonthlyQuota !== null && (
             <div>
               <p className="text-xs text-app3">WhatsApp este mes</p>
               <p className="text-sm font-semibold text-app">
