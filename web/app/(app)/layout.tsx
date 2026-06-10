@@ -78,8 +78,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [manualCheckMsg, setManualCheckMsg] = useState<{ type: 'info' | 'error'; text: string } | null>(null)
   const [paymentConfirmed, setPaymentConfirmed] = useState(false)
   const [subEndsAtOnOpen, setSubEndsAtOnOpen] = useState<string | null>(null)
-  // NAVE: cambiar a 'nave' para reactivar Nave como opción de pago
-  const [paymentMethod, setPaymentMethod] = useState<'nave' | 'mercadopago'>('mercadopago')
+  // NAVE activo. MercadoPago queda como fallback en código (selector comentado abajo).
+  const [paymentMethod, setPaymentMethod] = useState<'nave' | 'mercadopago'>('nave')
 
   const QR_DURATION_SECS = 25 * 60
 
@@ -1033,7 +1033,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 : 'bg-[#009EE3] hover:bg-[#0088cc]'
                             }`}
                           >
-                            {paymentMethod === 'nave' ? 'Pagar con Nave' : 'Pagar en MercadoPago'}
+                            {paymentMethod === 'nave' ? 'Pagar con app bancaria' : 'Pagar en MercadoPago'}
                           </a>
                           {paymentMethod === 'nave' && (
                             <>
