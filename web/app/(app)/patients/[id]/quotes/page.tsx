@@ -883,7 +883,7 @@ export default function PatientQuotesPage() {
                     value={form.valid_until}
                     min={todayISO()}
                     onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))}
-                    className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                    className="w-full min-w-0 appearance-none bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
                   />
                 </div>
 
