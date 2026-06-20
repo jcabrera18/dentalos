@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Plus_Jakarta_Sans } from 'next/font/google'
-import { ArrowRight, Check, Shield, Smartphone, Users } from 'lucide-react'
+import { ArrowRight, Check, Shield, Smartphone, Users, Eye, EyeOff } from 'lucide-react'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
@@ -48,7 +48,7 @@ function LeftPanel() {
         <div className="mb-10">
           <span className="inline-flex items-center gap-2 bg-[#00C4BC]/15 border border-[#00C4BC]/30 text-[#00C4BC] text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wider mb-5">
             <span className="w-1.5 h-1.5 bg-[#00C4BC] rounded-full animate-pulse" />
-            10 días gratis · Sin tarjeta
+            14 días gratis · Sin tarjeta
           </span>
           <h2 className="text-3xl xl:text-4xl font-extrabold text-white leading-tight">
             Organizá tu consultorio<br />
@@ -208,9 +208,11 @@ function RegisterForm() {
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginPassword, setLoginPassword] = useState('')
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
 
@@ -327,7 +329,7 @@ function RegisterForm() {
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-extrabold text-[#0F1720] mb-1">Empezar 10 días gratis</h1>
+            <h1 className="text-2xl font-extrabold text-[#0F1720] mb-1">Empezar 14 días gratis</h1>
             <p className="text-[#6B7280] text-sm">Sin tarjeta · Sin compromiso · Listo en 5 minutos</p>
           </>
         )}
@@ -360,16 +362,26 @@ function RegisterForm() {
           <label htmlFor="password" className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">
             Contraseña
           </label>
-          <input
-            id="password" name="password" type="password"
-            placeholder="Mínimo 8 caracteres" required minLength={8}
-            value={form.password} onChange={handleChange}
-            className={`w-full border bg-[#F9FAFB] rounded-xl px-4 py-3 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:bg-white transition-all text-sm ${
-              form.password.length > 0 && form.password.length < 8
-                ? 'border-red-400 focus:border-red-400'
-                : 'border-[#E5E7EB] focus:border-[#00C4BC]'
-            }`}
-          />
+          <div className="relative">
+            <input
+              id="password" name="password" type={showPassword ? 'text' : 'password'}
+              placeholder="Mínimo 8 caracteres" required minLength={8}
+              value={form.password} onChange={handleChange}
+              className={`w-full border bg-[#F9FAFB] rounded-xl px-4 py-3 pr-12 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:bg-white transition-all text-sm ${
+                form.password.length > 0 && form.password.length < 8
+                  ? 'border-red-400 focus:border-red-400'
+                  : 'border-[#E5E7EB] focus:border-[#00C4BC]'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              className="absolute inset-y-0 right-0 flex items-center px-4 text-[#9CA3AF] hover:text-[#0F1720] transition-colors"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           {form.password.length > 0 && form.password.length < 8 && (
             <p className="text-red-500 text-xs mt-1.5">
               {form.password.length}/8 caracteres
@@ -478,12 +490,22 @@ function RegisterForm() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">Contraseña</label>
-                <input
-                  type="password" value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
-                  placeholder="••••••••" required
-                  className="w-full border border-[#E5E7EB] bg-[#F3F4F6] rounded-xl px-4 py-3 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:border-[#00C4BC] transition-colors text-sm"
-                />
+                <div className="relative">
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
+                    onChange={e => setLoginPassword(e.target.value)}
+                    placeholder="••••••••" required
+                    className="w-full border border-[#E5E7EB] bg-[#F3F4F6] rounded-xl px-4 py-3 pr-12 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:border-[#00C4BC] transition-colors text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(v => !v)}
+                    aria-label={showLoginPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute inset-y-0 right-0 flex items-center px-4 text-[#9CA3AF] hover:text-[#0F1720] transition-colors"
+                  >
+                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               {loginError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">

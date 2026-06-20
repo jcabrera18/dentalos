@@ -6,9 +6,10 @@ import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useAfipConfig, usePatientOdontogram, queryKeys } from '@/lib/queries'
 import { useRouter, useParams } from 'next/navigation'
-import { Wallet, FileText, ClipboardList, Loader2 } from 'lucide-react'
+import { Wallet, FileText, ClipboardList, Loader2, MoreVertical } from 'lucide-react'
 import { PaymentModal } from '@/components/PaymentModal'
-import { downloadAccountStatementPNG } from '@/components/generateReceipt'
+import { InvoiceModal } from '@/components/InvoiceModal'
+import { downloadAccountStatementPNG, downloadReceiptPNG } from '@/components/generateReceipt'
 import { PatientNotesSection } from '@/components/PatientNotesSection'
 import { PatientFilesSection } from '@/components/PatientFilesSection'
 import { PatientAppointmentsSection } from '@/components/PatientAppointmentsSection'
@@ -20,6 +21,8 @@ const EMPTY_ACCOUNT_SUMMARY = {
   payments_count: 0,
   last_payment_at: null,
 }
+
+const ACCOUNT_PAGE_SIZE = 5
 
 function hasExplicitTotalAmount(payment: { total_amount?: number | string | null }) {
   return payment.total_amount !== null && payment.total_amount !== undefined
@@ -79,9 +82,23 @@ export default function PatientDetailClient({
   const [deleting, setDeleting] = useState(false)
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [editingPayment, setEditingPayment] = useState<any>(null)
+  const [paymentPrefillAmount, setPaymentPrefillAmount] = useState<number | null>(null)
   const [token] = useState(initialToken)
   const [accountPayments, setAccountPayments] = useState<any[]>([])
   const [accountPage, setAccountPage] = useState(0)
+  const [accountTotal, setAccountTotal] = useState(0)
+  const [accountLoading, setAccountLoading] = useState(false)
+  const [accountPageLoading, setAccountPageLoading] = useState(false)
+  // Menú por cobro dentro de la cuenta corriente (Editar / Facturar / Recibo / Eliminar)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [menuOpenUp, setMenuOpenUp] = useState(false)
+  const [invoicesMap, setInvoicesMap] = useState<Record<string, any>>({})
+  const [invoiceModalPayment, setInvoiceModalPayment] = useState<any>(null)
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null)
+  const [paymentToDelete, setPaymentToDelete] = useState<any>(null)
+  const [deletingPayment, setDeletingPayment] = useState(false)
+  const [deletePaymentError, setDeletePaymentError] = useState('')
   const [odontogramActiveType, setOdontogramActiveType] = useState<'adult' | 'child'>(
     (initialPatient?.odontogram_type as 'adult' | 'child') ?? 'adult'
   )
@@ -133,6 +150,10 @@ export default function PatientDetailClient({
   const supabase = createClient()
   const qc = useQueryClient()
   const accountDataLoadedRef = useRef(false)
+  // Espejo de accountPage para leer la página actual desde callbacks con closures estables
+  // (p. ej. el handler de focus/visibility, que tiene deps vacías).
+  const accountPageRef = useRef(0)
+  useEffect(() => { accountPageRef.current = accountPage }, [accountPage])
 
   async function refreshAccountSummary(accessToken: string) {
     const summaryData = await apiFetch(`/patients/${params.id}/account-summary`, {
@@ -141,18 +162,120 @@ export default function PatientDetailClient({
     setAccountSummary(summaryData.data ?? EMPTY_ACCOUNT_SUMMARY)
   }
 
-  async function refreshAccountPayments(accessToken: string) {
-    const paymentsData = await apiFetch(`/payments?patient_id=${params.id}&limit=100`, {
-      token: accessToken,
-    })
-    setAccountPayments(paymentsData.data ?? [])
+  // Paginación del lado del servidor: traemos solo la página visible (5 por vez).
+  async function loadAccountPaymentsPage(accessToken: string, page: number) {
+    const offset = page * ACCOUNT_PAGE_SIZE
+    const paymentsData = await apiFetch(
+      `/payments?patient_id=${params.id}&limit=${ACCOUNT_PAGE_SIZE}&offset=${offset}`,
+      { token: accessToken },
+    )
+    const rows: any[] = paymentsData.data ?? []
+    const total: number = paymentsData.meta?.total ?? rows.length
+    // Si la página quedó fuera de rango (p. ej. tras eliminar el último cobro), retrocedemos.
+    const lastPage = Math.max(0, Math.ceil(total / ACCOUNT_PAGE_SIZE) - 1)
+    if (page > lastPage) {
+      return loadAccountPaymentsPage(accessToken, lastPage)
+    }
+    setAccountPayments(rows)
+    setAccountTotal(total)
+    setAccountPage(page)
+    const paymentIds = rows.map((r) => r.id)
+    if (paymentIds.length > 0) {
+      fetchInvoicesForPayments(paymentIds, accessToken)
+    } else {
+      setInvoicesMap({})
+    }
   }
 
-  async function refreshAccountState(accessToken: string) {
+  async function goToAccountPage(page: number) {
+    if (page < 0) return
+    setAccountPageLoading(true)
+    try {
+      const t = await getSupabaseToken()
+      if (!t) return
+      await loadAccountPaymentsPage(t, page)
+    } finally {
+      setAccountPageLoading(false)
+    }
+  }
+
+  async function fetchInvoicesForPayments(paymentIds: string[], accessToken: string) {
+    try {
+      const data = await apiFetch(`/invoices?payment_ids=${paymentIds.join(',')}`, { token: accessToken })
+      const map: Record<string, any> = {}
+      for (const inv of (data.data ?? [])) {
+        if (inv.payment_id) map[inv.payment_id] = inv
+      }
+      setInvoicesMap(map)
+    } catch {}
+  }
+
+  async function downloadInvoicePdf(invoiceId: string, invoiceType: string, numero: number) {
+    setDownloadingPdfId(invoiceId)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
+      const res = await fetch(`${apiUrl}/invoices/${invoiceId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('No se pudo generar el PDF')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `factura-${invoiceType}-${String(numero).padStart(8, '0')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert(err.message ?? 'Error al descargar PDF')
+    } finally {
+      setDownloadingPdfId(null)
+    }
+  }
+
+  async function confirmDeletePayment() {
+    if (!paymentToDelete) return
+    const t = await getSupabaseToken()
+    if (!t) return
+    setDeletingPayment(true)
+    setDeletePaymentError('')
+    try {
+      await apiFetch(`/payments/${paymentToDelete.id}`, { method: 'DELETE', token: t })
+      await refreshAccountState(t)
+      setPaymentToDelete(null)
+    } catch (err) {
+      setDeletePaymentError(err instanceof Error ? err.message : 'No se pudo eliminar el cobro')
+    } finally {
+      setDeletingPayment(false)
+    }
+  }
+
+  async function refreshAccountState(accessToken: string, page: number = accountPageRef.current) {
     await Promise.all([
       refreshAccountSummary(accessToken),
-      refreshAccountPayments(accessToken),
+      loadAccountPaymentsPage(accessToken, page),
     ])
+  }
+
+  async function handleGenerateStatement() {
+    // El estado de cuenta siempre muestra los 5 cobros más recientes. Como la lista
+    // ahora pagina del lado del servidor, traemos la primera página fresca si hace falta.
+    let recent = accountPayments
+    if (accountPage !== 0) {
+      const t = await getSupabaseToken()
+      if (!t) return
+      const data = await apiFetch(`/payments?patient_id=${params.id}&limit=${ACCOUNT_PAGE_SIZE}&offset=0`, { token: t })
+      recent = data.data ?? []
+    }
+    const sorted = [...recent].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+    downloadAccountStatementPNG({
+      patientName: `${patient.first_name} ${patient.last_name}`,
+      clinicName: clinicName || null,
+      professionalName: myProfessionalName || null,
+      totalBilled: Number(accountSummary.total_billed),
+      totalCollected: Number(accountSummary.total_collected),
+      balanceDue: Number(accountSummary.balance_due),
+      recentPayments: sorted.slice(0, 5),
+    })
   }
 
   // Realtime: si otro dispositivo edita este paciente mientras la ficha está abierta,
@@ -358,9 +481,14 @@ export default function PatientDetailClient({
     setShowAccountModal(true)
     setAccountPage(0)
     accountDataLoadedRef.current = true
-    const token = await getSupabaseToken()
-    if (!token) return
-    await refreshAccountState(token)
+    setAccountLoading(true)
+    try {
+      const token = await getSupabaseToken()
+      if (!token) return
+      await refreshAccountState(token, 0)
+    } finally {
+      setAccountLoading(false)
+    }
   }
 
   async function addDiagnostic(diag: {
@@ -779,6 +907,16 @@ export default function PatientDetailClient({
             <>
               {/* Resumen */}
               <div className="px-6 py-4 border-b border-app shrink-0">
+                {accountLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="bg-surface2 rounded-xl p-3 text-center animate-pulse">
+                        <div className="h-3 w-20 mx-auto mb-2 rounded bg-surface3" />
+                        <div className="h-5 w-24 mx-auto rounded bg-surface3" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-surface2 rounded-xl p-3 text-center">
                     <div className="text-xs text-app3 mb-1">Total de servicios</div>
@@ -800,29 +938,59 @@ export default function PatientDetailClient({
                         </div>
                       )
                     }
+                    if (due > 0) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => { setEditingPayment(null); setPaymentPrefillAmount(due); setShowPaymentModal(true) }}
+                          className="group rounded-xl p-3 text-center bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 hover:border-red-400 dark:hover:border-red-600 active:scale-95 transition-all cursor-pointer"
+                        >
+                          <div className="text-xs mb-1 text-red-700 dark:text-red-400">Saldo pendiente</div>
+                          <div className="text-base font-bold text-red-800 dark:text-red-400">
+                            ${due.toLocaleString('es-AR')}
+                          </div>
+                          <div className="text-[10px] font-semibold text-red-600/80 dark:text-red-400/80 mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                            Tocá para saldar →
+                          </div>
+                        </button>
+                      )
+                    }
                     return (
-                      <div className={`rounded-xl p-3 text-center ${due > 0 ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50' : 'bg-surface2'}`}>
-                        <div className={`text-xs mb-1 ${due > 0 ? 'text-red-700 dark:text-red-400' : 'text-app3'}`}>Saldo pendiente</div>
-                        <div className={`text-base font-bold ${due > 0 ? 'text-red-800 dark:text-red-400' : 'text-app3'}`}>
+                      <div className="rounded-xl p-3 text-center bg-surface2">
+                        <div className="text-xs mb-1 text-app3">Saldo pendiente</div>
+                        <div className="text-base font-bold text-app3">
                           ${due.toLocaleString('es-AR')}
                         </div>
                       </div>
                     )
                   })()}
                 </div>
+                )}
               </div>
 
               {/* Historial */}
               <div className="flex-1 overflow-y-auto">
-                {accountPayments.length === 0 ? (
+                {(accountLoading || accountPageLoading) ? (
+                  <div className="divide-y divide-app">
+                    {Array.from({ length: ACCOUNT_PAGE_SIZE }).map((_, i) => (
+                      <div key={i} className="px-6 py-4 animate-pulse">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 space-y-2">
+                            <div className="h-3 w-24 rounded bg-surface3" />
+                            <div className="h-4 w-28 rounded bg-surface3" />
+                          </div>
+                          <div className="h-4 w-16 rounded bg-surface3" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : accountPayments.length === 0 ? (
                   <div className="px-6 py-12 text-center text-app3 text-sm">Sin cobros registrados</div>
                 ) : (
                   <div className="divide-y divide-app">
                     {(() => {
-                      const PAGE_SIZE = 5
-                      const sorted = [...accountPayments].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
-                      const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
-                      const paginated = sorted.slice(accountPage * PAGE_SIZE, (accountPage + 1) * PAGE_SIZE)
+                      const totalPages = Math.max(1, Math.ceil(accountTotal / ACCOUNT_PAGE_SIZE))
+                      const paginated = accountPayments
                       return (<>
                         {paginated.map((p: any) => {
                       const servicio = hasExplicitTotalAmount(p) ? Number(p.total_amount) : 0
@@ -869,6 +1037,81 @@ export default function PatientDetailClient({
                                 </div>
                               )}
                             </div>
+                            <div className="relative shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  if (openMenuId === p.id) { setOpenMenuId(null); return }
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                  setMenuOpenUp(window.innerHeight - rect.bottom < 200)
+                                  setOpenMenuId(p.id)
+                                }}
+                                className="p-1.5 rounded-lg text-app3 hover:text-app hover:bg-surface2 transition-all cursor-pointer"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                              {openMenuId === p.id && (
+                                <>
+                                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                                  <div className={`absolute right-0 z-20 bg-surface border border-app rounded-xl shadow-lg py-1 min-w-[150px] ${menuOpenUp ? 'bottom-8' : 'top-8'}`}>
+                                    <button
+                                      onClick={() => { setOpenMenuId(null); setEditingPayment(p); setShowPaymentModal(true) }}
+                                      className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors cursor-pointer"
+                                    >
+                                      Editar
+                                    </button>
+                                    {invoicesMap[p.id] ? (
+                                      <button
+                                        onClick={() => { setOpenMenuId(null); const inv = invoicesMap[p.id]; downloadInvoicePdf(inv.id, inv.invoice_type, inv.afip_numero ?? inv.numero) }}
+                                        disabled={downloadingPdfId === invoicesMap[p.id]?.id}
+                                        className="w-full text-left px-4 py-2 text-sm text-emerald-500 hover:bg-surface2 transition-colors disabled:opacity-50 cursor-pointer"
+                                      >
+                                        {downloadingPdfId === invoicesMap[p.id]?.id ? 'Generando...' : 'Descargar factura'}
+                                      </button>
+                                    ) : myAfipConfigured ? (
+                                      <button
+                                        onClick={() => { setOpenMenuId(null); setInvoiceModalPayment({ ...p, patient_name: `${patient.first_name} ${patient.last_name}` }) }}
+                                        className="w-full text-left px-4 py-2 text-sm text-amber-500 hover:bg-surface2 transition-colors cursor-pointer"
+                                      >
+                                        Facturar
+                                      </button>
+                                    ) : (
+                                      <div className="px-4 py-2">
+                                        <p className="text-sm text-app3 opacity-50 cursor-not-allowed">Facturar</p>
+                                        <p className="text-xs text-app3 mt-0.5">Configurá tus datos AFIP en <span className="text-[#00C4BC]">Configuración</span></p>
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        setOpenMenuId(null)
+                                        downloadReceiptPNG({
+                                          patientName: `${patient.first_name} ${patient.last_name}`,
+                                          date: p.paid_at,
+                                          concept: p.concept ?? null,
+                                          method: p.method,
+                                          amount: pagado,
+                                          totalAmount: hasExplicitTotalAmount(p) ? servicio : null,
+                                          notes: p.notes ?? null,
+                                          installments: p.installments ?? null,
+                                          professionalName: myProfessionalName || null,
+                                          clinicName: clinicName || null,
+                                          balance: Number(accountSummary.balance_due),
+                                        })
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors cursor-pointer"
+                                    >
+                                      Descargar recibo
+                                    </button>
+                                    <div className="my-1 border-t border-app" />
+                                    <button
+                                      onClick={() => { setOpenMenuId(null); setDeletePaymentError(''); setPaymentToDelete(p) }}
+                                      className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-surface2 transition-colors cursor-pointer"
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                         )
@@ -876,16 +1119,16 @@ export default function PatientDetailClient({
                         {totalPages > 1 && (
                           <div className="px-6 py-3 flex items-center justify-between">
                             <button
-                              disabled={accountPage === 0}
-                              onClick={() => setAccountPage(p => p - 1)}
+                              disabled={accountPage === 0 || accountPageLoading}
+                              onClick={() => goToAccountPage(accountPage - 1)}
                               className="text-sm text-app2 hover:text-app disabled:opacity-30 disabled:cursor-not-allowed px-2 py-1 rounded-lg hover:bg-surface2 transition-colors"
                             >
                               ← Anterior
                             </button>
                             <span className="text-xs text-app3">{accountPage + 1} / {totalPages}</span>
                             <button
-                              disabled={accountPage >= totalPages - 1}
-                              onClick={() => setAccountPage(p => p + 1)}
+                              disabled={accountPage >= totalPages - 1 || accountPageLoading}
+                              onClick={() => goToAccountPage(accountPage + 1)}
                               className="text-sm text-app2 hover:text-app disabled:opacity-30 disabled:cursor-not-allowed px-2 py-1 rounded-lg hover:bg-surface2 transition-colors"
                             >
                               Siguiente →
@@ -901,25 +1144,15 @@ export default function PatientDetailClient({
               {/* Footer */}
               <div className="px-6 py-4 border-t border-app shrink-0 space-y-2">
                 <button
-                  onClick={() => {
-                    const sorted = [...accountPayments].sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
-                    downloadAccountStatementPNG({
-                      patientName: `${patient.first_name} ${patient.last_name}`,
-                      clinicName: clinicName || null,
-                      professionalName: myProfessionalName || null,
-                      totalBilled: Number(accountSummary.total_billed),
-                      totalCollected: Number(accountSummary.total_collected),
-                      balanceDue: Number(accountSummary.balance_due),
-                      recentPayments: sorted.slice(0, 5),
-                    })
-                  }}
-                  className="w-full flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 font-semibold py-2.5 rounded-xl transition-all text-sm"
+                  onClick={handleGenerateStatement}
+                  disabled={accountLoading || accountPayments.length === 0}
+                  className="w-full flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app2 font-semibold py-2.5 rounded-xl transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   Generar estado de cuenta
                 </button>
                 <button
-                  onClick={() => setShowPaymentModal(true)}
+                  onClick={() => { setEditingPayment(null); setPaymentPrefillAmount(null); setShowPaymentModal(true) }}
                   className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-bold py-3 rounded-xl transition-all text-sm shadow-sm shadow-[#00C4BC]/20"
                 >
                   💰 Registrar nuevo cobro
@@ -936,17 +1169,55 @@ export default function PatientDetailClient({
           token={token}
           patients={patient ? [patient] : []}
           professionals={[]}
+          payment={editingPayment}
           preselectedPatientId={params.id as string}
+          prefillAmount={paymentPrefillAmount}
           clinicName={clinicName || undefined}
           myProfessionalName={myProfessionalName || undefined}
           profesionalIvaCondition={myAfipIvaCondition}
           hasAfipConfig={myAfipConfigured}
-          onClose={() => setShowPaymentModal(false)}
+          onClose={() => { setShowPaymentModal(false); setEditingPayment(null); setPaymentPrefillAmount(null) }}
           onSaved={async () => {
+            const wasEditing = Boolean(editingPayment)
             setShowPaymentModal(false)
-            await refreshAccountState(token)
+            setEditingPayment(null)
+            setPaymentPrefillAmount(null)
+            // Un cobro nuevo aparece primero → saltamos a la página 0; una edición conserva la página.
+            await refreshAccountState(token, wasEditing ? accountPageRef.current : 0)
           }}
         />
+      )}
+
+      {invoiceModalPayment && (
+        <InvoiceModal
+          payment={invoiceModalPayment}
+          profesionalIvaCondition={myAfipIvaCondition}
+          token={token}
+          onClose={() => setInvoiceModalPayment(null)}
+          onSuccess={(inv) => setInvoicesMap(prev => ({ ...prev, [inv.payment_id]: inv }))}
+        />
+      )}
+
+      {paymentToDelete && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setPaymentToDelete(null)}>
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-app">
+              <h2 className="text-lg font-semibold">Confirmar eliminación</h2>
+              <p className="text-sm text-app3 mt-1">¿Eliminar este cobro de forma definitiva?</p>
+            </div>
+            <div className="px-6 py-4 space-y-2">
+              {deletePaymentError && <div className="px-3 py-2 rounded-lg bg-red-600/10 text-xs text-red-500">{deletePaymentError}</div>}
+              <div className="flex gap-2">
+                <button onClick={() => setPaymentToDelete(null)} className="flex-1 bg-surface2 hover:bg-surface3 border border-app rounded-xl text-sm font-semibold py-3 transition-all active:scale-95">
+                  Cancelar
+                </button>
+                <button onClick={confirmDeletePayment} disabled={deletingPayment} className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold py-3 transition-all active:scale-95 disabled:opacity-50">
+                  {deletingPayment ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal edición paciente */}

@@ -47,8 +47,24 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" suppressHydrationWarning className="dark">
+    <html lang="es" suppressHydrationWarning className="light">
       <head>
+        {/* Aplica el tema guardado antes del paint (default: claro) para evitar parpadeo */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var saved = localStorage.getItem('theme');
+                  var theme = saved === 'dark' ? 'dark' : 'light';
+                  var el = document.documentElement;
+                  el.classList.toggle('dark', theme === 'dark');
+                  el.classList.toggle('light', theme === 'light');
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
         {/* Google Ads Conversion Tracking */}
         <Script 
           src="https://www.googletagmanager.com/gtag/js?id=AW-18082738848" 

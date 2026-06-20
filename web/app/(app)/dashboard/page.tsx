@@ -602,15 +602,15 @@ export default function DashboardPage() {
 
         {/* Pacientes inactivos */}
         {inactive.length > 0 && (
-          <div className="bg-amber-950/20 border border-amber-800/40 rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-amber-800/30 flex items-center justify-between">
-              <h3 className="font-semibold text-amber-400 text-sm">Sin turno hace +90 días</h3>
-              <span className="text-xs font-bold bg-amber-500/20 text-amber-400 px-2 py-1 rounded-full">{inactive.length}</span>
+          <div className="bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/40 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-amber-200 dark:border-amber-800/30 flex items-center justify-between">
+              <h3 className="font-semibold text-amber-600 dark:text-amber-400 text-sm">Sin turno hace +90 días</h3>
+              <span className="text-xs font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-1 rounded-full">{inactive.length}</span>
             </div>
-            <div className="divide-y divide-amber-800/20">
+            <div className="divide-y divide-amber-200 dark:divide-amber-800/20">
               {inactive.slice(0, 5).map((p: any) => (
-                <div key={p.id} className="px-5 py-3 flex items-center gap-3 hover:bg-amber-900/10 transition-colors">
-                  <div className="w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center text-amber-400 text-xs font-bold flex-shrink-0">
+                <div key={p.id} className="px-5 py-3 flex items-center gap-3 hover:bg-amber-100/60 dark:hover:bg-amber-900/10 transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-amber-200 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0">
                     {p.first_name[0]}{p.last_name[0]}
                   </div>
                   <div className="flex-1 min-w-0">

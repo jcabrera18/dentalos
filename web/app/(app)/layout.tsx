@@ -90,6 +90,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     enterprise: 'scale',
   }
 
+  // Ranking de planes para distinguir upgrade de downgrade. El upgrade aplica al
+  // instante; el downgrade lo frenamos mientras quede tiempo pagado del plan
+  // superior, para que el cliente no pierda días ya abonados.
+  const PLAN_RANK: Record<string, number> = {
+    free: 0, basic: 1, pro: 2, clinic: 3, enterprise: 4,
+    starter: 1, growth: 2, scale: 3,
+  }
+
+  // Hay un plan superior vigente: suscripción activa, no en prueba y sin vencer.
+  const hasActivePaidPlan =
+    !!subscription &&
+    subscription.status === 'active' &&
+    !subscription.trial.active &&
+    !subscription.subscription.expired &&
+    !!subscription.subscription.endsAt
+
+  const currentPlanRank = subscription ? (PLAN_RANK[subscription.plan] ?? 0) : 0
+
+  // Un plan del modal es un downgrade bloqueado si su rango es menor al actual
+  // y todavía hay tiempo pagado del plan superior.
+  function isBlockedDowngrade(planKey: 'starter' | 'growth' | 'scale') {
+    return hasActivePaidPlan && (PLAN_RANK[planKey] ?? 0) < currentPlanRank
+  }
+
+  const subEndsAtFormatted = subscription?.subscription.endsAt
+    ? new Date(subscription.subscription.endsAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
+
   function openRenewalModal() {
     const key = subscription?.plan ? (PLAN_KEY_MAP[subscription.plan] ?? 'growth') : 'growth'
     setSelectedPlan(key)
@@ -807,14 +835,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </span>
                 </div>
                 <div className="grid md:grid-cols-3 gap-4">
-                  {PLANS.map(plan => (
+                  {PLANS.map(plan => {
+                    const blocked = isBlockedDowngrade(plan.key)
+                    return (
                     <button
                       key={plan.key}
-                      onClick={() => setSelectedPlan(plan.key)}
-                      className={`text-left rounded-2xl p-6 border-2 transition-all hover:shadow-md ${
-                        plan.highlight
-                          ? 'border-[#00C4BC] shadow-lg shadow-[#00C4BC]/10'
-                          : 'border-[#E5E7EB] hover:border-[#00C4BC]/40'
+                      onClick={() => { if (!blocked) setSelectedPlan(plan.key) }}
+                      disabled={blocked}
+                      className={`text-left rounded-2xl p-6 border-2 transition-all ${
+                        blocked
+                          ? 'border-[#E5E7EB] opacity-60 cursor-not-allowed'
+                          : plan.highlight
+                          ? 'border-[#00C4BC] shadow-lg shadow-[#00C4BC]/10 hover:shadow-md'
+                          : 'border-[#E5E7EB] hover:border-[#00C4BC]/40 hover:shadow-md'
                       }`}
                     >
                       {plan.highlight && (
@@ -836,15 +869,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           </li>
                         ))}
                       </ul>
-                      <div className={`mt-5 w-full py-2.5 rounded-xl text-sm font-bold text-center transition-colors ${
-                        plan.highlight
-                          ? 'bg-[#00C4BC] text-white'
-                          : 'bg-[#F3F4F6] text-[#0F1720]'
-                      }`}>
-                        Elegir {plan.name}
-                      </div>
+                      {blocked ? (
+                        <div className="mt-5 rounded-xl bg-[#FFF7ED] border border-[#FED7AA] p-3 text-[11px] leading-relaxed text-[#9A3412]">
+                          Ya tenés un plan superior activo. Para no perder los días que ya pagaste, vas a poder cambiar a este plan
+                          {subEndsAtFormatted ? <> a partir del <span className="font-bold">{subEndsAtFormatted}</span>.</> : ' cuando venza tu suscripción.'}
+                        </div>
+                      ) : (
+                        <div className={`mt-5 w-full py-2.5 rounded-xl text-sm font-bold text-center transition-colors ${
+                          plan.highlight
+                            ? 'bg-[#00C4BC] text-white'
+                            : 'bg-[#F3F4F6] text-[#0F1720]'
+                        }`}>
+                          Elegir {plan.name}
+                        </div>
+                      )}
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
                 <p className="text-center text-xs text-[#6B7280] mt-5">
                   Mensajes WhatsApp adicionales disponibles en packs.

@@ -20,12 +20,13 @@ export const TIPOS = [
   'Control', 'Armonizacion facial', 'Otro',
 ]
 
-export function PaymentModal({ token, patients: initialPatients, professionals, payment, preselectedPatientId, clinicName, myProfessionalName, profesionalIvaCondition, hasAfipConfig, onClose, onSaved }: {
+export function PaymentModal({ token, patients: initialPatients, professionals, payment, preselectedPatientId, prefillAmount, clinicName, myProfessionalName, profesionalIvaCondition, hasAfipConfig, onClose, onSaved }: {
   token: string
   patients: any[]
   professionals: any[]
   payment?: any | null
   preselectedPatientId?: string | null
+  prefillAmount?: number | null
   clinicName?: string
   myProfessionalName?: string
   profesionalIvaCondition?: string
@@ -38,7 +39,7 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
     patient_id: payment?.patient_id ?? preselectedPatientId ?? '',
     concept: payment?.concept ?? '',
     total_amount: payment?.total_amount != null ? String(Number(payment.total_amount)) : '',
-    amount: payment?.amount != null ? String(Number(payment.amount)) : '0',
+    amount: payment?.amount != null ? String(Number(payment.amount)) : (prefillAmount != null && prefillAmount > 0 ? String(prefillAmount) : '0'),
     method: payment?.method ?? 'cash',
     installments: String(payment?.installments ?? 1),
     notes: payment?.notes ?? '',
@@ -388,19 +389,27 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 font-bold text-sm">$</span>
                   <input type="number" value={form.total_amount} onChange={e => set('total_amount', e.target.value)}
                     placeholder="0"
-                    className="w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
+                    className="no-spinner w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
                     min="0" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Entregado</label>
+                <div className="flex items-center justify-between mb-1.5 min-h-[16px]">
+                  <label className="text-xs font-semibold text-app3 uppercase tracking-wider">Entregado</label>
+                  {totalAmount > 0 && (
+                    <button type="button" onClick={() => set('amount', String(totalAmount))}
+                      className="text-xs font-semibold text-[#00C4BC] hover:underline active:scale-95 transition-transform">
+                      Total: ${totalAmount.toLocaleString('es-AR')}
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 font-bold text-sm">$</span>
                   <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
                     onFocus={() => { if (form.amount === '0') set('amount', '') }}
                     onBlur={() => { if (form.amount === '') set('amount', '0') }}
                     placeholder="0"
-                    className="w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
+                    className="no-spinner w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
                     min="0" required />
                 </div>
               </div>

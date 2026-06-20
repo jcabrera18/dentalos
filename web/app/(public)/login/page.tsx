@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Plus_Jakarta_Sans } from 'next/font/google'
-import { ArrowRight, Calendar, TrendingUp, Users, FileText } from 'lucide-react'
+import { ArrowRight, Calendar, TrendingUp, Users, FileText, Eye, EyeOff } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -127,7 +127,7 @@ function LeftPanel() {
         {/* Stats strip */}
         <div className="mt-auto border-t border-white/8 pt-6 grid grid-cols-3 gap-4">
           {[
-            { num: '10 días', label: 'Prueba gratis' },
+            { num: '14 días', label: 'Prueba gratis' },
             { num: '5 min', label: 'Para empezar' },
             { num: '24/7', label: 'Desde cualquier lugar' },
           ].map((s, i) => (
@@ -165,6 +165,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -222,15 +223,25 @@ function LoginForm() {
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
-          <input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            required
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="w-full border border-[#E5E7EB] bg-[#F9FAFB] rounded-xl px-4 py-3 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:border-[#00C4BC] focus:bg-white transition-all text-sm"
-          />
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="••••••••"
+              required
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full border border-[#E5E7EB] bg-[#F9FAFB] rounded-xl px-4 py-3 pr-12 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:border-[#00C4BC] focus:bg-white transition-all text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              className="absolute inset-y-0 right-0 flex items-center px-4 text-[#9CA3AF] hover:text-[#0F1720] transition-colors"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         {/* Submit */}
@@ -256,7 +267,7 @@ function LoginForm() {
         href="/register"
         className="block w-full border-2 border-[#00C4BC]/30 hover:border-[#00C4BC] hover:bg-[#E6F8F1] text-[#00C4BC] font-bold py-3.5 rounded-xl transition-all text-sm text-center"
       >
-        Empezar 10 días gratis
+        Empezar 14 días gratis
       </Link>
 
       <p className="text-center text-xs text-[#9CA3AF] mt-4">

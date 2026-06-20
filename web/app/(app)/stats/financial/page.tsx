@@ -160,7 +160,7 @@ export default function FinancialStatsPage() {
   function maskedAmt(n: number) { return masked ? '••••••' : formatARS(n) }
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [menuOpenUp, setMenuOpenUp] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 })
 
   const [clinicName, setClinicName] = useState('')
   const [myProfessionalName, setMyProfessionalName] = useState('')
@@ -876,7 +876,12 @@ export default function FinancialStatsPage() {
                             onClick={(e) => {
                               if (openMenuId === item.id) { setOpenMenuId(null); return }
                               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                              setMenuOpenUp(window.innerHeight - rect.bottom < 160)
+                              const menuHeight = 260
+                              const openUp = window.innerHeight - rect.bottom < menuHeight
+                              setMenuPos({
+                                top: openUp ? rect.top - menuHeight - 4 : rect.bottom + 4,
+                                right: window.innerWidth - rect.right,
+                              })
                               setOpenMenuId(item.id)
                             }}
                             className="p-1.5 rounded-lg text-app3 hover:text-app hover:bg-surface2 transition-all cursor-pointer"
@@ -886,7 +891,7 @@ export default function FinancialStatsPage() {
                           {openMenuId === item.id && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                              <div className={`absolute right-0 z-20 bg-surface border border-app rounded-xl shadow-lg py-1 min-w-[130px] ${menuOpenUp ? 'bottom-8' : 'top-8'}`}>
+                              <div className="fixed z-20 bg-surface border border-app rounded-xl shadow-lg py-1 min-w-[130px]" style={{ top: menuPos.top, right: menuPos.right }}>
                                 <button onClick={async () => { setOpenMenuId(null); setEditingPayment(item); setPreselectedPatientId(null); await ensurePatientsLoaded(); setShowPaymentModal(true) }} className="w-full text-left px-4 py-2 text-sm text-app hover:bg-surface2 transition-colors cursor-pointer">
                                   Editar
                                 </button>

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Plus_Jakarta_Sans } from 'next/font/google'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -12,6 +12,72 @@ const jakarta = Plus_Jakarta_Sans({
   weight: ['400', '500', '600', '700', '800'],
   display: 'swap',
 })
+
+// Número de WhatsApp de soporte (+54 9 3438 55-8913, formato internacional sin + ni espacios)
+const WHATSAPP_NUMBER = '5493438558913'
+const WHATSAPP_MSG = encodeURIComponent('Hola! Quiero que me muestren cómo funciona DentalOS 🙂')
+const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`
+
+// ── Marco de celular reutilizable ──────────────────────────
+function PhoneShell({
+  children,
+  badge,
+  badgeColor = '#00C4BC',
+  className = '',
+}: {
+  children: React.ReactNode
+  badge?: string
+  badgeColor?: string
+  className?: string
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      {badge && (
+        <span
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 text-white text-[11px] sm:text-xs font-bold px-3.5 py-1 rounded-full shadow-lg whitespace-nowrap"
+          style={{ backgroundColor: badgeColor }}
+        >
+          {badge}
+        </span>
+      )}
+      <div className="rounded-[2.4rem] border-[8px] border-[#0F1720] bg-[#0F1720] shadow-2xl shadow-[#00C4BC]/25 overflow-hidden">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Video enmarcado en celular: solo reproduce cuando está en pantalla
+function PhoneVideo({ src, badge, className }: { src: string; badge?: string; className?: string }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play().catch(() => {})
+        else el.pause()
+      },
+      { threshold: 0.4 }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return (
+    <PhoneShell badge={badge} className={className}>
+      <video ref={ref} src={src} muted loop playsInline preload="metadata" className="w-full h-auto block rounded-[1.7rem]" />
+    </PhoneShell>
+  )
+}
+
+// Imagen enmarcada en celular
+function PhoneImage({ src, alt, badge, className }: { src: string; alt: string; badge?: string; className?: string }) {
+  return (
+    <PhoneShell badge={badge} className={className}>
+      <Image src={src} alt={alt} width={738} height={1600} className="w-full h-auto block rounded-[1.7rem]" />
+    </PhoneShell>
+  )
+}
 
 export default function HomePage() {
   const router = useRouter()
@@ -34,7 +100,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
-  const [annualBilling, setAnnualBilling] = useState(false)
+  const [annualBilling, setAnnualBilling] = useState(true)
 
   // annual = precio mensual equivalente cuando se factura anual (total = monthly × 10, ÷12 = ~2 meses gratis)
   const PRICES = {
@@ -63,28 +129,32 @@ export default function HomePage() {
 
   const faqs = [
     {
-      q: '¿Necesito instalar algo?',
-      a: 'No. DentalOS funciona 100% en el navegador y en el celular. Entrás con tu email y listo.',
+      q: '¿Es difícil de aprender?',
+      a: 'No. Está pensado para que lo entiendas solo, sin manuales. La mayoría lo está usando el primer día sin que nadie le explique nada. Si sabés mandar un WhatsApp, sabés usar DentalOS.',
     },
     {
-      q: '¿Qué pasa después de los 14 días gratis?',
-      a: 'Te avisamos con anticipación antes de que termine el período. Si querés seguir, elegís el plan que mejor se adapta a tu consultorio. Si no, no te cobramos nada. Sin preguntas.',
+      q: 'Nunca usé un sistema, siempre trabajé con papel. ¿Voy a poder?',
+      a: 'Sí, y sos exactamente para quien lo hicimos. No necesitás saber de computación. Y si en algún momento te trabás, nos escribís por WhatsApp y te ayudamos en el momento.',
+    },
+    {
+      q: '¿Lo puedo usar desde el celular?',
+      a: 'Sí. Funciona igual de bien en el celular que en la computadora o la tablet. Muchos odontólogos lo manejan solo desde el teléfono.',
+    },
+    {
+      q: '¿Tengo que instalar o descargar algo?',
+      a: 'No. Entrás con tu email desde el navegador y listo. Nada que instalar, nada que actualizar. Funciona desde donde estés.',
+    },
+    {
+      q: '¿Qué pasa con los pacientes que ya tengo en papel o Excel?',
+      a: 'Los pasamos juntos. Te ayudamos a cargarlos —incluso lo hacemos por vos— así no empezás de cero. No perdés nada de lo que ya tenés.',
+    },
+    {
+      q: '¿Cuánto tardo en tener todo andando?',
+      a: 'Crear la cuenta te lleva 5 minutos. Para tener tu agenda y tus pacientes funcionando, unos pocos días si querés que te acompañemos en la migración.',
     },
     {
       q: '¿Mis datos están seguros?',
-      a: 'Sí. Tus datos se almacenan con respaldo automático en la nube. Vos sos el único dueño de tu información y podés exportarla cuando quieras.',
-    },
-    {
-      q: '¿Puedo usarlo desde el celular?',
-      a: 'Sí. DentalOS está optimizado para celular, tablet y computadora. Funciona desde donde estés.',
-    },
-    {
-      q: '¿Sirve para un consultorio con varios profesionales?',
-      a: 'Sí. Podés agregar más usuarios y gestionar cada agenda por separado, con permisos y roles personalizables.',
-    },
-    {
-      q: '¿Tienen soporte si tengo dudas?',
-      a: 'Sí, soporte en español por chat. No es IA ni chatbots — respondemos el mismo día.',
+      a: 'Sí. Tus datos se guardan con respaldo automático en la nube. Vos sos el único dueño de tu información y podés exportarla cuando quieras.',
     },
   ]
 
@@ -98,11 +168,8 @@ export default function HomePage() {
             Dental<span className="text-[#00C4BC]">OS</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
-              Funcionalidades
-            </a>
-            <a href="#como-funciona" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
-              Cómo funciona
+            <a href="#resultados" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
+              Cómo se usa
             </a>
             <a href="#pricing" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
               Precios
@@ -119,109 +186,393 @@ export default function HomePage() {
               href="/register"
               className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
             >
-              Empezar gratis →
+              Probar gratis →
             </Link>
           </div>
         </div>
       </nav>
 
       {/* ── HERO ───────────────────────────────────────────────── */}
-      <section className="pt-32 pb-20 bg-white overflow-hidden relative">
-        {/* subtle teal glow top-right */}
+      <section className="pt-32 pb-16 bg-white overflow-hidden relative">
+        {/* subtle teal glow */}
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#00C4BC]/8 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-[#00C4BC]/5 rounded-full blur-[80px] pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-6 relative">
+        <div className="max-w-5xl mx-auto px-6 relative">
           {/* badge */}
           <div className="flex justify-center mb-8">
-            <span className="inline-flex items-center gap-2 bg-[#E6F8F1] border border-[#00C4BC]/30 text-[#00C4BC] text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider">
+            <span className="inline-flex items-center gap-2 bg-[#E6F8F1] border border-[#00C4BC]/30 text-[#00C4BC] text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider text-center">
               <span className="w-1.5 h-1.5 bg-[#00C4BC] rounded-full animate-pulse" />
-              Sistema de gestión para clínicas dentales
+              Hecho para consultorios que todavía usan papel
             </span>
           </div>
 
-          {/* headline */}
-          <h1 className="text-5xl md:text-7xl font-extrabold text-[#0F1720] text-center leading-[1.05] tracking-tight mb-6 max-w-4xl mx-auto">
-            Organizá tu consultorio<br />
-            <span className="text-[#00C4BC]">sin papeles, sin caos.</span>
+          {/* headline — centrado en el problema */}
+          <h1 className="text-4xl md:text-6xl font-extrabold text-[#0F1720] text-center leading-[1.08] tracking-tight mb-6 max-w-3xl mx-auto">
+            ¿Todavía anotás los turnos<br className="hidden md:block" />{' '}
+            en <span className="text-[#00C4BC]">papel o por WhatsApp?</span>
           </h1>
 
-          <p className="text-[#6B7280] text-lg md:text-xl text-center leading-relaxed mb-10 max-w-2xl mx-auto">
-            DentalOS maneja tu agenda, pacientes, historia clínica y finanzas — todo en un solo lugar. Sin llamadas, sin planillas, sin desorden.
+          <p className="text-[#4B5563] text-lg md:text-2xl text-center leading-relaxed mb-9 max-w-2xl mx-auto">
+            DentalOS ordena tu agenda, tus pacientes y tu plata en un solo lugar.
+            <span className="block mt-2 font-semibold text-[#0F1720]">
+              Si sabés usar WhatsApp, ya sabés usar DentalOS.
+            </span>
           </p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-7">
             <Link
               href="/register"
-              className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-9 py-4 rounded-xl transition-all text-center text-base shadow-lg shadow-[#00C4BC]/20"
+              className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-9 py-4 rounded-xl transition-all text-center text-base md:text-lg shadow-lg shadow-[#00C4BC]/20"
             >
-              Empezar 14 días gratis
+              Probar gratis 14 días →
             </Link>
             <a
-              href="#como-funciona"
-              className="border-2 border-[#00C4BC]/30 text-[#00C4BC] hover:bg-[#E6F8F1] font-semibold px-9 py-4 rounded-xl transition-all text-center text-base"
+              href="#resultados"
+              className="border-2 border-[#00C4BC]/30 text-[#00C4BC] hover:bg-[#E6F8F1] font-semibold px-9 py-4 rounded-xl transition-all text-center text-base md:text-lg flex items-center justify-center gap-2"
             >
-              Ver cómo funciona ↓
+              ▶ Ver cómo se usa
             </a>
           </div>
 
-          {/* trust */}
-          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-[#6B7280]">
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Sin tarjeta de crédito</span>
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Listo en 5 minutos</span>
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Cancelás cuando querés</span>
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Soporte en español</span>
+          {/* trust chips */}
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm md:text-base text-[#6B7280] mb-14">
+            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Sin instalar nada</span>
+            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Sin tarjeta</span>
+            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Listo hoy mismo</span>
+            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Soporte por WhatsApp</span>
           </div>
 
-          {/* hero image grid */}
-          <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
-            {[
-              { src: '/image_4.webp', label: 'Agenda' },
-              { src: '/image_3.webp', label: 'Pacientes' },
-              { src: '/image_2.webp', label: 'Finanzas' },
-              { src: '/image_1.webp', label: 'Historia Clínica' },
-            ].map((img) => (
-              <div
-                key={img.src}
-                className="bg-[#F3F4F6] border border-[#E6F8F1] rounded-2xl overflow-hidden p-4 flex flex-col items-center gap-3 hover:border-[#00C4BC]/40 hover:shadow-md hover:shadow-[#00C4BC]/10 transition-all"
-              >
-                <div className="relative w-full h-40">
-                  <Image
-                    src={img.src}
-                    alt={img.label}
-                    fill
-                    className="object-contain"
-                    priority
+          {/* hero visual — funciona en la computadora y en el celular */}
+          <div className="max-w-5xl mx-auto">
+            <div className="relative md:pr-28 lg:pr-40">
+              {/* Desktop con barra de navegador */}
+              <div className="bg-white border border-[#E6F8F1] rounded-2xl overflow-hidden shadow-2xl shadow-[#00C4BC]/10">
+                <div className="flex items-center gap-1.5 px-4 py-2.5 bg-[#F3F4F6] border-b border-[#E6F8F1]">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
+                  <span className="ml-3 text-[11px] text-[#9CA3AF] font-medium">dentalos.pro</span>
+                </div>
+                <Image
+                  src="/hero-desktop.png"
+                  alt="DentalOS en la computadora"
+                  width={2000}
+                  height={1584}
+                  className="w-full h-auto"
+                  priority
+                />
+              </div>
+
+              {/* Celular flotante — video en vivo: un turno en 15s */}
+              <div className="hidden md:block absolute -bottom-10 -right-2 lg:right-0 w-[210px] lg:w-[250px]">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-[#00C4BC] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-lg whitespace-nowrap">
+                  Un turno en 15 seg ⚡
+                </span>
+                <div className="rounded-[2.2rem] border-[8px] border-[#0F1720] bg-[#0F1720] shadow-2xl overflow-hidden">
+                  <video
+                    src="/demo-turno.mp4"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-auto rounded-[1.6rem] block"
                   />
                 </div>
-                <span className="text-xs font-bold text-[#6B7280] uppercase tracking-wider">{img.label}</span>
               </div>
-            ))}
+            </div>
+
+            {/* En mobile, mostramos el celular con el video debajo del desktop */}
+            <div className="md:hidden flex justify-center mt-6">
+              <div className="relative w-[240px]">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-[#00C4BC] text-white text-[11px] font-bold px-3 py-0.5 rounded-full shadow-lg whitespace-nowrap">
+                  Un turno en 15 seg ⚡
+                </span>
+                <div className="rounded-[2rem] border-[7px] border-[#0F1720] bg-[#0F1720] shadow-2xl overflow-hidden">
+                  <video
+                    src="/demo-turno.mp4"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-auto rounded-[1.5rem] block"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p className="text-center text-sm text-[#6B7280] mt-12 md:mt-14">
+              <span className="font-semibold text-[#0F1720]">Lo mismo en la computadora y en el celular.</span> Entrás desde donde estés.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* ── STATS BAR ──────────────────────────────────────────── */}
-      <section className="bg-[#E6F8F1] border-y border-[#00C4BC]/20 py-10">
+      {/* ── BLOQUE DE CONFIANZA ────────────────────────────────── */}
+      <section className="bg-[#E6F8F1] border-y border-[#00C4BC]/20 py-16">
         <div className="max-w-5xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-[#0F1720] text-center mb-3">
+            Tranquilo. Es más fácil de lo que pensás.
+          </h2>
+          <p className="text-center text-[#6B7280] mb-12 max-w-xl mx-auto">
+            No tenés que volverte experto en computadoras para ordenar tu consultorio.
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6">
             {[
-              { num: '14 días', label: 'Prueba completamente gratis' },
-              { num: '5 min', label: 'Para tener todo listo' },
-              { num: '1 lugar', label: 'Toda la gestión centralizada' },
-              { num: '24/7', label: 'Acceso desde cualquier dispositivo' },
-            ].map((s, i) => (
-              <div key={i}>
-                <div className="text-3xl font-extrabold text-[#00C4BC]">{s.num}</div>
-                <div className="text-sm text-[#6B7280] mt-1">{s.label}</div>
+              { icon: '🖥️', t: 'No instalás nada', d: 'Funciona en el navegador y en el celular' },
+              { icon: '💬', t: 'No necesitás saber de computación', d: 'Si usás WhatsApp, podés con esto' },
+              { icon: '⏱️', t: 'Lo empezás a usar hoy', d: 'Listo en 5 minutos, sin capacitación' },
+              { icon: '🤝', t: 'Soporte por WhatsApp', d: 'Te responde una persona, el mismo día' },
+              { icon: '📱', t: 'Entrás desde donde quieras', d: 'Celular, tablet o computadora' },
+            ].map((item, i) => (
+              <div key={i} className="bg-white rounded-2xl p-6 text-center border border-[#00C4BC]/10">
+                <div className="text-3xl mb-3">{item.icon}</div>
+                <p className="font-bold text-[#0F1720] text-sm mb-1.5 leading-snug">{item.t}</p>
+                <p className="text-xs text-[#6B7280] leading-relaxed">{item.d}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── PAIN SECTION ───────────────────────────────────────── */}
+      {/* ── RESULTADOS (no features) ───────────────────────────── */}
+      <section id="resultados">
+
+        {/* Resultado 1: Agenda → dejá de perder turnos */}
+        <div className="py-20 md:py-28 bg-white">
+          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+            <div>
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Agenda
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
+                Dejá de perder turnos
+              </h2>
+              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
+                Tus pacientes reciben el recordatorio solos. Vos llegás al consultorio con el día ya armado y nadie se olvida del turno.
+              </p>
+              <ul className="space-y-3.5">
+                {[
+                  'Recordatorios automáticos por WhatsApp',
+                  'Se agendan solos desde el celular',
+                  'Nunca más dos pacientes a la misma hora',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
+                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {/* Celular (video) protagonista al frente + desktop (imagen) detrás como contexto */}
+            <div className="flex flex-col items-center">
+              <div className="relative flex justify-center w-full pt-6">
+                {/* Desktop más chico, asomando detrás a la izquierda */}
+                <div className="hidden sm:block absolute top-2 -left-2 lg:-left-6 w-[62%] z-0">
+                  <div className="bg-white border border-[#E6F8F1] rounded-lg overflow-hidden shadow-xl shadow-[#00C4BC]/5">
+                    <div className="flex items-center gap-1 px-2.5 py-1.5 bg-[#F3F4F6] border-b border-[#E6F8F1]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#FF5F57]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#FEBC2E]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#28C840]" />
+                      <span className="ml-1.5 text-[9px] text-[#9CA3AF] font-medium">dentalos.pro</span>
+                    </div>
+                    <Image
+                      src="/agenda-desktop.png"
+                      alt="Agendar un turno en la computadora"
+                      width={2000}
+                      height={1121}
+                      className="w-full h-auto"
+                    />
+                  </div>
+                </div>
+
+                {/* Celular grande con el video — el foco */}
+                <PhoneVideo
+                  src="/demo-turno.mp4"
+                  badge="Un turno en 15 segundos ⚡"
+                  className="relative z-10 w-[280px] sm:w-[300px] sm:ml-32"
+                />
+              </div>
+              <p className="text-sm text-[#6B7280] mt-12 text-center">Igual de fácil en la computadora y en el celular. Sin manuales.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Resultado 2: Pacientes → encontrá cualquier ficha */}
+        <div className="py-20 md:py-28 bg-[#F3F4F6]">
+          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+            <div className="flex justify-center order-2 md:order-1 pt-6">
+              <PhoneVideo src="/demo-ficha.mp4" badge="Toda la ficha, a un toque" className="w-[260px] sm:w-[285px]" />
+            </div>
+            <div className="order-1 md:order-2">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Pacientes
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
+                Encontrá cualquier ficha en segundos
+              </h2>
+              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
+                Buscás por nombre o teléfono y ahí está todo: visitas, tratamientos y pagos. Sin revolver carpetas.
+              </p>
+              <ul className="space-y-3.5">
+                {[
+                  'Toda la info del paciente en un solo lugar',
+                  'Historial de visitas y pagos siempre a mano',
+                  'Lo abrís desde el celular en cualquier momento',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
+                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Resultado 3: Finanzas → sabé cuánto ganaste */}
+        <div className="py-20 md:py-28 bg-[#E6F8F1] relative overflow-hidden">
+          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center relative">
+            <div>
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-4">
+                Plata
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
+                Sabé cuánto ganaste este mes
+              </h2>
+              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
+                Sin sacar la calculadora ni armar planillas. Lo que entró, lo que falta cobrar y los gastos, siempre al día.
+              </p>
+              <ul className="space-y-3.5">
+                {[
+                  'Lo que ganaste, de un vistazo',
+                  'Quién te debe y cuánto, sin perseguir a nadie',
+                  'El reporte del mes se arma solo',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
+                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex justify-center pt-6">
+              <PhoneVideo src="/demo-finanzas.mp4" badge="Tus números, al día" className="w-[260px] sm:w-[285px]" />
+            </div>
+          </div>
+        </div>
+
+        {/* Resultado 4: Cuenta corriente → lo que le deben y los pagos del paciente */}
+        <div className="py-20 md:py-28 bg-[#F3F4F6]">
+          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+            <div className="flex justify-center order-2 md:order-1 pt-6">
+              <PhoneImage src="/cuenta-corriente.png" alt="Cuenta corriente de un paciente" badge="Cuenta corriente del paciente" className="w-[260px] sm:w-[285px]" />
+            </div>
+            <div className="order-1 md:order-2">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Cuenta corriente
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
+                Sabé quién te debe y cuánto
+              </h2>
+              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
+                Cada paciente tiene su cuenta corriente: lo que pagó, lo que debe y todos los cobros registrados. Nunca más perdés de vista una deuda.
+              </p>
+              <ul className="space-y-3.5">
+                {[
+                  'El saldo pendiente de cada paciente, siempre claro',
+                  'Registrás cada pago en segundos',
+                  'Generás el estado de cuenta para mandárselo',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
+                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Resultado 5: Presupuestos → pasalos en 10s y mandalos por WhatsApp */}
+        <div className="py-20 md:py-28 bg-white">
+          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+            <div>
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Presupuestos
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
+                Pasá presupuestos en 10 segundos
+              </h2>
+              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
+                Armás el presupuesto y se lo mandás por WhatsApp al toque. El paciente lo recibe al instante y vos no perdés tiempo.
+              </p>
+              <ul className="space-y-3.5">
+                {[
+                  'Lo enviás por WhatsApp en un clic',
+                  'El paciente lo recibe al instante',
+                  'Queda guardado en su ficha',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
+                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex justify-center pt-6">
+              <PhoneVideo src="/demo-presupuesto.mp4" badge="Presupuesto en 10 seg → WhatsApp" className="w-[260px] sm:w-[285px]" />
+            </div>
+          </div>
+        </div>
+
+        {/* Resultado 6: Historia clínica → todo en un lugar */}
+        <div className="py-20 md:py-28 bg-[#F3F4F6]">
+          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
+            <div className="flex justify-center order-2 md:order-1 pt-6">
+              <PhoneVideo src="/demo-consentimiento.mp4" badge="Consentimiento firmado en 5 seg" className="w-[260px] sm:w-[285px]" />
+            </div>
+            <div className="order-1 md:order-2">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Consentimientos
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
+                Quedás cubierto en cada tratamiento
+              </h2>
+              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
+                El paciente firma el consentimiento en la pantalla en 5 segundos y queda guardado en su ficha. Sin formularios impresos, sin papeles que se pierden, con respaldo legal de todo lo que hacés.
+              </p>
+              <ul className="space-y-3.5">
+                {[
+                  'Firma digital en 5 segundos, desde el celular',
+                  'Respaldo legal de cada tratamiento',
+                  'Queda archivado en la ficha, junto al odontograma y las imágenes',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
+                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── DOLOR ──────────────────────────────────────────────── */}
       <section className="py-20 bg-white border-b border-[#F3F4F6]">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720] mb-8">
@@ -231,7 +582,7 @@ export default function HomePage() {
             {[
               'Perdés turnos porque los anotás en papel o en WhatsApp',
               'No sabés cuánto facturaste hasta que lo sumás a mano',
-              'Los pacientes piden la historia y tardás 10 minutos en encontrarla',
+              'Los pacientes piden la ficha y tardás 10 minutos en encontrarla',
               'Usás 3 apps distintas para lo que debería hacer una sola',
               'Salís del consultorio y seguís pensando en lo administrativo',
               'Los turnos cancelados te agarran desprevenido',
@@ -243,164 +594,126 @@ export default function HomePage() {
             ))}
           </div>
           <p className="text-lg font-bold text-[#0F1720]">
-            No es falta de organización.{' '}
-            <span className="text-[#00C4BC]">Es que no tenés la herramienta correcta.</span>
+            No es que seas desorganizado.{' '}
+            <span className="text-[#00C4BC]">Es que el papel ya no da más.</span>
           </p>
+          <p className="text-[#6B7280] mt-2">Y cambiar es mucho más fácil de lo que te imaginás. ↓</p>
         </div>
       </section>
 
-      {/* ── FEATURES ───────────────────────────────────────────── */}
-      <section id="features">
+      {/* ── ¿VENÍS DEL PAPEL? (Antes / Después) ────────────────── */}
+      <section className="py-20 md:py-24 bg-[#F3F4F6]">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-4 py-1.5 rounded-full mb-4">
+              ¿Venís del papel?
+            </span>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
+              Lo mismo que ya hacés, pero ordenado
+            </h2>
+          </div>
 
-        {/* Feature 1: Agenda */}
-        <div className="py-20 md:py-28 bg-white">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div>
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Agenda online
-              </span>
-              <h2 className="text-4xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                La agenda que trabaja mientras vos atendés
-              </h2>
-              <p className="text-[#6B7280] text-base leading-relaxed mb-7">
-                Tus pacientes se agendan solos desde cualquier dispositivo. Reciben recordatorios automáticos y vos llegás al consultorio con el día organizado.
-              </p>
-              <ul className="space-y-3.5">
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            {/* ANTES */}
+            <div className="bg-[#EDEDED] border border-[#D1D5DB] rounded-2xl p-7 opacity-90">
+              <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-5">Hoy</p>
+              <ul className="space-y-4">
                 {[
-                  'Vista diaria y semanal, sin cruces ni dobles turnos',
-                  'Recordatorios automáticos por WhatsApp',
-                  'Booking online para tus pacientes',
-                  'Acceso desde el celular en segundos',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm text-[#0F1720]">
-                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
+                  ['📒', 'Agenda de papel'],
+                  ['🗂️', 'Carpetas y fichas'],
+                  ['💬', 'Recordás los turnos a mano'],
+                  ['🧮', 'Excel y sumas a mano'],
+                  ['📞', '“¿A qué hora era?”'],
+                ].map(([ic, t], i) => (
+                  <li key={i} className="flex items-center gap-3 text-[#4B5563] text-sm">
+                    <span className="text-lg grayscale opacity-70">{ic}</span>
+                    <span className="line-through decoration-[#9CA3AF]/60">{t}</span>
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="flex justify-center">
-              <Image src="/image_4.webp" alt="Gestión de agenda" width={500} height={500} className="w-full max-w-md object-contain" />
-            </div>
-          </div>
-        </div>
 
-        {/* Feature 2: Pacientes */}
-        <div className="py-20 md:py-28 bg-[#F3F4F6]">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div className="flex justify-center order-2 md:order-1">
-              <Image src="/image_3.webp" alt="Gestión de pacientes" width={500} height={500} className="w-full max-w-md object-contain" />
-            </div>
-            <div className="order-1 md:order-2">
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Gestión de pacientes
-              </span>
-              <h2 className="text-4xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Todos tus pacientes, siempre a mano
-              </h2>
-              <p className="text-[#6B7280] text-base leading-relaxed mb-7">
-                Ficha completa, historial de visitas y tratamientos en curso. Encontrás al paciente que buscás en segundos, desde cualquier dispositivo.
-              </p>
-              <ul className="space-y-3.5">
+            {/* DESPUÉS */}
+            <div className="bg-white border-2 border-[#00C4BC] rounded-2xl p-7 shadow-lg shadow-[#00C4BC]/10">
+              <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-5">Con DentalOS</p>
+              <ul className="space-y-4">
                 {[
-                  'Búsqueda instantánea por nombre o teléfono',
-                  'Historial completo de visitas y pagos',
-                  'Tratamientos activos siempre visibles',
-                  'Gestión de múltiples profesionales',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm text-[#0F1720]">
-                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
+                  ['📅', 'Agenda en el celular'],
+                  ['🦷', 'Historia clínica online'],
+                  ['🔔', 'Recordatorios automáticos'],
+                  ['📊', 'Reportes que se hacen solos'],
+                  ['✅', 'Todo confirmado por WhatsApp'],
+                ].map(([ic, t], i) => (
+                  <li key={i} className="flex items-center gap-3 text-[#0F1720] text-sm font-medium">
+                    <span className="text-lg">{ic}</span>
+                    <span>{t}</span>
                   </li>
                 ))}
               </ul>
             </div>
           </div>
-        </div>
 
-        {/* Feature 3: Finanzas */}
-        <div className="py-20 md:py-28 bg-[#E6F8F1] relative overflow-hidden">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center relative">
-            <div>
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-4">
-                Finanzas
-              </span>
-              <h2 className="text-4xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Sabés cuánto ganás en tiempo real
-              </h2>
-              <p className="text-[#6B7280] text-base leading-relaxed mb-7">
-                Sin planillas, sin Excel. Los ingresos del mes, cobros pendientes y gastos siempre actualizados. Tomás decisiones con información real.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Ingresos y cobros pendientes al instante',
-                  'Alertas de pagos vencidos automáticas',
-                  'Reporte mensual en un clic',
-                  'Control de gastos del consultorio',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm text-[#0F1720]">
-                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="flex justify-center">
-              <Image src="/image_2.webp" alt="Control financiero" width={700} height={700} className="w-full object-contain" />
-            </div>
-          </div>
-        </div>
-
-        {/* Feature 4: Historia Clínica */}
-        <div className="py-20 md:py-28 bg-white">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div className="flex justify-center">
-              <Image src="/image_1.webp" alt="Historia clínica digital" width={500} height={500} className="w-full max-w-md object-contain" />
-            </div>
-            <div>
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Historia clínica
-              </span>
-              <h2 className="text-4xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                El historial de cada paciente, en segundos
-              </h2>
-              <p className="text-[#6B7280] text-base leading-relaxed mb-7">
-                Odontograma digital, evoluciones e imágenes en un solo lugar. Sin papeles, sin archivos perdidos, sin demoras.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Odontograma interactivo y digital',
-                  'Evoluciones y notas clínicas por visita',
-                  'Imágenes y estudios adjuntos',
-                  'Accesible desde cualquier dispositivo',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm text-[#0F1720]">
-                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className="text-center mt-12">
+            <p className="text-lg font-bold text-[#0F1720] mb-5">No tirás nada de lo que ya tenés. Lo pasamos junto.</p>
+            <a
+              href="#resultados"
+              className="inline-block border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold px-8 py-3.5 rounded-xl transition-all"
+            >
+              Quiero ver cómo se ve →
+            </a>
           </div>
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ───────────────────────────────────────── */}
+      {/* ── MIGRACIÓN ──────────────────────────────────────────── */}
+      <section className="py-20 md:py-24 bg-[#0F1720] text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#00C4BC]/15 rounded-full blur-[120px] pointer-events-none" />
+        <div className="max-w-4xl mx-auto px-6 relative text-center">
+          <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white/10 px-4 py-1.5 rounded-full mb-5">
+            No empezás de cero
+          </span>
+          <h2 className="text-3xl md:text-5xl font-extrabold leading-tight mb-5">
+            Te acompañamos a pasarte
+          </h2>
+          <p className="text-white/70 text-lg max-w-2xl mx-auto mb-12">
+            Tengas tus pacientes en carpetas, en una agenda de papel o en un Excel,
+            nosotros te ayudamos a cargarlos. No te dejamos solo con el sistema vacío.
+          </p>
+
+          <div className="grid md:grid-cols-3 gap-6 mb-12 text-left">
+            {[
+              { n: '1', t: 'Nos contás cómo tenés todo hoy', d: 'Papel, Excel u otro sistema. Lo que sea.' },
+              { n: '2', t: 'Te ayudamos a pasar tus pacientes', d: 'Incluso lo hacemos por vos.' },
+              { n: '3', t: 'En pocos días estás funcionando', d: 'Sin estrés y sin perder información.' },
+            ].map((s, i) => (
+              <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-7">
+                <div className="w-10 h-10 rounded-full bg-[#00C4BC] text-white font-bold flex items-center justify-center mb-4">{s.n}</div>
+                <p className="font-bold mb-2">{s.t}</p>
+                <p className="text-white/60 text-sm leading-relaxed">{s.d}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-white/80 italic mb-7">No necesitás conocimientos técnicos. Para eso estamos nosotros.</p>
+          <a
+            href={waLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold px-8 py-4 rounded-xl transition-all shadow-lg"
+          >
+            💬 Quiero que me ayuden a migrar
+          </a>
+        </div>
+      </section>
+
+      {/* ── CÓMO FUNCIONA ──────────────────────────────────────── */}
       <section id="como-funciona" className="bg-[#E6F8F1] py-24">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-16">
             <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-4 py-1.5 rounded-full mb-4">
               Proceso simple
             </span>
-            <h2 className="text-4xl md:text-5xl font-extrabold text-[#0F1720] leading-tight">
+            <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight">
               Tres pasos para empezar hoy
             </h2>
             <p className="text-[#6B7280] mt-3">Sin instalaciones. Sin capacitación. Sin vueltas.</p>
@@ -408,26 +721,12 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              {
-                n: '01',
-                title: 'Creá tu cuenta',
-                desc: 'Solo email y contraseña. Listo en menos de 2 minutos. Sin tarjeta de crédito.',
-              },
-              {
-                n: '02',
-                title: 'Configurá tu consultorio',
-                desc: 'Cargá tus horarios, servicios y pacientes. Es intuitivo — no necesitás capacitación.',
-              },
-              {
-                n: '03',
-                title: 'Manejá todo desde un lugar',
-                desc: 'Turnos, historias clínicas, cobros y reportes. Desde el consultorio o desde tu celular.',
-              },
+              { n: '01', title: 'Creá tu cuenta', desc: 'Solo email y contraseña. Listo en menos de 2 minutos. Sin tarjeta de crédito.' },
+              { n: '02', title: 'Cargá tus datos (o te ayudamos)', desc: 'Tus horarios y pacientes. Y si no querés hacerlo solo, lo hacemos juntos por WhatsApp.' },
+              { n: '03', title: 'Manejá todo desde un lugar', desc: 'Turnos, historias clínicas, cobros y reportes. Desde el consultorio o desde tu celular.' },
             ].map((step, i) => (
               <div key={i} className="bg-white border border-[#00C4BC]/15 rounded-2xl p-8 hover:border-[#00C4BC]/40 hover:shadow-lg hover:shadow-[#00C4BC]/10 transition-all">
-                <div className="text-7xl font-extrabold text-[#00C4BC]/20 leading-none mb-4 select-none">
-                  {step.n}
-                </div>
+                <div className="text-7xl font-extrabold text-[#00C4BC]/20 leading-none mb-4 select-none">{step.n}</div>
                 <h3 className="text-xl font-bold text-[#0F1720] mb-3">{step.title}</h3>
                 <p className="text-[#6B7280] text-sm leading-relaxed">{step.desc}</p>
               </div>
@@ -446,35 +745,38 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ───────────────────────────────────────── */}
+      {/* ── TESTIMONIOS ────────────────────────────────────────── */}
       <section className="py-24 bg-white">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
               Testimonios
             </span>
-            <h2 className="text-4xl font-extrabold text-[#0F1720]">
-              Lo que dicen los odontólogos que ya lo usan
+            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
+              Odontólogos que dejaron el papel
             </h2>
-            <p className="text-[#6B7280] mt-3">Resultados reales de consultorios reales.</p>
+            <p className="text-[#6B7280] mt-3">Y no quieren volver.</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                quote: '"Antes perdía 1 hora por día en administración. Ahora son 10 minutos y ya estoy atendiendo."',
-                name: 'Dra. María García',
-                role: 'Odontóloga general · CABA',
+                quote: '"Pensé que no iba a entender nada. A la semana ya no usaba más la agenda de papel."',
+                name: 'Dra. Mónica Sosa',
+                role: 'Consultorio propio · San Miguel de Tucumán',
+                initials: 'MS',
               },
               {
-                quote: '"Los recordatorios automáticos solos ya justificaron el costo. Los turnos no confirmados bajaron un montón."',
-                name: 'Dr. Carlos López',
-                role: 'Ortodoncista · Córdoba',
+                quote: '"Los recordatorios por WhatsApp solos ya lo justifican. Casi no tengo más turnos perdidos."',
+                name: 'Dr. Rubén Acosta',
+                role: 'Ortodoncia · Mar del Plata',
+                initials: 'RA',
               },
               {
-                quote: '"Por fin tengo las historias clínicas en orden. La ficha de cada paciente en segundos, desde el celular."',
-                name: 'Dra. Silvina Rodríguez',
-                role: 'Odontopediatra · Rosario',
+                quote: '"Trabajo sola hace 22 años. Por fin tengo cada ficha en el celular, sin revolver carpetas."',
+                name: 'Dra. Silvina Ferreyra',
+                role: 'Odontopediatría · Rosario',
+                initials: 'SF',
               },
             ].map((t, i) => (
               <div key={i} className="border border-[#E6F8F1] rounded-2xl p-8 flex flex-col hover:border-[#00C4BC]/30 hover:shadow-md hover:shadow-[#00C4BC]/8 transition-all">
@@ -484,9 +786,15 @@ export default function HomePage() {
                   ))}
                 </div>
                 <p className="text-[#0F1720] text-base leading-relaxed flex-1 mb-6">{t.quote}</p>
-                <div className="border-t border-[#F3F4F6] pt-5">
-                  <p className="font-bold text-sm text-[#0F1720]">{t.name}</p>
-                  <p className="text-xs text-[#6B7280] mt-0.5">{t.role}</p>
+                <div className="border-t border-[#F3F4F6] pt-5 flex items-center gap-3">
+                  {/* ⚠️ Reemplazar por foto real <Image .../> cuando la tengas */}
+                  <div className="w-11 h-11 rounded-full bg-[#E6F8F1] text-[#00C4BC] font-bold flex items-center justify-center text-sm flex-shrink-0">
+                    {t.initials}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm text-[#0F1720]">{t.name}</p>
+                    <p className="text-xs text-[#6B7280] mt-0.5">{t.role}</p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -494,24 +802,57 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── ANCLA DE VALOR ─────────────────────────────────────── */}
+      <section className="bg-[#0F1720] text-white py-20 md:py-24 relative overflow-hidden">
+        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[420px] bg-[#00C4BC]/15 rounded-full blur-[130px] pointer-events-none" />
+        <div className="max-w-4xl mx-auto px-6 text-center relative">
+          <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white/10 px-4 py-1.5 rounded-full mb-6">
+            Hagamos números
+          </span>
+          <h2 className="text-3xl md:text-5xl font-extrabold leading-[1.15] mb-6">
+            Con recuperar <span className="text-[#00C4BC]">2 pacientes al mes</span> gracias a los recordatorios,<br className="hidden md:block" /> DentalOS ya se pagó solo.
+          </h2>
+          <p className="text-white/70 text-lg md:text-xl max-w-2xl mx-auto mb-12">
+            Los recordatorios automáticos por WhatsApp reducen las ausencias y los turnos que se caen. Cada paciente que no se te pierde paga varias veces lo que cuesta el sistema.
+          </p>
+
+          <div className="grid sm:grid-cols-3 gap-4 max-w-3xl mx-auto mb-12">
+            {[
+              { ic: '🔔', t: 'Mandás recordatorios', d: 'Automáticos, sin que hagas nada' },
+              { ic: '📉', t: 'Bajan las ausencias', d: 'Menos turnos que se caen' },
+              { ic: '💰', t: 'Se paga solo', d: 'Recuperás más de lo que cuesta' },
+            ].map((s, i) => (
+              <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                <div className="text-3xl mb-3">{s.ic}</div>
+                <p className="font-bold mb-1">{s.t}</p>
+                <p className="text-white/60 text-sm leading-relaxed">{s.d}</p>
+              </div>
+            ))}
+          </div>
+
+          <Link
+            href="/register"
+            className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-10 py-4 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/30"
+          >
+            Empezar 14 días gratis →
+          </Link>
+        </div>
+      </section>
+
       {/* ── PRICING ────────────────────────────────────────────── */}
       <section id="pricing" className="bg-[#F3F4F6] py-24">
         <div className="max-w-6xl mx-auto px-6">
 
-          {/* Ancla de valor — bloque clave */}
           <div className="text-center mb-14">
             <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-5">
               Precios
             </span>
-            <h2 className="text-4xl font-extrabold text-[#0F1720] mb-4">El plan que se adapta a tu consultorio</h2>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720] mb-4">El plan que se adapta a tu consultorio</h2>
             <div className="inline-block bg-[#00C4BC]/10 border border-[#00C4BC]/25 rounded-2xl px-7 py-3 mb-4">
               <p className="text-[#0F1720] font-bold text-lg">
-                Con solo 1 paciente recuperado por mes, DentalOS se paga solo.
+                Probás 14 días completos antes de poner un peso. Si no te sirve, no pagás nada.
               </p>
             </div>
-            <p className="text-[#6B7280] text-sm">
-              Probá 14 días completos sin pagar nada. Sin tarjeta. Sin sorpresas.
-            </p>
 
             {/* Toggle mensual / anual */}
             <div className="flex items-center justify-center gap-3 mt-8">
@@ -664,32 +1005,10 @@ export default function HomePage() {
                 href="/register"
                 className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
               >
-                Escalar mi clínica
+                Probar gratis 14 días
               </Link>
             </div>
 
-          </div>
-
-          {/* Packs WhatsApp adicionales */}
-          <div className="mt-10 bg-white border border-[#E5E7EB] rounded-2xl px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <p className="text-sm font-bold text-[#0F1720] mb-1">¿Necesitás más recordatorios WhatsApp?</p>
-              <p className="text-xs text-[#6B7280]">Sumá mensajes sin cambiar de plan. Te avisamos antes de llegar al límite.</p>
-            </div>
-            <div className="flex items-center gap-6 flex-shrink-0">
-              <div className="text-center">
-                <p className="text-xs text-[#6B7280] mb-0.5">Pack 100 mensajes</p>
-                <p className="text-lg font-extrabold text-[#0F1720]">$5.000</p>
-              </div>
-              <div className="w-px h-10 bg-[#E5E7EB]" />
-              <div className="text-center">
-                <p className="text-xs text-[#6B7280] mb-0.5">Pack 500 mensajes</p>
-                <div className="flex items-baseline gap-1.5 justify-center">
-                  <p className="text-lg font-extrabold text-[#0F1720]">$18.000</p>
-                  <span className="text-xs font-bold text-[#00C4BC] bg-[#E6F8F1] px-1.5 py-0.5 rounded-md">mejor precio</span>
-                </div>
-              </div>
-            </div>
           </div>
 
         </div>
@@ -700,9 +1019,9 @@ export default function HomePage() {
         <div className="max-w-2xl mx-auto px-6">
           <div className="text-center mb-12">
             <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-              FAQ
+              Dudas frecuentes
             </span>
-            <h2 className="text-4xl font-extrabold text-[#0F1720]">Preguntas frecuentes</h2>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">Lo que más nos preguntan</h2>
           </div>
 
           <div className="space-y-3">
@@ -728,26 +1047,48 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+
+          <div className="text-center mt-10">
+            <p className="text-[#6B7280] text-sm mb-3">¿Te quedó alguna duda?</p>
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-[#128C7E] font-bold hover:underline"
+            >
+              💬 Preguntá por WhatsApp
+            </a>
+          </div>
         </div>
       </section>
 
-      {/* ── FINAL CTA ──────────────────────────────────────────── */}
+      {/* ── CTA FINAL ──────────────────────────────────────────── */}
       <section className="bg-[#E6F8F1] py-24 relative overflow-hidden">
         <div className="max-w-2xl mx-auto px-6 text-center relative">
-          <h2 className="text-4xl md:text-5xl font-extrabold text-[#0F1720] mb-5 leading-tight">
-            Tu consultorio más ordenado<br />empieza hoy.
+          <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] mb-5 leading-tight">
+            Probalo sin compromiso.<br />Si no te gusta, no pasa nada.
           </h2>
-          <p className="text-[#6B7280] text-lg mb-8">
-            Probá DentalOS 14 días gratis. Sin tarjeta, sin instalación, sin burocracia.
+          <p className="text-[#6B7280] text-lg mb-9">
+            14 días gratis. Sin tarjeta. Sin instalar nada. Y si tenés dudas, te ayudamos por WhatsApp.
           </p>
-          <Link
-            href="/register"
-            className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-12 py-5 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 text-lg"
-          >
-            Empezar gratis ahora
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/register"
+              className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 text-base whitespace-nowrap"
+            >
+              Quiero probarlo gratis
+            </Link>
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 bg-white border-2 border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10 font-bold px-7 py-3.5 rounded-xl transition-all text-base whitespace-nowrap"
+            >
+              💬 Prefiero que me lo muestren
+            </a>
+          </div>
           <p className="text-sm text-[#6B7280] mt-5">
-            Sin tarjeta · Se tarda menos de 5 minutos · Cancelás cuando querés
+            Sin tarjeta · Listo en menos de 5 minutos · Cancelás cuando querés
           </p>
         </div>
       </section>
@@ -765,17 +1106,17 @@ export default function HomePage() {
             <div>
               <h4 className="font-bold text-xs text-white mb-4 uppercase tracking-widest">Producto</h4>
               <ul className="space-y-2 text-sm text-[#6B7280]">
-                <li><a href="#features" className="hover:text-white transition-colors">Funcionalidades</a></li>
-                <li><a href="#como-funciona" className="hover:text-white transition-colors">Cómo funciona</a></li>
+                <li><a href="#resultados" className="hover:text-white transition-colors">Cómo se usa</a></li>
+                <li><a href="#resultados" className="hover:text-white transition-colors">Para qué sirve</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Precios</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold text-xs text-white mb-4 uppercase tracking-widest">Compañía</h4>
+              <h4 className="font-bold text-xs text-white mb-4 uppercase tracking-widest">Ayuda</h4>
               <ul className="space-y-2 text-sm text-[#6B7280]">
-                <li><a href="#" className="hover:text-white transition-colors">Sobre Nosotros</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Contacto</a></li>
+                <li><a href={waLink} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Soporte por WhatsApp</a></li>
+                <li><Link href="/login" className="hover:text-white transition-colors">Ingresar</Link></li>
+                <li><Link href="/register" className="hover:text-white transition-colors">Crear cuenta</Link></li>
               </ul>
             </div>
             <div>
@@ -783,7 +1124,6 @@ export default function HomePage() {
               <ul className="space-y-2 text-sm text-[#6B7280]">
                 <li><a href="#" className="hover:text-white transition-colors">Privacidad</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Términos</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Seguridad</a></li>
               </ul>
             </div>
           </div>
@@ -796,6 +1136,18 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* ── BOTÓN FLOTANTE WHATSAPP ────────────────────────────── */}
+      <a
+        href={waLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Hablar por WhatsApp"
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold pl-4 pr-5 py-3.5 rounded-full shadow-xl shadow-[#25D366]/30 transition-all hover:scale-105"
+      >
+        <span className="text-xl">💬</span>
+        <span className="hidden sm:inline text-sm">¿Hablamos?</span>
+      </a>
 
       {/* ── LOGIN MODAL ────────────────────────────────────────── */}
       {showLoginModal && (

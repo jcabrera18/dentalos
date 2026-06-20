@@ -8,7 +8,7 @@ const ThemeContext = createContext<{
   theme: Theme
   setTheme: (t: Theme) => void
 }>({
-  theme: 'dark',
+  theme: 'light',
   setTheme: () => {}
 })
 
@@ -35,11 +35,11 @@ export function PlansModalProvider({ openPlansModal, children }: { openPlansModa
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('dark')
+  const [theme, setThemeState] = useState<Theme>('light')
 
   useEffect(() => {
     const saved = localStorage.getItem('theme') as Theme
-    const initial = saved ?? 'dark'
+    const initial = saved ?? 'light'
     setThemeState(initial)
     document.documentElement.classList.toggle('dark', initial === 'dark')
     document.documentElement.classList.toggle('light', initial === 'light')
