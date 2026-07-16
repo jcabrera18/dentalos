@@ -138,7 +138,8 @@ export function NotificationBell() {
             )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          {/* Alto acotado: ~3 ítems visibles, el resto (hasta 10) queda en scroll */}
+          <div className="max-h-[19rem] overflow-y-auto">
             {isLoading ? (
               <p className="px-4 py-6 text-sm text-app3 text-center">Cargando…</p>
             ) : items.length === 0 ? (

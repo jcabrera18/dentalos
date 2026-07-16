@@ -64,7 +64,7 @@ export function useNotificationsInbox(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.notificationsInbox,
     queryFn: async (): Promise<AppNotification[]> =>
-      (await authedApiFetch('/notifications/inbox?limit=20')).data ?? [],
+      (await authedApiFetch('/notifications/inbox?limit=10')).data ?? [],
     enabled,
     staleTime: 1000 * 15,
   })
