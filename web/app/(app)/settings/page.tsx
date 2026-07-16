@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
-import { usePlansModal } from '@/app/providers'
-import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown } from 'lucide-react'
+import { usePlansModal, useAppTheme } from '@/app/providers'
+import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown, UserPlus, Sun, Moon, LogOut } from 'lucide-react'
 
 const DAYS = [
   { key: 0, label: 'Lunes' },
@@ -622,6 +623,198 @@ function AfipConfigSection({ token }: { token: string }) {
   )
 }
 
+function AccountActionsSection() {
+  const supabase = createClient()
+  const router = useRouter()
+  const { theme, setTheme } = useAppTheme()
+  const [mounted, setMounted] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'loading'>('idle')
+  const [showInviteSuccess, setShowInviteSuccess] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  async function handleCopyInviteLink() {
+    setCopyState('loading')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('No session')
+      const res = await apiFetch('/professionals/invite', {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({ role: 'professional' }),
+      })
+      const link: string = res.data.link
+      setInviteLink(link)
+      try {
+        await navigator.clipboard.writeText(link)
+        setLinkCopied(true)
+      } catch {
+        setLinkCopied(false)
+      }
+      setShowInviteSuccess(true)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error al generar el link')
+    } finally {
+      setCopyState('idle')
+    }
+  }
+
+  async function handleCopyLinkManual() {
+    if (!inviteLink) return
+    try {
+      await navigator.clipboard.writeText(inviteLink)
+      setLinkCopied(true)
+    } catch {
+      // el usuario puede seleccionar el texto manualmente
+    }
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/')
+  }
+
+  return (
+    <>
+      <div className="bg-surface border border-app rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-app">
+          <h2 className="font-semibold text-app">Cuenta y sesión</h2>
+          <p className="text-xs text-app3 mt-0.5">
+            Invitá profesionales, cambiá el tema y cerrá tu sesión.
+          </p>
+        </div>
+
+        <div className="divide-y divide-app">
+          {/* Invitar profesional */}
+          <button
+            onClick={handleCopyInviteLink}
+            disabled={copyState === 'loading'}
+            className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-app hover:bg-surface2/60 disabled:opacity-50 transition-colors text-left"
+          >
+            <UserPlus size={18} strokeWidth={1.8} className="text-app3 shrink-0" />
+            <span className="flex-1">{copyState === 'loading' ? 'Generando link...' : 'Invitar profesional'}</span>
+          </button>
+
+          {/* Tema claro / oscuro */}
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-app hover:bg-surface2/60 transition-colors text-left"
+          >
+            {mounted
+              ? theme === 'dark'
+                ? <Sun size={18} strokeWidth={1.8} className="text-app3 shrink-0" />
+                : <Moon size={18} strokeWidth={1.8} className="text-app3 shrink-0" />
+              : <Sun size={18} strokeWidth={1.8} className="text-app3 shrink-0" />
+            }
+            <span className="flex-1">{mounted ? (theme === 'dark' ? 'Modo claro' : 'Modo oscuro') : 'Modo claro'}</span>
+          </button>
+
+          {/* Cerrar sesión */}
+          <button
+            onClick={() => setShowLogoutModal(true)}
+            className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-500/5 transition-colors text-left"
+          >
+            <LogOut size={18} strokeWidth={1.8} className="shrink-0" />
+            <span className="flex-1">Cerrar sesión</span>
+          </button>
+        </div>
+      </div>
+
+      {showInviteSuccess && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-[#E6F8F1] flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">🔗</span>
+            </div>
+            <h3 className="font-bold text-lg text-app mb-2">
+              {linkCopied ? '¡Link copiado!' : 'Link generado'}
+            </h3>
+            <p className="text-app3 text-sm mb-4">
+              Compartí este link con el profesional que querés invitar. Una vez que se una a tu clínica, podrá:
+            </p>
+            <ul className="text-left text-sm text-app3 space-y-2 mb-4">
+              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">📅</span> Ver y gestionar la agenda</li>
+              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">👥</span> Compartir y acceder a los pacientes</li>
+              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">💰</span> Ver las finanzas de la clínica</li>
+            </ul>
+            {inviteLink && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 bg-surface2 rounded-xl px-3 py-2 text-left">
+                  <span className="text-xs text-app3 truncate flex-1 font-mono select-all">{inviteLink}</span>
+                  <button
+                    onClick={handleCopyLinkManual}
+                    className="shrink-0 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                  >
+                    {linkCopied ? '✓' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => { setShowInviteSuccess(false); setInviteLink(null); setLinkCopied(false) }}
+              className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <h3 className="font-bold text-lg text-app mb-2">Sin permiso</h3>
+            <p className="text-app3 text-sm mb-6">
+              {errorMessage === 'Only owner or admin can generate invite links'
+                ? 'Solo el dueño o un administrador pueden generar links de invitación.'
+                : errorMessage}
+            </p>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="w-full bg-surface2 hover:bg-surface3 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">👋</span>
+            </div>
+            <h3 className="font-bold text-lg text-app mb-2">¿Cerrar sesión?</h3>
+            <p className="text-app3 text-sm mb-6">
+              Vas a salir de DentalOS. Podés volver a entrar cuando quieras.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 bg-surface2 hover:bg-surface3 active:scale-95 text-app font-semibold py-3 rounded-xl transition-all">
+                Cancelar
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex-1 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
+                Salir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function SettingsPage() {
   const [token, setToken]               = useState('')
   const [professionals, setProfessionals] = useState<any[]>([])
@@ -801,6 +994,7 @@ export default function SettingsPage() {
           <h2 className="text-base font-semibold text-app">Cuenta y facturación</h2>
           <PlanCard />
           {token && <AfipConfigSection token={token} />}
+          <AccountActionsSection />
         </div>
 
         {/* Right column: agenda */}

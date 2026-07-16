@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [createdPayment, setCreatedPayment] = useState<any>(null)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [inactiveOpen, setInactiveOpen] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const qc = useQueryClient()
@@ -610,11 +611,18 @@ export default function DashboardPage() {
         {/* Pacientes inactivos */}
         {inactive.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/40 rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-amber-200 dark:border-amber-800/30 flex items-center justify-between">
+            <button
+              onClick={() => setInactiveOpen(o => !o)}
+              className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-amber-100/40 dark:hover:bg-amber-900/10 transition-colors cursor-pointer"
+            >
               <h3 className="font-semibold text-amber-600 dark:text-amber-400 text-sm">Sin turno hace +90 días</h3>
-              <span className="text-xs font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-1 rounded-full">{inactive.length}</span>
-            </div>
-            <div className="divide-y divide-amber-200 dark:divide-amber-800/20">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-1 rounded-full">{inactive.length}</span>
+                <ChevronDown size={16} className={`text-amber-600 dark:text-amber-400 transition-transform ${inactiveOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+            {inactiveOpen && (
+            <div className="divide-y divide-amber-200 dark:divide-amber-800/20 border-t border-amber-200 dark:border-amber-800/30">
               {inactive.slice(0, 5).map((p: any) => (
                 <div key={p.id} className="px-5 py-3 flex items-center gap-3 hover:bg-amber-100/60 dark:hover:bg-amber-900/10 transition-colors">
                   <div className="w-8 h-8 rounded-full bg-amber-200 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -642,6 +650,7 @@ export default function DashboardPage() {
                 <div className="px-5 py-3 text-center text-sm text-app3">+{inactive.length - 5} pacientes más</div>
               )}
             </div>
+            )}
           </div>
         )}
 

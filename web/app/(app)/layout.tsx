@@ -562,32 +562,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <span className="text-lg font-extrabold tracking-tight text-app">
           Dental<span className="text-[#00C4BC]">OS</span>
         </span>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCopyInviteLink}
-            disabled={copyState === 'loading'}
-            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] disabled:opacity-50 transition-colors"
-          >
-            <UserPlus size={14} strokeWidth={1.8} />
-            {copyState === 'loading' ? '...' : copyState === 'copied' ? '¡Copiado!' : ''}
-          </button>
-          <NotificationBell />
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="text-app3 hover:text-app transition-colors"
-          >
-            {mounted
-              ? theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />
-              : <Sun size={18} />
-            }
-          </button>
-          <button
-            onClick={() => setShowLogoutModal(true)}
-            className="text-app3 hover:text-app transition-colors"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
+        <NotificationBell />
       </div>
 
       {/* ── CONTENIDO ───────────────────────────────────────────── */}

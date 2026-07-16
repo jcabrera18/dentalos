@@ -74,13 +74,25 @@ export function useMarkNotificationRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
-      authedApiFetch(`/notifications/inbox/${id}/read`, { method: 'POST' }),
+      // Body '{}' obligatorio: apiFetch manda Content-Type JSON y Fastify
+      // rechaza el POST si el cuerpo va vacío (FST_ERR_CTP_EMPTY_JSON_BODY).
+      authedApiFetch(`/notifications/inbox/${id}/read`, { method: 'POST', body: '{}' }),
     onMutate: async (id) => {
+      // Cancelamos refetches en vuelo para que no pisen el update optimista.
+      await qc.cancelQueries({ queryKey: queryKeys.notificationsUnread })
+      const prevCount = qc.getQueryData<number>(queryKeys.notificationsUnread)
+      const prevInbox = qc.getQueryData<AppNotification[]>(queryKeys.notificationsInbox)
       // Optimista: marca leída en la lista y baja el badge al instante.
       qc.setQueryData<AppNotification[]>(queryKeys.notificationsInbox, prev =>
         prev?.map(n => (n.id === id && !n.read_at ? { ...n, read_at: new Date().toISOString() } : n)))
       qc.setQueryData<number>(queryKeys.notificationsUnread, prev =>
         typeof prev === 'number' ? Math.max(0, prev - 1) : prev)
+      return { prevCount, prevInbox }
+    },
+    // Si el server falla (ej. falta permiso UPDATE), volvemos al estado real.
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prevCount !== undefined) qc.setQueryData(queryKeys.notificationsUnread, ctx.prevCount)
+      if (ctx?.prevInbox !== undefined) qc.setQueryData(queryKeys.notificationsInbox, ctx.prevInbox)
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.notificationsUnread })
@@ -91,12 +103,20 @@ export function useMarkNotificationRead() {
 export function useMarkAllNotificationsRead() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => authedApiFetch('/notifications/inbox/read-all', { method: 'POST' }),
+    mutationFn: () => authedApiFetch('/notifications/inbox/read-all', { method: 'POST', body: '{}' }),
     onMutate: async () => {
+      await qc.cancelQueries({ queryKey: queryKeys.notificationsUnread })
+      const prevCount = qc.getQueryData<number>(queryKeys.notificationsUnread)
+      const prevInbox = qc.getQueryData<AppNotification[]>(queryKeys.notificationsInbox)
       const now = new Date().toISOString()
       qc.setQueryData<AppNotification[]>(queryKeys.notificationsInbox, prev =>
         prev?.map(n => (n.read_at ? n : { ...n, read_at: now })))
       qc.setQueryData<number>(queryKeys.notificationsUnread, 0)
+      return { prevCount, prevInbox }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevCount !== undefined) qc.setQueryData(queryKeys.notificationsUnread, ctx.prevCount)
+      if (ctx?.prevInbox !== undefined) qc.setQueryData(queryKeys.notificationsInbox, ctx.prevInbox)
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.notificationsUnread })
