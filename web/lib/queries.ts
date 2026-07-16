@@ -27,6 +27,81 @@ export const queryKeys = {
   patientsList: (query: string) => ['patients', 'list', query] as const,
   patientOdontogram: (id: string) => ['patient', id, 'odontogram'] as const,
   patientDiagnostics: (id: string) => ['patient', id, 'diagnostics'] as const,
+  notificationsInbox: ['notifications', 'inbox'] as const,
+  notificationsUnread: ['notifications', 'unread-count'] as const,
+}
+
+// ── Notificaciones in-app (campana) ──────────────────────
+export type AppNotification = {
+  id: string
+  type: string
+  title: string
+  body: string | null
+  appointment_id: string | null
+  patient_id: string | null
+  professional_id: string | null
+  metadata: Record<string, unknown>
+  read_at: string | null
+  created_at: string
+}
+
+// Contador de no leídas para el badge. Poll suave cada 30s; barato en el
+// backend (índice parcial + head count).
+export function useUnreadNotificationsCount() {
+  return useQuery({
+    queryKey: queryKeys.notificationsUnread,
+    queryFn: async (): Promise<number> => {
+      const res = await authedApiFetch('/notifications/inbox/unread-count')
+      return res.count ?? 0
+    },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  })
+}
+
+// Lista del inbox. Se carga al abrir el panel (enabled controlado por el caller).
+export function useNotificationsInbox(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.notificationsInbox,
+    queryFn: async (): Promise<AppNotification[]> =>
+      (await authedApiFetch('/notifications/inbox?limit=20')).data ?? [],
+    enabled,
+    staleTime: 1000 * 15,
+  })
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      authedApiFetch(`/notifications/inbox/${id}/read`, { method: 'POST' }),
+    onMutate: async (id) => {
+      // Optimista: marca leída en la lista y baja el badge al instante.
+      qc.setQueryData<AppNotification[]>(queryKeys.notificationsInbox, prev =>
+        prev?.map(n => (n.id === id && !n.read_at ? { ...n, read_at: new Date().toISOString() } : n)))
+      qc.setQueryData<number>(queryKeys.notificationsUnread, prev =>
+        typeof prev === 'number' ? Math.max(0, prev - 1) : prev)
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.notificationsUnread })
+    },
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => authedApiFetch('/notifications/inbox/read-all', { method: 'POST' }),
+    onMutate: async () => {
+      const now = new Date().toISOString()
+      qc.setQueryData<AppNotification[]>(queryKeys.notificationsInbox, prev =>
+        prev?.map(n => (n.read_at ? n : { ...n, read_at: now })))
+      qc.setQueryData<number>(queryKeys.notificationsUnread, 0)
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.notificationsUnread })
+    },
+  })
 }
 
 export type PatientSummary = {

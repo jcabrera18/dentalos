@@ -29,6 +29,7 @@ import {
 import { useSubscription, invalidateSubscriptionCache } from '@/lib/useSubscription'
 import { syncPatients } from '@/lib/patientsLocalDb'
 import { NavigationProgress } from '@/components/NavigationProgress'
+import { NotificationBell } from '@/components/NotificationBell'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -570,6 +571,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <UserPlus size={14} strokeWidth={1.8} />
             {copyState === 'loading' ? '...' : copyState === 'copied' ? '¡Copiado!' : ''}
           </button>
+          <NotificationBell />
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="text-app3 hover:text-app transition-colors"

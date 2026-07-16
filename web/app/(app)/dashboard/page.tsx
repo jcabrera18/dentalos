@@ -8,6 +8,7 @@ import { useMe, useDashboard, useUpdateAppointmentStatus, queryKeys } from '@/li
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
 import { InvoiceModal } from '@/components/InvoiceModal'
+import { NotificationBell } from '@/components/NotificationBell'
 
 export default function DashboardPage() {
   const [token, setToken] = useState('')
@@ -305,9 +306,15 @@ export default function DashboardPage() {
       <main className="p-6 max-w-4xl mx-auto">
 
         {/* Greeting */}
-        <div className="mb-5">
-          <h2 className="text-2xl font-bold">Buenos días, Od. {user?.first_name}</h2>
-          <p className="text-app2 mt-0.5 capitalize">{today}</p>
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold">Buenos días, Od. {user?.first_name}</h2>
+            <p className="text-app2 mt-0.5 capitalize">{today}</p>
+          </div>
+          {/* Campana solo en desktop; en mobile vive en la top bar del layout */}
+          <div className="hidden md:block pt-1">
+            <NotificationBell />
+          </div>
         </div>
 
         {/* Alertas de acción */}
