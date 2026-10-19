@@ -63,7 +63,8 @@ export function NotificationBell() {
 
     ;(async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      const clinicId = session?.user?.user_metadata?.clinic_id as string | undefined
+      // F0.0: clinic_id ahora vive en app_metadata; fallback a user_metadata (pre-backfill).
+      const clinicId = (session?.user?.app_metadata?.clinic_id ?? session?.user?.user_metadata?.clinic_id) as string | undefined
       if (!clinicId || !active) return
 
       channel = supabase

@@ -447,7 +447,8 @@ export default function PatientQuotesPage() {
       if (!session) { router.push('/'); return }
 
       const token = session.access_token
-      const profId: string = (session.user.user_metadata?.professional_id ?? session.user.id) as string
+      // F0.0: professional_id ahora vive en app_metadata; fallback a user_metadata (pre-backfill) y a sub.
+      const profId: string = (session.user.app_metadata?.professional_id ?? session.user.user_metadata?.professional_id ?? session.user.id) as string
       setMyProfessionalId(profId)
 
       const [patientRes, quotesRes, profsRes] = await Promise.all([

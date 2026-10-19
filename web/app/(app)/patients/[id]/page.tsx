@@ -2,6 +2,10 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import PatientDetailClient from './PatientDetailClient'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL!
+
+// F2: la carga inicial pasa por Fastify (no lee Supabase directo) para que el PHI
+// cifrado se descifre en la API. La sesión sigue leyéndose del cookie (sin hop de red).
 export default async function PatientDetailPage({
   params,
 }: {
@@ -10,36 +14,34 @@ export default async function PatientDetailPage({
   const { id } = await params
   const supabase = await createServerSupabaseClient()
 
-  // getSession() reads from the encrypted cookie — no network hop to Supabase Auth.
-  // RLS enforces clinic isolation via the JWT that's already in the cookie.
-  // All three run in parallel: session parse + both Supabase queries.
-  const [{ data: { session } }, patientRes, clinicalHistoryRes] = await Promise.all([
-    supabase.auth.getSession(),
-    supabase
-      .from('patients')
-      .select('id, first_name, last_name, document_type, document_number, date_of_birth, gender, phone, phone_alt, email, address, city, insurance_name, insurance_plan, insurance_number, allergies, current_medications, medical_notes, blood_type, referral_source, is_active, last_appointment_at, odontogram_type, notes, created_by, created_at, updated_at')
-      .eq('id', id)
-      .is('deleted_at', null)
-      .single(),
-    supabase
-      .from('patient_clinical_histories')
-      .select('*')
-      .eq('patient_id', id)
-      .maybeSingle(),
-  ])
-
+  const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
 
-  if (patientRes.error) {
-    console.error('[patient-page] patient query error:', patientRes.error)
+  const headers = { Authorization: `Bearer ${session.access_token}` }
+  const [patientRes, clinicalHistoryRes] = await Promise.all([
+    fetch(`${API_URL}/patients/${id}`, { headers, cache: 'no-store' }),
+    fetch(`${API_URL}/patients/${id}/clinical-history`, { headers, cache: 'no-store' }),
+  ])
+
+  let initialPatient = null
+  if (patientRes.ok) {
+    initialPatient = (await patientRes.json()).data ?? null
+  } else if (patientRes.status === 404) {
+    // El paciente no existe o es de otra clínica: dejamos que el cliente maneje el estado.
+  } else {
+    console.error('[patient-page] patient fetch failed:', patientRes.status)
   }
+
+  const initialClinicalHistory = clinicalHistoryRes.ok
+    ? (await clinicalHistoryRes.json()).data ?? null
+    : null
 
   return (
     <PatientDetailClient
-      initialPatient={patientRes.data ?? null}
+      initialPatient={initialPatient}
       initialToken={session.access_token}
       patientId={id}
-      initialClinicalHistory={clinicalHistoryRes.data ?? null}
+      initialClinicalHistory={initialClinicalHistory}
     />
   )
 }

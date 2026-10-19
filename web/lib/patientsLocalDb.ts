@@ -2,8 +2,15 @@
 // Store DEDICADO (no es el cache de React Query) porque el patrón de acceso es distinto:
 // se filtra en memoria y tiene su propio cursor de delta sync.
 // OJO: solo metadata liviana — NADA de archivos/radiografías ni data clínica.
+//
+// AISLAMIENTO POR SESIÓN (F0.6): las claves se namespacean por user id para que la cartera
+// de un usuario no se muestre ni se fusione con la de otro en un equipo compartido. Un guard
+// de "época" descarta cualquier sync que haya empezado en una sesión anterior (evita que un
+// sync tardío de A repueble IndexedDB después de que entró B). `clearLocalPatients()` borra
+// TODO el almacén (incluye el heredado global y los namespaces de otros usuarios).
 
-import { get, set, createStore, type UseStore } from 'idb-keyval'
+import { get, set, del, clear, createStore, type UseStore } from 'idb-keyval'
+import { createClient } from '@/lib/supabase'
 import { authedApiFetch, type PatientSummary } from './queries'
 
 export type LocalPatient = PatientSummary & {
@@ -20,18 +27,46 @@ function getStore() {
 }
 
 const PAGE_SIZE = 1000
-const KEY_PATIENTS = 'patients'
-const KEY_CURSOR = 'cursor'
+const kPatients = (uid: string) => `patients:${uid}`
+const kCursor   = (uid: string) => `cursor:${uid}`
+
+// Claves globales heredadas (sin namespace) de la versión anterior. Se eliminan al migrar.
+const LEGACY_KEY_PATIENTS = 'patients'
+const LEGACY_KEY_CURSOR   = 'cursor'
+let legacyCleaned = false
+
+// Guard de sesión: cada logout/cambio de usuario incrementa la época vía clearLocalPatients().
+// Un sync que empezó con una época anterior no escribe IndexedDB ni devuelve datos.
+let sessionEpoch = 0
+
+async function currentUserId(): Promise<string | null> {
+  // getSession() lee de almacenamiento local (sin red) — suficiente para namespacing.
+  const { data } = await createClient().auth.getSession()
+  return data.session?.user?.id ?? null
+}
+
+// Llamar al cerrar o cambiar de sesión: invalida syncs en vuelo y borra todo el almacén.
+export async function clearLocalPatients(): Promise<void> {
+  sessionEpoch++
+  inFlight = null
+  try {
+    await clear(getStore())
+  } catch {
+    // Si falla el borrado (p.ej. store ya cerrado), la época igual bloquea syncs tardíos.
+  }
+}
+
+export async function getLocalPatients(): Promise<LocalPatient[]> {
+  const uid = await currentUserId()
+  if (!uid) return []
+  return (await get(kPatients(uid), getStore())) ?? []
+}
 
 async function fetchPage(offset: number, since?: string): Promise<LocalPatient[]> {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
   if (since) params.set('since', since)
   const res = await authedApiFetch(`/patients/sync?${params.toString()}`)
   return res.data ?? []
-}
-
-export async function getLocalPatients(): Promise<LocalPatient[]> {
-  return (await get(KEY_PATIENTS, getStore())) ?? []
 }
 
 // Dedupe de concurrencia: si el layout y la página /patients disparan el sync a la vez,
@@ -47,9 +82,23 @@ export function syncPatients(): Promise<LocalPatient[]> {
 }
 
 async function doSync(): Promise<LocalPatient[]> {
+  const myEpoch = sessionEpoch
+  const uid = await currentUserId()
+  if (!uid) return []
+
   const s = getStore()
-  const existing: LocalPatient[] = (await get(KEY_PATIENTS, s)) ?? []
-  const cursor: string | undefined = await get(KEY_CURSOR, s)
+
+  // Migración única: borrar el almacén global heredado para que no quede data de otro usuario.
+  if (!legacyCleaned) {
+    legacyCleaned = true
+    await Promise.all([
+      del(LEGACY_KEY_PATIENTS, s),
+      del(LEGACY_KEY_CURSOR, s),
+    ]).catch(() => {})
+  }
+
+  const existing: LocalPatient[] = (await get(kPatients(uid), s)) ?? []
+  const cursor: string | undefined = await get(kCursor(uid), s)
 
   const byId = new Map<string, LocalPatient>(existing.map((p) => [p.id, p]))
   let maxUpdated = cursor ?? ''
@@ -66,9 +115,12 @@ async function doSync(): Promise<LocalPatient[]> {
     offset += PAGE_SIZE
   }
 
+  // La sesión cambió mientras sincronizábamos: descartar sin tocar IndexedDB.
+  if (sessionEpoch !== myEpoch) return []
+
   const merged = Array.from(byId.values())
-  await set(KEY_PATIENTS, merged, s)
-  if (maxUpdated) await set(KEY_CURSOR, maxUpdated, s)
+  await set(kPatients(uid), merged, s)
+  if (maxUpdated) await set(kCursor(uid), maxUpdated, s)
   return merged
 }
 

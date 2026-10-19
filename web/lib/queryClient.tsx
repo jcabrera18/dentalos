@@ -6,6 +6,11 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { get, set, del, createStore, type UseStore } from 'idb-keyval'
 import { createClient } from '@/lib/supabase'
+import { clearLocalPatients } from '@/lib/patientsLocalDb'
+
+// Recordamos el último usuario para detectar un cambio de identidad sin SIGNED_OUT previo
+// (p.ej. cierre abrupto de la pestaña): al entrar otro usuario, purgamos antes de usar cache.
+const LAST_UID_KEY = 'dentalos-last-uid'
 
 // Subí este número si cambia la forma de los datos cacheados (invalida todo lo persistido).
 const CACHE_BUSTER = 'v1'
@@ -54,15 +59,33 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     })
   )
 
-  // Limpia el cache persistido al cerrar sesión para no filtrar datos entre usuarios.
+  // Limpia TODAS las cachés locales (React Query + cartera de pacientes) al cerrar sesión o
+  // al detectar que entró un usuario distinto, para no filtrar datos entre usuarios.
   useEffect(() => {
+    const purgeAll = () => {
+      queryClient.clear()
+      void persister.removeClient()
+      void clearLocalPatients()
+    }
+
     const supabase = createClient()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
-      if (event === 'SIGNED_OUT') {
-        queryClient.clear()
-        void persister.removeClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event: string, session: { user?: { id?: string } } | null) => {
+        if (event === 'SIGNED_OUT') {
+          purgeAll()
+          try { localStorage.removeItem(LAST_UID_KEY) } catch {}
+          return
+        }
+        if (event === 'SIGNED_IN') {
+          const uid = session?.user?.id
+          if (!uid) return
+          let prev: string | null = null
+          try { prev = localStorage.getItem(LAST_UID_KEY) } catch {}
+          if (prev && prev !== uid) purgeAll()
+          try { localStorage.setItem(LAST_UID_KEY, uid) } catch {}
+        }
       }
-    })
+    )
     return () => subscription.unsubscribe()
   }, [queryClient, persister])
 
