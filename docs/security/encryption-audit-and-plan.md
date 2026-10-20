@@ -14,9 +14,43 @@ Convención: **[H]** = hecho verificado en código · **[I]** = inferencia · **
 
 ---
 
+## 0. Estado de implementación (actualizado 2026-10-19)
+
+> **Este plan fue IMPLEMENTADO y DESPLEGADO en producción.** Las secciones §1 en adelante son la
+> auditoría y el diseño **originales**; se conservan como contexto del "por qué". El estado
+> operativo vigente (variables, scripts, pendientes, rollback) vive en
+> **[`rollout-status.md`](rollout-status.md)**.
+
+- **Fase 0 (hallazgos previos al cifrado) — cerrada.** F0.0 autorización desde `app_metadata`
+  (fallback a `user_metadata` desactivado, `AUTH_ALLOW_USER_METADATA=false`); F0.1 archivos
+  cross-tenant; F0.2 scoping de `supabaseAdmin`; F0.3 `audit_log` a diffs sin PHI (+ scrub del
+  histórico); F0.4 secretos AFIP cifrados; F0.5 redacción de logs; F0.6 aislamiento de cachés
+  locales; F0.7 matriz de copias (`data-copies-matrix.md`).
+- **Fase 1 (core criptográfico) — hecha.** `lib/crypto` (AES-256-GCM, DEK por clínica envuelta por
+  KEK, blind index), tabla `tenant_keys`, abstracción KMS con **AWS KMS** (probado contra KMS real).
+- **Fase 2 (`patients` PHI) — hecha y desplegada.** `allergies`, `current_medications`,
+  `medical_notes`; carga inicial de la ficha migrada de lectura directa a Fastify.
+- **Fase 3 (historia clínica) — hecha y desplegada.** `patient_clinical_histories` y
+  `clinical_history_signatures` (snapshot firmado, firma, IP/UA).
+- **Rollout en prod OK**: migraciones 051–058 aplicadas; backfills (patients 317, AFIP 5, historias
+  81, firmas 49; 0 fallos); scrub de `audit_log`; **verificación 1159/1159** descifran == plano.
+- **Falta el *contract*** (irreversible): cambio de código a *enc-only* + `DROP` de las columnas en
+  claro — planeado en días, tras observación. **Hasta entonces el PHI sigue en el dump** (columnas
+  en claro no dropeadas); hoy hay **dual-write** y lectura desde `*_enc`.
+- **Fase 3 restante**: `consents`, turnos/tratamientos/odontograma, receptores de `invoices`,
+  notificaciones, Storage, blind index DNI/teléfono. **Fase 4** (rotación/rewrap/revocación/restore)
+  sin empezar.
+
+Convención de abajo: **[x]** hecho · **[~]** parcial/en proceso · **[ ]** pendiente.
+
+---
+
 ## 1. Executive Summary
 
-**[H] Hoy no existe ningún cifrado a nivel de aplicación ni de columna.** La extensión
+> **Nota (2026-10-19):** esta sección describe el estado **al momento de la auditoría**. Varios de
+> estos hallazgos **ya fueron resueltos** (ver §0). Se conserva el texto original como contexto.
+
+**[H] Al momento de la auditoría no existía ningún cifrado a nivel de aplicación ni de columna.** La extensión
 `pgcrypto` está habilitada (`001_core_schema.sql:8`) pero **nunca se usa**; los comentarios
 `-- encrypted at rest via Supabase Vault in prod` (`002_patients.sql:29`) y
 `-- encrypted in prod` (`003_appointments.sql:36`) son **aspiracionales y falsos** — no hay
@@ -616,17 +650,17 @@ del SDK (IAM role / `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`). La identidad A
 - DEK o respuestas descifradas cacheadas pueden sobrevivir a la revocación de acceso a KMS
   hasta la invalidación/expiración definida.
 
-**Decisiones técnicas pendientes (requieren input del equipo):**
-1. [ ] **Proveedor de KMS** (AWS/GCP/Infisical/Vault self-host) — define costo y operación.
-2. [ ] **Granularidad DEK** — recomiendo por clínica; confirmar.
+**Decisiones técnicas (estado):**
+1. [x] **Proveedor de KMS** → **AWS KMS** (DEK por clínica envuelta por la KEK).
+2. [x] **Granularidad DEK** → **por clínica**.
 3. [ ] **Búsqueda de nombres**: ¿mover 100% al cliente (ya hay base en IndexedDB) o mantener
-   nombres en claro con control de acceso reforzado?
-4. [ ] **`audit_log`**: ¿cifrar `old_data/new_data` o rediseñar a diffs sin PHI?
+   nombres en claro con control de acceso reforzado? *(Pendiente — Fase 3, con blind index.)*
+4. [x] **`audit_log`** → **diffs sin PHI** (trigger 055 + scrub del histórico).
 5. [ ] **Retención/supresión**: validación jurídica de si *crypto-shredding* satisface Ley 25.326
-   y normativa sanitaria.
-6. [ ] **Fuente de autorización**: membresías controladas por servidor o `app_metadata`,
-   estrategia de renovación/revocación y coherencia entre API y RLS (F0.0).
-7. [ ] **Cachés y revocación**: datos permitidos, retención, aislamiento por sesión y ventana
+   y normativa sanitaria. *(Pendiente — requiere asesoría legal.)*
+6. [x] **Fuente de autorización** → **`app_metadata` administrada por el servidor** (F0.0);
+   fallback a `user_metadata` desactivado en la API. Falta quitar `user_metadata` del RLS (inocuo hoy).
+7. [~] **Cachés y revocación**: aislamiento por sesión de IndexedDB hecho (F0.6); la ventana
    máxima aceptada tras revocar KMS; aplicar a API, workers, Redis y navegador según su función.
 
 ---
@@ -635,7 +669,13 @@ del SDK (IAM role / `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`). La identidad A
 
 **Si roban una copia completa de la base de Supabase:**
 
-- **Hoy leen, en texto plano y sin esfuerzo**: nombres y apellidos, DNI/CUIT, fecha de nacimiento,
+> **Estado actual (2026-10-19):** el alcance de Fases 2-3 ya está cifrado en columnas `*_enc`, pero
+> las columnas en claro **todavía existen** (dual-write, pendiente el *contract*). Es decir: **hasta
+> hacer el `DROP` de las columnas en claro, un dump todavía las contiene**. Tras el contract, los
+> campos cifrados (PHI de pacientes, historia clínica, firmas, secretos AFIP) ya **no** serían
+> legibles con solo el dump. El texto de abajo describe el estado **al momento de la auditoría**.
+
+- **Al momento de la auditoría leían, en texto plano y sin esfuerzo**: nombres y apellidos, DNI/CUIT, fecha de nacimiento,
   teléfonos, emails, direcciones, obra social, **alergias, medicación y notas médicas**, historia
   clínica (JSONB), diagnósticos, odontogramas, notas de tratamientos/sesiones, motivos de consulta
   y notas clínicas de turnos, **consentimientos firmados con IP/user-agent**, historial de
@@ -665,9 +705,13 @@ Verificar con §12.1 (dump completo del alcance migrado), §12.2 (KMS y cachés)
 
 ## Limitaciones de esta auditoría
 
-- **[H]** Basada en el código de `web/` y `../dentalos-api` a la fecha indicada. No se ejecutaron
-  migraciones ni se consultaron datos reales.
-- **No inspeccionado**: configuración de infraestructura de Supabase (cifrado de disco gestionado,
-  backups, PITR), Railway, el KMS (aún no existe), ni variables de entorno (por política de no
-  exponer secretos). Declarar como pendiente de revisión de infra.
+> **Nota (2026-10-19):** estas limitaciones aplican a la auditoría **original**. Desde entonces el
+> plan se implementó y desplegó: el KMS (AWS) existe y se probó contra datos reales, las migraciones
+> se aplicaron en prod y los backfills se corrieron y verificaron (1159/1159). Ver §0 y `rollout-status.md`.
+
+- **[H]** Basada en el código de `web/` y `../dentalos-api` a la fecha indicada. (La auditoría
+  original no ejecutó migraciones ni consultó datos reales; el rollout posterior sí.)
+- **No inspeccionado en la auditoría original**: configuración de infraestructura de Supabase (cifrado
+  de disco gestionado, backups, PITR), Railway, ni variables de entorno (por política de no exponer
+  secretos). Pendiente: revisión de infra (retención de backups previos al contract).
 - **[I/?]** marcados en el texto requieren verificación adicional antes de ejecutar.

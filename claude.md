@@ -1,210 +1,115 @@
-# DentalOS - Documentación Completa
+# DentalOS — Guía para Claude Code
 
-## Descripción del Proyecto
+SaaS multi-tenant de gestión para clínicas de salud (odontología primero), Argentina.
+Maneja datos clínicos sensibles de usuarios reales en producción. **Tratá seguridad y aislamiento entre clínicas como requisito, no como opción.**
 
-DentalOS es un sistema completo de gestión para clínicas dentales que incluye tanto el frontend (aplicación web) como el backend (API REST). Permite gestionar pacientes, citas, tratamientos, pagos, notificaciones y más, todo en un solo lugar.
+## Dos repos hermanos (mismo nivel de carpeta)
 
-## Stack Tecnológico
+| Repo | Qué es | Corre en |
+|------|--------|----------|
+| `dentalos/web` | Frontend Next.js 16 (App Router) + React 19 | `localhost:3001` |
+| `dentalos-api` | Backend Fastify 4 (TS, ESM) | `localhost:3000` |
 
-### Backend (dentalos-api)
-- **Runtime**: Node.js 20 + TypeScript
-- **Framework**: Fastify 4
-- **Base de Datos**: PostgreSQL via Supabase (managed)
-- **Autenticación**: Supabase Auth + JWT
-- **Colas**: BullMQ + Redis (Upstash)
-- **Notificaciones**: Twilio WhatsApp/SMS
-- **Despliegue**: Railway
+Este repo (`dentalos/`) contiene el **frontend** (`web/`) y esta documentación. El backend vive en `../dentalos-api` y **tiene su propio `CLAUDE.md` que es la fuente de verdad del backend** — leelo antes de tocar la API.
+Infra: Supabase (PostgreSQL + Auth + Storage), Upstash Redis (colas/cache), Vercel (web), Railway (API + worker).
 
-### Frontend (web)
-- **Framework**: Next.js 16 (App Router)
-- **Lenguaje**: TypeScript
-- **UI**: React 19, Tailwind CSS 4
-- **Base de Datos**: Supabase (SSR)
-- **Analytics**: PostHog
-- **Iconos**: Lucide React
-- **Gráficos**: Recharts
-- **Despliegue**: Vercel
+## Arquitectura en una pantalla
 
-## Estructura del Proyecto
-
-### Raíz (dentalos/)
 ```
-dentalos/
-├── supabase/
-│   └── migrations/          # Migraciones de base de datos
-│       ├── 001_core_schema.sql        # Esquemas base: clínicas, profesionales, RLS
-│       ├── 002_patients.sql           # Pacientes + búsqueda de texto completo
-│       ├── 003_appointments.sql       # Agenda + vistas
-│       ├── 004_treatments.sql         # Tratamientos, sesiones, odontograma
-│       ├── 005_payments.sql           # Pagos, presupuestos, vistas de caja
-│       ├── 006_notifications_consents_audit.sql
-│       └── 007_seed.sql               # Plantillas de consentimiento + función de onboarding
-├── web/                     # Frontend Next.js
-│   ├── app/
-│   │   ├── globals.css
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   ├── providers.tsx
-│   │   ├── booking/[professionalId]/page.tsx
-│   │   ├── dashboard/
-│   │   │   ├── layout.tsx
-│   │   │   ├── page.tsx
-│   │   │   ├── agenda/page.tsx
-│   │   │   ├── patients/
-│   │   │   │   ├── page.tsx
-│   │   │   │   └── [id]/
-│   │   │   │       ├── page.tsx
-│   │   │   │       └── appointment/page.tsx
-│   │   │   └── payments/page.tsx
-│   │   ├── providers/
-│   │   │   ├── pageview.tsx
-│   │   │   └── posthog.tsx
-│   │   └── register/page.tsx
-│   ├── lib/
-│   │   ├── api.ts
-│   │   └── supabase.ts
-│   └── public/
-├── package.json
-├── railway.toml
-├── README.md
-└── tsconfig.json
+Browser ──JWT Supabase──> Fastify API ──RLS──> Supabase/Postgres
+   │  (web, React Query)        │                     │
+   └── Supabase Auth directo    ├── Redis (cache/BullMQ)
+       (login/sesión)           ├── Worker (notifs WhatsApp/Twilio)
+                                 └── AFIP · MercadoPago · Nave (webhooks)
 ```
 
-### Backend (dentalos-api/)
+- El browser habla con Supabase Auth **directo** para la sesión, y con la API REST para **todo el dominio** (nunca escribe tablas de negocio vía Supabase client).
+- La API verifica el JWT (jose + JWKS), extrae `clinic_id`/`professional_id`/`role` del token y filtra por tenant. RLS en Postgres es la segunda barrera.
+- Mutaciones → React Query con updates optimistas; cache persistida en IndexedDB.
+
+## Convenciones obligatorias
+
+**Frontend (`web/`)**
+- Toda llamada a la API pasa por `lib/api.ts` (`apiFetch`) o los hooks de `lib/queries.ts` (`authedApiFetch`). Nunca `fetch()` crudo a la API.
+- Server Components para auth/guard; `'use client'` para interacción. Rutas en grupos `(app)` (privado) y `(public)`.
+- Data de servidor cacheable → hook en `lib/queries.ts` con clave en `queryKeys`. No metas binarios grandes (archivos/radiografías) en el cache persistido.
+- UI: Tailwind CSS 4, iconos `lucide-react`, gráficos `recharts`. Sin librería de formularios: estado con `useState` + validación manual.
+- Textos de UI en **español**; nombres de código en inglés.
+
+**Backend (`../dentalos-api/`)** — detalle en su `CLAUDE.md`
+- Validación con **zod** en cada handler. Respuestas `{ data, meta? }`; errores `reply.code(n).send({ error })`.
+- Imports relativos con extensión `.js` (ESM). Soft-delete con `deleted_at`.
+- Elegí el cliente Supabase correcto: `supabaseForUser` (RLS activo, default) vs `supabaseAdmin` (bypassa RLS, solo interno + `.eq('clinic_id', …)` manual).
+
+## Reglas críticas de seguridad (datos clínicos)
+
+1. **Aislamiento por clínica**: el `clinic_id` sale **siempre del JWT**, nunca del body/query del cliente. Toda query de tenant filtra por él.
+2. **RLS activo** en Postgres vía `current_clinic_id()`. Funciones `SECURITY DEFINER` y vistas requieren cuidado (ver `docs/architecture/database.md`).
+3. **Secretos**: nunca en el repo ni en estos `.md`. AFIP cert/key viven en `professionals` y solo se exponen como flags `has_cert/has_key`.
+4. **Archivos médicos**: bucket privado `patient-files`, sin RLS pública → solo `service_role` (la API) sirve URLs firmadas. No exponer el bucket al cliente.
+5. **Webhooks** (MP/Nave/Twilio/Zapier) verifican firma/API-key y son idempotentes. No debilitar esas comprobaciones.
+6. Al cerrar sesión, el cache de IndexedDB se limpia para no filtrar datos entre usuarios (`lib/queryClient.tsx`).
+
+## Comandos
+
+```bash
+# Frontend (web/)
+npm run dev        # Next dev en :3001
+npm run build      # build prod
+npm run lint       # eslint
+
+# Backend (../dentalos-api/)
+npm run dev        # API (tsx watch)
+npm run dev:worker # worker BullMQ (notificaciones)
+npm run build      # tsc → dist/
+npm run migrate    # aplica migraciones SQL (--reset para reiniciar)
+npm test           # vitest  (⚠ hoy no hay tests escritos)
+npm run lint
 ```
-dentalos-api/
-├── src/
-│   ├── server.ts            # Bootstrap de Fastify
-│   ├── lib/
-│   │   └── supabase.ts      # Cliente de DB (anon + service_role)
-│   ├── types/
-│   │   └── database.ts      # Tipos TypeScript para todas las tablas
-│   └── modules/
-│       ├── auth/routes.ts             # Login, registro, /me
-│       ├── patients/routes.ts         # CRUD + búsqueda + balance
-│       ├── appointments/routes.ts     # Calendario + gestión de estados
-│       ├── payments/routes.ts         # Pagos + presupuestos + reporte de caja
-│       ├── treatments/routes.ts       # Tratamientos + sesiones + odontograma
-│       ├── notifications/
-│       │   ├── routes.ts              # Envío manual + recordatorios masivos
-│       │   └── service.ts             # Colas BullMQ + envío Twilio
-│       ├── expenses/routes.ts
-│       ├── integrations/routes.ts
-│       ├── booking/routes.ts          # Booking público (sin auth)
-│       └── schedule-blocks/routes.ts
-├── scripts/
-│   └── migrate.js          # Ejecutor de migraciones
-├── .env
-├── package.json
-├── tsconfig.json
-└── railway.toml
-```
 
-## Funcionalidades Principales
+No hay tests automatizados todavía (ver `docs/development/testing.md`).
 
-### Gestión de Pacientes
-- CRUD completo de pacientes
-- Búsqueda de texto completo
-- Balance de cuenta por paciente
+## Cómo ubicar archivos relacionados ante una tarea
 
-### Agenda y Citas
-- Calendario interactivo
-- Gestión de estados de citas
-- Bloques de horario
+1. **Página/feature del frontend** → `web/app/(app)/<área>/…`. Componentes compartidos en `web/components/`.
+2. **Qué endpoint usa una página** → `docs/reference/dependency-map.md`.
+3. **Qué hace un endpoint / dónde está** → `docs/reference/api-map.md` → `../dentalos-api/src/modules/<módulo>/routes.ts`.
+4. **Tablas / RLS / RPC afectadas** → `docs/architecture/database.md` → `../dentalos-api/src/supabase/migrations/`.
+5. **Regla de negocio** → `docs/business/business-rules.md`.
 
-### Tratamientos
-- Gestión de tratamientos
-- Sesiones de tratamiento
-- Odontograma
+## Índice de documentación (cargá solo lo necesario)
 
-### Pagos y Finanzas
-- Registro de pagos
-- Presupuestos
-- Reportes de caja
-- Gastos
+| Archivo | Cuándo leerlo |
+|---------|---------------|
+| `docs/architecture/overview.md` | Entender el sistema completo / flujo de datos |
+| `docs/architecture/frontend.md` | Trabajar en `web/` (rutas, hooks, auth, cache) |
+| `docs/architecture/backend.md` | Trabajar en la API (resumen; detalle en `../dentalos-api/CLAUDE.md`) |
+| `docs/architecture/database.md` | Tablas, vistas, RPC, RLS, buckets |
+| `docs/architecture/integrations.md` | Twilio, AFIP, MercadoPago, Nave, Zapier, PostHog |
+| `docs/business/modules.md` | Qué módulos existen y su estado real |
+| `docs/business/business-rules.md` | Reglas de pagos, agenda, planes, facturación |
+| `docs/development/conventions.md` | Patrones de código detallados |
+| `docs/development/workflows.md` | Cómo correr, deployar, agregar features |
+| `docs/development/testing.md` | Estado de testing y cómo validar cambios |
+| `docs/reference/api-map.md` | Catálogo completo de endpoints |
+| `docs/reference/dependency-map.md` | Mapa página ↔ endpoint ↔ tabla |
 
-### Notificaciones
-- Envío manual de mensajes
-- Recordatorios automáticos
-- Integración con Twilio (WhatsApp/SMS)
+## Trabajar con mínimos tokens (progressive disclosure)
 
-### Autenticación y Autorización
-- Autenticación via Supabase Auth
-- JWT con verificación JWKS
-- Roles y permisos por clínica
+- **Primero este archivo**, después solo el doc del área afectada. No leas todo `docs/`.
+- Usá los mapas de `docs/reference/` para saltar directo al archivo correcto en vez de explorar.
+- Buscá por símbolo/ruta/patrón (`grep`), no leas archivos enteros. Excluí `node_modules`, `.next`, `dist`.
+- `web/app/(app)/agenda/page.tsx` y `patients/[id]/PatientDetailClient.tsx` son archivos grandes (>1k líneas): leé por rangos, no completos.
+- No repitas en tus respuestas arquitectura ya documentada; referenciá el `.md`.
+- Distinguí hechos verificados de hipótesis.
 
-### Booking Público
-- Reserva de citas sin autenticación
-- Integración con frontend
+## Mantenimiento de esta documentación
 
-## Cómo Ejecutar el Proyecto
+Actualizá solo el doc afectado, sin reescribir el resto:
+- Cambió/nació un endpoint → `reference/api-map.md` (+ `dependency-map.md` si una página lo usa).
+- Cambió una regla de negocio → `business/business-rules.md`.
+- Nuevo módulo → `business/modules.md`.
+- Cambió la arquitectura → `architecture/*`.
+- Cambió una convención global o regla de seguridad → este `CLAUDE.md`.
 
-### Backend (dentalos-api)
-1. Instalar dependencias: `npm install`
-2. Configurar variables de entorno (copiar `.env.example` a `.env`)
-3. Ejecutar migraciones: `npm run migrate`
-4. Ejecutar en desarrollo: `npm run dev`
-5. Ejecutar tests: `npm test`
-
-### Frontend (web)
-1. Instalar dependencias: `npm install`
-2. Configurar variables de entorno
-3. Ejecutar en desarrollo: `npm run dev` (puerto 3001)
-4. Construir para producción: `npm run build`
-
-### Base de Datos
-- Las migraciones se ejecutan via script en el backend
-- Usa Supabase para hosting managed de PostgreSQL
-
-## Despliegue
-- **Backend**: Railway
-- **Frontend**: Vercel
-- **Base de Datos**: Supabase
-
-## API Endpoints Principales
-- `/auth/*` - Autenticación
-- `/patients/*` - Gestión de pacientes
-- `/appointments/*` - Agenda y citas
-- `/payments/*` - Pagos y finanzas
-- `/treatments/*` - Tratamientos
-- `/notifications/*` - Notificaciones
-- `/public/booking/*` - Booking público
-
-## Seguridad
-- Rate limiting global (200 req/min por IP)
-- CORS configurado
-- Helmet para headers de seguridad
-- Autenticación JWT con Supabase
-- RLS (Row Level Security) en base de datos
-
-## Desarrollo
-- TypeScript en todo el proyecto
-- ESLint para linting
-- Vitest para tests
-- Pino para logging
-- Swagger UI para documentación de API en desarrollo (`/docs`)
-
-## Variables de Entorno
-### Backend
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `JWT_SECRET` (dummy, usa JWKS)
-- `REDIS_URL`
-- `TWILIO_*` (para notificaciones)
-- `ALLOWED_ORIGINS`
-- `PORT`
-
-### Frontend
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_POSTHOG_KEY`
-- `NEXT_PUBLIC_API_URL`
-
-## Notas Adicionales
-- El proyecto usa Railway para despliegue del backend y Vercel para el frontend.
-- Supabase maneja la base de datos y autenticación.
-- Integración con PostHog para analytics.
-- Soporte para WhatsApp/SMS via Twilio.
-- Arquitectura modular con Fastify para el backend.</content>
-<parameter name="filePath">/Users/juanignaciocabrera/Documents/GitHub/dentalos/claude.md
+No modifiques código de producción, migraciones ni configs al documentar.
