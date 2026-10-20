@@ -7,7 +7,15 @@ import { apiFetch } from '@/lib/api'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal, useAppTheme } from '@/app/providers'
-import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown, UserPlus, Sun, Moon, LogOut } from 'lucide-react'
+import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown, UserPlus, Sun, Moon, LogOut, Stethoscope } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/lib/queries'
+import { invalidateProfileCache } from '@/lib/profileCache'
+import { DISCIPLINES, DISCIPLINE_LABELS, normalizeDiscipline, type Discipline } from '@/lib/capabilities'
+
+// Activación progresiva: con el flag apagado no se muestra el cambio de especialidad
+// (todos quedan en odontología). La barrera real está en el backend.
+const MULTI_SPECIALTY_ENABLED = process.env.NEXT_PUBLIC_VITALOS_MULTI_SPECIALTY_SIGNUP === 'true'
 
 const DAYS = [
   { key: 0, label: 'Lunes' },
@@ -588,10 +596,10 @@ function AfipConfigSection({ token }: { token: string }) {
               ¿No sabés cómo obtener el certificado AFIP?{' '}
               Escribinos a{' '}
               <a
-                href="mailto:soporte.dentalos@gmail.com"
+                href="mailto:soporte@vitalos.com.ar"
                 className="text-[#00C4BC] font-medium hover:underline"
               >
-                soporte.dentalos@gmail.com
+                soporte@vitalos.com.ar
               </a>{' '}
               y te ayudamos a configurarlo.
             </div>
@@ -794,7 +802,7 @@ function AccountActionsSection() {
             </div>
             <h3 className="font-bold text-lg text-app mb-2">¿Cerrar sesión?</h3>
             <p className="text-app3 text-sm mb-6">
-              Vas a salir de DentalOS. Podés volver a entrar cuando quieras.
+              Vas a salir de VitalOS. Podés volver a entrar cuando quieras.
             </p>
             <div className="flex gap-3">
               <button
@@ -812,6 +820,133 @@ function AccountActionsSection() {
         </div>
       )}
     </>
+  )
+}
+
+// ── Mi especialidad profesional ─────────────────────────────────
+// Ver/cambiar la disciplina (VitalOS). Cambiarla reconfigura qué módulos ve el
+// profesional (p. ej. el odontograma) pero NO borra datos clínicos. El cambio se
+// confirma, se audita en backend y refresca las capacidades en toda la sesión.
+function SpecialtySection({
+  token, professionalId, currentDiscipline, onChanged,
+}: {
+  token: string
+  professionalId: string
+  currentDiscipline: Discipline
+  onChanged: (d: Discipline) => void
+}) {
+  const qc = useQueryClient()
+  const [selected, setSelected]     = useState<Discipline>(currentDiscipline)
+  const [confirming, setConfirming] = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
+  const [error, setError]           = useState('')
+
+  // Si cambia el prop (recarga de datos), sincronizamos la selección.
+  useEffect(() => { setSelected(currentDiscipline) }, [currentDiscipline])
+
+  const dirty              = selected !== currentDiscipline
+  const willLoseOdontogram = currentDiscipline === 'dentistry' && selected !== 'dentistry'
+  const willGainOdontogram = currentDiscipline !== 'dentistry' && selected === 'dentistry'
+
+  async function handleConfirm() {
+    setSaving(true); setError('')
+    try {
+      await apiFetch(`/professionals/${professionalId}`, {
+        method: 'PATCH', token,
+        body: JSON.stringify({ discipline: selected }),
+      })
+      // Refrescar capacidades en toda la app: cache de perfil (módulo) + React Query me.
+      invalidateProfileCache()
+      await qc.invalidateQueries({ queryKey: queryKeys.me })
+      onChanged(selected)
+      setConfirming(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo cambiar la especialidad')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-surface border border-app rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-app">
+        <h2 className="font-semibold text-app flex items-center gap-2">
+          <Stethoscope size={16} className="text-[#00C4BC]" /> Mi especialidad profesional
+        </h2>
+        <p className="text-xs text-app3 mt-1">
+          Define qué módulos ves. Cambiarla no borra ninguna información clínica.
+        </p>
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="grid grid-cols-2 gap-2">
+          {DISCIPLINES.map((code) => {
+            const active = selected === code
+            return (
+              <button key={code} type="button"
+                onClick={() => setSelected(code)}
+                aria-pressed={active}
+                className={`rounded-xl px-3 py-3 text-sm font-semibold border-2 transition-all text-left ${
+                  active
+                    ? 'border-[#00C4BC] bg-[#E6F8F1] text-[#00C4BC] dark:bg-[#00C4BC]/15'
+                    : 'border-app bg-surface2 text-app3 hover:border-[#00C4BC]/40'
+                }`}>
+                {DISCIPLINE_LABELS[code]}
+                {code === currentDiscipline && (
+                  <span className="block text-[10px] font-medium opacity-70 mt-0.5">Actual</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {error && !confirming && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
+        )}
+
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => { setError(''); setConfirming(true) }}
+            disabled={!dirty || saving}
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 ${
+              saved ? 'bg-[#E6F8F1] text-[#00C4BC] border border-[#00C4BC]/30' : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
+            }`}>
+            {saved ? '✓ Especialidad actualizada' : 'Cambiar especialidad'}
+          </button>
+        </div>
+      </div>
+
+      {confirming && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-lg text-app mb-2">¿Cambiar tu especialidad?</h3>
+            <p className="text-app3 text-sm mb-3">
+              Vas a pasar de <span className="font-semibold text-app">{DISCIPLINE_LABELS[currentDiscipline]}</span> a{' '}
+              <span className="font-semibold text-app">{DISCIPLINE_LABELS[selected]}</span>.
+            </p>
+            <ul className="text-sm text-app3 space-y-1.5 mb-5 list-disc pl-5">
+              {willLoseOdontogram && <li>Se oculta el <span className="font-medium text-app">odontograma</span> de tu experiencia. No se borra: si volvés a Odontología, reaparece.</li>}
+              {willGainOdontogram && <li>Se habilita el <span className="font-medium text-app">odontograma</span> en las fichas de tus pacientes.</li>}
+              <li>No se elimina ninguna historia clínica, tratamiento ni dato existente.</li>
+              <li>El cambio queda registrado.</li>
+            </ul>
+            {error && <div className="p-3 mb-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>}
+            <div className="flex gap-3">
+              <button onClick={() => setConfirming(false)} disabled={saving}
+                className="flex-1 bg-surface2 hover:bg-surface3 text-app font-semibold py-3 rounded-xl transition-all disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={handleConfirm} disabled={saving}
+                className="flex-1 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50">
+                {saving ? 'Guardando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -940,6 +1075,12 @@ export default function SettingsPage() {
     }
   }
 
+  const selfProfessional = professionals.find((p: any) => p.id === myId)
+
+  function handleDisciplineChanged(d: Discipline) {
+    setProfessionals((prev: any[]) => prev.map(p => p.id === myId ? { ...p, discipline: d } : p))
+  }
+
   if (loading) {
     return (
       <div className="px-6 py-8 animate-pulse">
@@ -993,6 +1134,14 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <h2 className="text-base font-semibold text-app">Cuenta y facturación</h2>
           <PlanCard />
+          {MULTI_SPECIALTY_ENABLED && token && myId && (
+            <SpecialtySection
+              token={token}
+              professionalId={myId}
+              currentDiscipline={normalizeDiscipline(selfProfessional?.discipline)}
+              onChanged={handleDisciplineChanged}
+            />
+          )}
           {token && <AfipConfigSection token={token} />}
           <AccountActionsSection />
         </div>

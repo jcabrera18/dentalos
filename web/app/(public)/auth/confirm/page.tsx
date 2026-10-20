@@ -139,7 +139,7 @@ export default function ConfirmPage() {
 
         <div className="text-center mb-8">
           <Link href="/" className="inline-block text-2xl font-extrabold text-[#0F1720]">
-            Dental<span className="text-[#00C4BC]">OS</span>
+            Vital<span className="text-[#00C4BC]">OS</span>
           </Link>
         </div>
 

@@ -249,7 +249,7 @@ export default function BookingPage() {
       <div className={`${jakarta.className} min-h-screen flex items-center justify-center bg-white`}>
         <div className="text-center">
           <p className="text-2xl font-extrabold tracking-tight mb-6" style={{ color: DARK }}>
-            Dental<span style={{ color: BRAND }}>OS</span>
+            Vital<span style={{ color: BRAND }}>OS</span>
           </p>
           <div
             className="w-8 h-8 rounded-full border-4 mx-auto animate-spin"
@@ -264,7 +264,7 @@ export default function BookingPage() {
     return (
       <div className={`${jakarta.className} min-h-screen flex flex-col items-center justify-center bg-white p-6 text-center`}>
         <p className="text-2xl font-extrabold tracking-tight mb-8" style={{ color: DARK }}>
-          Dental<span style={{ color: BRAND }}>OS</span>
+          Vital<span style={{ color: BRAND }}>OS</span>
         </p>
         <h1 className="text-xl font-bold mb-2" style={{ color: DARK }}>Profesional no encontrado</h1>
         <p className="text-sm" style={{ color: '#6B7280' }}>El enlace puede ser incorrecto o el profesional ya no está activo.</p>
@@ -297,7 +297,7 @@ export default function BookingPage() {
         {/* ── Logo ── */}
         <div className="text-center pt-2 pb-1">
           <p className="text-2xl font-extrabold tracking-tight" style={{ color: DARK }}>
-            Dental<span style={{ color: BRAND }}>OS</span>
+            Vital<span style={{ color: BRAND }}>OS</span>
           </p>
         </div>
 
@@ -717,7 +717,7 @@ export default function BookingPage() {
           <p className="text-xs" style={{ color: '#9CA3AF' }}>
             Agendado con{' '}
             <span className="font-extrabold" style={{ color: DARK }}>
-              Dental<span style={{ color: BRAND }}>OS</span>
+              Vital<span style={{ color: BRAND }}>OS</span>
             </span>
           </p>
         </div>

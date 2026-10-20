@@ -66,7 +66,7 @@ function generatePrintHtml(quote: Quote, patientName: string): string {
 
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;padding-bottom:24px;border-bottom:2px solid #f0f0f0">
     <div>
-      <h1 style="font-size:26px;font-weight:900;color:#111;letter-spacing:-0.5px">Dental<span style="color:#00C4BC">OS</span></h1>
+      <h1 style="font-size:26px;font-weight:900;color:#111;letter-spacing:-0.5px">Vital<span style="color:#00C4BC">OS</span></h1>
       ${profName ? `<p style="color:#6b7280;font-size:12px;margin-top:4px">${profName}</p>` : ''}
     </div>
     <div style="text-align:right">

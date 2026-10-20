@@ -11,7 +11,7 @@ type PatientFile = {
   created_at?: string
 }
 
-export function PatientFilesSection({ patientId }: { patientId: string }) {
+export function PatientFilesSection({ patientId, showOdontogramPhoto = true }: { patientId: string; showOdontogramPhoto?: boolean }) {
   const [files, setFiles] = useState<PatientFile[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -80,10 +80,12 @@ export function PatientFilesSection({ patientId }: { patientId: string }) {
         <div className="px-6 py-4 border-b border-app flex items-center justify-between">
           <h3 className="font-semibold">Archivos y radiografías</h3>
           <div className="flex gap-2">
-            <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${uploading ? 'bg-surface2 border-app text-app3 opacity-50' : 'bg-surface2 border-app2 hover:bg-surface3 text-app2 hover:text-app'}`}>
-              Foto odontograma
-              <input type="file" className="hidden" accept="image/*" capture="environment" data-type="odontograma" onChange={handleUpload} disabled={uploading} />
-            </label>
+            {showOdontogramPhoto && (
+              <label className={`cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${uploading ? 'bg-surface2 border-app text-app3 opacity-50' : 'bg-surface2 border-app2 hover:bg-surface3 text-app2 hover:text-app'}`}>
+                Foto odontograma
+                <input type="file" className="hidden" accept="image/*" capture="environment" data-type="odontograma" onChange={handleUpload} disabled={uploading} />
+              </label>
+            )}
             <label className={`cursor-pointer text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95 ${uploading ? 'bg-surface3 text-app3' : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white shadow-sm shadow-[#00C4BC]/20'}`}>
               {uploading ? 'Subiendo...' : '+ Archivo'}
               <input type="file" className="hidden" accept="image/*,.pdf,.dcm" onChange={handleUpload} disabled={uploading} />

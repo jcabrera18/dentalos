@@ -291,14 +291,14 @@ function buildCanvas(data: ReceiptData): HTMLCanvasElement {
   ctx.stroke()
   y += 1
 
-  // --- FOOTER: "Generado por Dental OS" + "dentalos.pro" ---
+  // --- FOOTER: "Generado por Vital OS" + "vitalos.com.ar" ---
   // Measure each piece to center the composite line
   ctx.font = `10px ${FONT}`
   const genW = ctx.measureText('Generado por ').width
   ctx.font = `bold 10px ${FONT}`
-  const dentalW = ctx.measureText('Dental').width
+  const vitalW = ctx.measureText('Vital').width
   const osW = ctx.measureText('OS').width
-  const lineW = genW + dentalW + osW
+  const lineW = genW + vitalW + osW
   const startX = Math.floor((W - lineW) / 2)
 
   ctx.fillStyle = C.light
@@ -308,15 +308,15 @@ function buildCanvas(data: ReceiptData): HTMLCanvasElement {
 
   ctx.fillStyle = C.dark
   ctx.font = `bold 10px ${FONT}`
-  ctx.fillText('Dental', startX + genW, y + 22)
+  ctx.fillText('Vital', startX + genW, y + 22)
 
   ctx.fillStyle = C.teal
-  ctx.fillText('OS', startX + genW + dentalW, y + 22)
+  ctx.fillText('OS', startX + genW + vitalW, y + 22)
 
   ctx.fillStyle = C.light
   ctx.font = `9px ${FONT}`
   ctx.textAlign = 'center'
-  ctx.fillText('dentalos.pro', W / 2, y + 38)
+  ctx.fillText('vitalos.com.ar', W / 2, y + 38)
 
   return canvas
 }
@@ -503,9 +503,9 @@ function buildStatementCanvas(data: AccountStatementData): HTMLCanvasElement {
   ctx.font = `10px ${FONT}`
   const genW = ctx.measureText('Generado por ').width
   ctx.font = `bold 10px ${FONT}`
-  const dentalW = ctx.measureText('Dental').width
+  const vitalW = ctx.measureText('Vital').width
   const osW = ctx.measureText('OS').width
-  const startX = Math.floor((W - genW - dentalW - osW) / 2)
+  const startX = Math.floor((W - genW - vitalW - osW) / 2)
 
   ctx.fillStyle = C.light
   ctx.font = `10px ${FONT}`
@@ -513,13 +513,13 @@ function buildStatementCanvas(data: AccountStatementData): HTMLCanvasElement {
   ctx.fillText('Generado por ', startX, y + 22)
   ctx.fillStyle = C.dark
   ctx.font = `bold 10px ${FONT}`
-  ctx.fillText('Dental', startX + genW, y + 22)
+  ctx.fillText('Vital', startX + genW, y + 22)
   ctx.fillStyle = C.teal
-  ctx.fillText('OS', startX + genW + dentalW, y + 22)
+  ctx.fillText('OS', startX + genW + vitalW, y + 22)
   ctx.fillStyle = C.light
   ctx.font = `9px ${FONT}`
   ctx.textAlign = 'center'
-  ctx.fillText('dentalos.pro', W / 2, y + 38)
+  ctx.fillText('vitalos.com.ar', W / 2, y + 38)
 
   return canvas
 }

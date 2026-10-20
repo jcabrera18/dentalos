@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-block text-2xl font-extrabold text-[#0F1720]">
-            Dental<span className="text-[#00C4BC]">OS</span>
+            Vital<span className="text-[#00C4BC]">OS</span>
           </Link>
         </div>
 
@@ -58,7 +58,7 @@ export default function ForgotPasswordPage() {
               <div>
                 <h1 className="text-xl font-extrabold text-[#0F1720] mb-2">Revisá tu email</h1>
                 <p className="text-[#6B7280] text-sm leading-relaxed">
-                  Si <span className="font-semibold text-[#0F1720]">{email}</span> tiene una cuenta en DentalOS, vas a recibir un enlace para restablecer tu contraseña en los próximos minutos.
+                  Si <span className="font-semibold text-[#0F1720]">{email}</span> tiene una cuenta en VitalOS, vas a recibir un enlace para restablecer tu contraseña en los próximos minutos.
                 </p>
               </div>
               <p className="text-xs text-[#9CA3AF]">

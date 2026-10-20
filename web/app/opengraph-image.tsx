@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og'
 
 export const runtime = 'edge'
-export const alt = 'DentalOS - Sistema de gestión dental'
+export const alt = 'VitalOS - Software de gestión para consultorios de salud'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -16,32 +16,32 @@ export default async function Image() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 50%, #111827 100%)',
+          background: 'linear-gradient(135deg, #FFFFFF 0%, #F3FBF9 55%, #E6F8F1 100%)',
           fontFamily: 'system-ui, sans-serif',
         }}
       >
-        {/* Decorative circles */}
+        {/* Decorative mint circles */}
         <div
           style={{
             position: 'absolute',
-            top: '-100px',
-            right: '-100px',
-            width: '400px',
-            height: '400px',
+            top: '-120px',
+            right: '-120px',
+            width: '420px',
+            height: '420px',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(77,168,240,0.15) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(0,196,188,0.18) 0%, transparent 70%)',
             display: 'flex',
           }}
         />
         <div
           style={{
             position: 'absolute',
-            bottom: '-80px',
-            left: '-80px',
-            width: '300px',
-            height: '300px',
+            bottom: '-100px',
+            left: '-100px',
+            width: '320px',
+            height: '320px',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(43,143,214,0.12) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(0,196,188,0.14) 0%, transparent 70%)',
             display: 'flex',
           }}
         />
@@ -55,43 +55,27 @@ export default async function Image() {
             marginBottom: '32px',
           }}
         >
-          {/* Tooth icon */}
+          {/* VitalOS brand mark (favicon) */}
           <div
             style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '18px',
-              background: 'linear-gradient(135deg, #1e1e1e, #111)',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 30px rgba(77,168,240,0.3)',
-              border: '1px solid rgba(77,168,240,0.2)',
+              borderRadius: '18px',
+              boxShadow: '0 12px 40px rgba(0,196,188,0.28)',
             }}
           >
-            {/* Simplified tooth SVG as text representation */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 32 32"
-              width="50"
-              height="50"
+              viewBox="0 0 100 100"
+              width="84"
+              height="84"
             >
-              <defs>
-                <linearGradient id="tg" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#ffffff" />
-                  <stop offset="100%" stopColor="#d8e8f5" />
-                </linearGradient>
-                <linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#4da8f0" />
-                  <stop offset="100%" stopColor="#2b8fd6" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M10,8 C10,7 11,6 12.5,6 C13.5,6 14.5,6.8 16,6.8 C17.5,6.8 18.5,6 19.5,6 C21,6 22,7 22,8 C22,10 21.5,12 21,14 C20.5,16.5 20,19 19.5,21 C19.2,22.5 18.5,23 18,23 C17.5,23 17,22 16.8,21 C16.5,19.5 16,18 16,18 C16,18 15.5,19.5 15.2,21 C15,22 14.5,23 14,23 C13.5,23 12.8,22.5 12.5,21 C12,19 11.5,16.5 11,14 C10.5,12 10,10 10,8 Z"
-                fill="url(#tg)"
-              />
-              <rect x="10" y="13" width="12" height="2" rx="1" fill="url(#ag)" opacity="0.7" />
-              <circle cx="23.5" cy="8.5" r="3" fill="url(#ag)" />
+              {/* Fondo blanco redondeado (tile tipo app icon) */}
+              <rect width="100" height="100" rx="22" fill="#FFFFFF" />
+              {/* V (brand-ink) */}
+              <path d="M14,28 L30,28 L41,61 L52,28 L68,28 L47,83 L35,83 Z" fill="#0F1720" />
+              {/* Cruz médica (brand-teal) */}
+              <rect x="75" y="22" width="11" height="33" rx="4" fill="#00C4BC" />
+              <rect x="64" y="33" width="33" height="11" rx="4" fill="#00C4BC" />
             </svg>
           </div>
 
@@ -99,15 +83,15 @@ export default async function Image() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span
               style={{
-                fontSize: '64px',
+                fontSize: '68px',
                 fontWeight: '800',
-                color: '#ffffff',
+                color: '#0F1720',
                 letterSpacing: '-2px',
                 lineHeight: 1,
               }}
             >
-              Dental
-              <span style={{ color: '#4da8f0' }}>OS</span>
+              Vital
+              <span style={{ color: '#00C4BC' }}>OS</span>
             </span>
           </div>
         </div>
@@ -116,8 +100,8 @@ export default async function Image() {
         <div
           style={{
             width: '120px',
-            height: '3px',
-            background: 'linear-gradient(90deg, #4da8f0, #2b8fd6)',
+            height: '4px',
+            background: 'linear-gradient(90deg, #00C4BC, #00aaa3)',
             borderRadius: '2px',
             marginBottom: '28px',
             display: 'flex',
@@ -127,15 +111,15 @@ export default async function Image() {
         {/* Tagline */}
         <p
           style={{
-            fontSize: '28px',
-            color: 'rgba(255,255,255,0.75)',
+            fontSize: '30px',
+            color: '#4B5563',
             margin: 0,
             textAlign: 'center',
-            maxWidth: '700px',
+            maxWidth: '760px',
             lineHeight: 1.4,
           }}
         >
-          Sistema de gestión para clínicas dentales
+          La gestión de tu consultorio, simplificada
         </p>
 
         {/* Bottom badges */}
@@ -146,17 +130,17 @@ export default async function Image() {
             marginTop: '48px',
           }}
         >
-          {['Agenda', 'Pacientes', 'Pagos', 'Radiografías'].map((label) => (
+          {['Agenda', 'Pacientes', 'Pagos', 'Historias clínicas'].map((label) => (
             <div
               key={label}
               style={{
-                padding: '8px 20px',
+                padding: '10px 22px',
                 borderRadius: '999px',
-                background: 'rgba(77,168,240,0.1)',
-                border: '1px solid rgba(77,168,240,0.25)',
-                color: '#4da8f0',
-                fontSize: '16px',
-                fontWeight: '500',
+                background: '#E6F8F1',
+                border: '1px solid rgba(0,196,188,0.35)',
+                color: '#00897F',
+                fontSize: '17px',
+                fontWeight: '600',
                 display: 'flex',
               }}
             >

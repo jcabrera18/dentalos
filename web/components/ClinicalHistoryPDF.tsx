@@ -322,7 +322,7 @@ export function ClinicalHistoryPDF({
               <Rect x="10" y="13" width="12" height="2" rx="1" fill="#4da8f0" />
               <Circle cx="23.5" cy="8.5" r="3" fill="#4da8f0" />
             </Svg>
-            <Text style={styles.brandText}>DentalOS</Text>
+            <Text style={styles.brandText}>VitalOS</Text>
             {clinicName && (
               <Text style={{ fontSize: 10, color: '#666', marginLeft: 4 }}>— {clinicName}</Text>
             )}
@@ -500,7 +500,7 @@ export function ClinicalHistoryPDF({
 
         {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>DentalOS — Historia Clínica Confidencial</Text>
+          <Text style={styles.footerText}>VitalOS — Historia Clínica Confidencial</Text>
           <Text style={styles.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
         </View>
       </Page>

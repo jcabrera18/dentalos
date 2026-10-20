@@ -7,27 +7,27 @@ import { PostHogPageview } from './providers/pageview'
 import { Suspense } from 'react'
 import './globals.css'
 
-const siteUrl = 'https://dentalos.pro'
+const siteUrl = 'https://vitalos.com.ar'
 
 export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
 export const metadata: Metadata = {
-  title: 'DentalOS',
-  description: 'Sistema de gestión para clínicas dentales. Agenda, pacientes, pagos y más en un solo lugar.',
+  title: 'VitalOS',
+  description: 'Software de gestión para consultorios de salud. Agenda, pacientes, pagos y más en un solo lugar.',
   metadataBase: new URL(siteUrl),
   openGraph: {
-    title: 'DentalOS',
-    description: 'Sistema de gestión para clínicas dentales. Agenda, pacientes, pagos y más en un solo lugar.',
+    title: 'VitalOS',
+    description: 'Software de gestión para consultorios de salud. Agenda, pacientes, pagos y más en un solo lugar.',
     url: siteUrl,
-    siteName: 'DentalOS',
+    siteName: 'VitalOS',
     images: [
       {
         url: '/opengraph-image',
         width: 1200,
         height: 630,
-        alt: 'DentalOS - Sistema de gestión dental',
+        alt: 'VitalOS - Software de gestión para consultorios de salud',
       },
     ],
     locale: 'es_AR',
@@ -35,8 +35,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'DentalOS',
-    description: 'Sistema de gestión para clínicas dentales. Agenda, pacientes, pagos y más en un solo lugar.',
+    title: 'VitalOS',
+    description: 'Software de gestión para consultorios de salud. Agenda, pacientes, pagos y más en un solo lugar.',
     images: ['/opengraph-image'],
   },
 }

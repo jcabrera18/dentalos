@@ -42,7 +42,7 @@ function LeftPanel() {
       <div className="relative flex flex-col h-full p-10 xl:p-12">
         {/* Logo */}
         <Link href="/" className="text-2xl font-extrabold tracking-tight text-white mb-14">
-          Dental<span className="text-[#00C4BC]">OS</span>
+          Vital<span className="text-[#00C4BC]">OS</span>
         </Link>
 
         {/* Welcome back copy */}
@@ -314,7 +314,7 @@ export default function LoginPage() {
         {/* Top bar */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#F3F4F6]">
           <Link href="/" className="lg:hidden text-xl font-extrabold text-[#0F1720]">
-            Dental<span className="text-[#00C4BC]">OS</span>
+            Vital<span className="text-[#00C4BC]">OS</span>
           </Link>
           <div className="lg:ml-auto text-sm text-[#6B7280]">
             ¿No tenés cuenta?{' '}

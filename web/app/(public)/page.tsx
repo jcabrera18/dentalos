@@ -15,7 +15,7 @@ const jakarta = Plus_Jakarta_Sans({
 
 // Número de WhatsApp de soporte (+54 9 3438 55-8913, formato internacional sin + ni espacios)
 const WHATSAPP_NUMBER = '5493438558913'
-const WHATSAPP_MSG = encodeURIComponent('Hola! Quiero que me muestren cómo funciona DentalOS 🙂')
+const WHATSAPP_MSG = encodeURIComponent('Hola! Quiero que me muestren cómo funciona VitalOS 🙂')
 const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`
 
 // ── Marco de celular reutilizable ──────────────────────────
@@ -130,7 +130,7 @@ export default function HomePage() {
   const faqs = [
     {
       q: '¿Es difícil de aprender?',
-      a: 'No. Está pensado para que lo entiendas solo, sin manuales. La mayoría lo está usando el primer día sin que nadie le explique nada. Si sabés mandar un WhatsApp, sabés usar DentalOS.',
+      a: 'No. Está pensado para que lo entiendas solo, sin manuales. La mayoría lo está usando el primer día sin que nadie le explique nada. Si sabés mandar un WhatsApp, sabés usar VitalOS.',
     },
     {
       q: 'Nunca usé un sistema, siempre trabajé con papel. ¿Voy a poder?',
@@ -165,7 +165,7 @@ export default function HomePage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#E6F8F1]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-2xl font-extrabold tracking-tight text-[#0F1720]">
-            Dental<span className="text-[#00C4BC]">OS</span>
+            Vital<span className="text-[#00C4BC]">OS</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <a href="#resultados" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
@@ -214,9 +214,9 @@ export default function HomePage() {
           </h1>
 
           <p className="text-[#4B5563] text-lg md:text-2xl text-center leading-relaxed mb-9 max-w-2xl mx-auto">
-            DentalOS ordena tu agenda, tus pacientes y tu plata en un solo lugar.
+            VitalOS ordena tu agenda, tus pacientes y tu plata en un solo lugar.
             <span className="block mt-2 font-semibold text-[#0F1720]">
-              Si sabés usar WhatsApp, ya sabés usar DentalOS.
+              Si sabés usar WhatsApp, ya sabés usar VitalOS.
             </span>
           </p>
 
@@ -253,13 +253,13 @@ export default function HomePage() {
                   <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
                   <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
                   <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
-                  <span className="ml-3 text-[11px] text-[#9CA3AF] font-medium">dentalos.pro</span>
+                  <span className="ml-3 text-[11px] text-[#9CA3AF] font-medium">vitalos.com.ar</span>
                 </div>
                 <Image
                   src="/hero-desktop.png"
-                  alt="DentalOS en la computadora"
+                  alt="VitalOS en la computadora"
                   width={2000}
-                  height={1584}
+                  height={1403}
                   className="w-full h-auto"
                   priority
                 />
@@ -377,7 +377,7 @@ export default function HomePage() {
                       <span className="w-1.5 h-1.5 rounded-full bg-[#FF5F57]" />
                       <span className="w-1.5 h-1.5 rounded-full bg-[#FEBC2E]" />
                       <span className="w-1.5 h-1.5 rounded-full bg-[#28C840]" />
-                      <span className="ml-1.5 text-[9px] text-[#9CA3AF] font-medium">dentalos.pro</span>
+                      <span className="ml-1.5 text-[9px] text-[#9CA3AF] font-medium">vitalos.com.ar</span>
                     </div>
                     <Image
                       src="/agenda-desktop.png"
@@ -635,7 +635,7 @@ export default function HomePage() {
 
             {/* DESPUÉS */}
             <div className="bg-white border-2 border-[#00C4BC] rounded-2xl p-7 shadow-lg shadow-[#00C4BC]/10">
-              <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-5">Con DentalOS</p>
+              <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-5">Con VitalOS</p>
               <ul className="space-y-4">
                 {[
                   ['📅', 'Agenda en el celular'],
@@ -810,7 +810,7 @@ export default function HomePage() {
             Hagamos números
           </span>
           <h2 className="text-3xl md:text-5xl font-extrabold leading-[1.15] mb-6">
-            Con recuperar <span className="text-[#00C4BC]">2 pacientes al mes</span> gracias a los recordatorios,<br className="hidden md:block" /> DentalOS ya se pagó solo.
+            Con recuperar <span className="text-[#00C4BC]">2 pacientes al mes</span> gracias a los recordatorios,<br className="hidden md:block" /> VitalOS ya se pagó solo.
           </h2>
           <p className="text-white/70 text-lg md:text-xl max-w-2xl mx-auto mb-12">
             Los recordatorios automáticos por WhatsApp reducen las ausencias y los turnos que se caen. Cada paciente que no se te pierde paga varias veces lo que cuesta el sistema.
@@ -1099,7 +1099,7 @@ export default function HomePage() {
           <div className="grid md:grid-cols-4 gap-10 mb-10">
             <div>
               <h3 className="text-2xl font-extrabold text-white mb-3">
-                Dental<span className="text-[#00C4BC]">OS</span>
+                Vital<span className="text-[#00C4BC]">OS</span>
               </h3>
               <p className="text-[#6B7280] text-sm">La gestión de tu consultorio, simplificada.</p>
             </div>
@@ -1122,13 +1122,14 @@ export default function HomePage() {
             <div>
               <h4 className="font-bold text-xs text-white mb-4 uppercase tracking-widest">Legal</h4>
               <ul className="space-y-2 text-sm text-[#6B7280]">
-                <li><a href="#" className="hover:text-white transition-colors">Privacidad</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Términos</a></li>
+                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacidad</Link></li>
+                <li><Link href="/terms" className="hover:text-white transition-colors">Términos</Link></li>
+                <li><Link href="/dpa" className="hover:text-white transition-colors">DPA</Link></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between">
-            <p className="text-[#6B7280] text-sm">© 2026 DentalOS. Todos los derechos reservados.</p>
+            <p className="text-[#6B7280] text-sm">© 2026 VitalOS. Todos los derechos reservados.</p>
             <div className="flex gap-6 mt-4 md:mt-0">
               <a href="#" className="text-[#6B7280] hover:text-white transition-colors text-sm">Instagram</a>
               <a href="#" className="text-[#6B7280] hover:text-white transition-colors text-sm">LinkedIn</a>
@@ -1162,7 +1163,7 @@ export default function HomePage() {
 
             <div className="text-center mb-8">
               <h1 className="text-3xl font-extrabold text-[#0F1720]">
-                Dental<span className="text-[#00C4BC]">OS</span>
+                Vital<span className="text-[#00C4BC]">OS</span>
               </h1>
               <p className="text-[#6B7280] mt-2 text-sm">Ingresá a tu consultorio</p>
             </div>

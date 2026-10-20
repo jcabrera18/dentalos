@@ -14,6 +14,10 @@ function getFriendlyApiError(message?: string, status?: number) {
     return 'Tenés un plan superior activo. Para no perder los días ya pagados, vas a poder cambiar a un plan inferior recién cuando venza tu suscripción.'
   }
 
+  if (status === 409 && message === 'Patient with this phone/document already exists') {
+    return 'Ya existe un paciente con ese teléfono o DNI.'
+  }
+
   return message ?? 'API error'
 }
 

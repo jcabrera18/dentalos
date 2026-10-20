@@ -238,10 +238,13 @@ export default function PatientsPage() {
         <NewPatientModal
           token={token}
           onClose={() => setShowModal(false)}
-          onCreated={async () => {
+          onCreated={(id) => {
             setShowModal(false)
-            // Trae el delta (el paciente nuevo) a la cartera local.
-            await resync()
+            setNavigatingTo(id)
+            // Trae el delta (el paciente nuevo) a la cartera local en background.
+            void resync()
+            // Abre la ficha del paciente recién creado.
+            router.push(`/patients/${id}`)
           }}
         />
       )}
@@ -252,7 +255,7 @@ export default function PatientsPage() {
 function NewPatientModal({ token, onClose, onCreated }: {
   token: string
   onClose: () => void
-  onCreated: () => void
+  onCreated: (id: string) => void
 }) {
   const [form, setForm] = useState({
     first_name: '', last_name: '', phone: '',
@@ -277,12 +280,16 @@ function NewPatientModal({ token, onClose, onCreated }: {
       for (const [k, v] of Object.entries(form)) {
         if (v !== '') payload[k] = v
       }
-      await apiFetch('/patients', {
+      const res = await apiFetch('/patients', {
         method: 'POST',
         token,
         body: JSON.stringify(payload)
       })
-      onCreated()
+      const created = res?.data ?? res
+      if (!created?.id) {
+        throw new Error('No se pudo abrir la ficha del paciente creado')
+      }
+      onCreated(created.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear el paciente')
       setLoading(false)

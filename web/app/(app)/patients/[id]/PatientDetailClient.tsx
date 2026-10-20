@@ -13,6 +13,7 @@ import { downloadAccountStatementPNG, downloadReceiptPNG } from '@/components/ge
 import { PatientNotesSection } from '@/components/PatientNotesSection'
 import { PatientFilesSection } from '@/components/PatientFilesSection'
 import { PatientAppointmentsSection } from '@/components/PatientAppointmentsSection'
+import { hasCapability, normalizeDiscipline } from '@/lib/capabilities'
 
 const EMPTY_ACCOUNT_SUMMARY = {
   total_billed: 0,
@@ -113,6 +114,14 @@ export default function PatientDetailClient({
 
   const odontogram: any[] = odontogramQuery.data ?? []
   const odontogramLoading = odontogramQuery.isPending
+
+  // Capacidad por especialidad (VitalOS): solo odontología crea/edita odontograma.
+  // La LECTURA de datos existentes queda permitida (política §15): si el paciente
+  // ya tiene odontograma cargado, se muestra en solo-lectura aunque el profesional
+  // no sea odontólogo (p. ej. uno que cambió de disciplina). Si no hay datos y no
+  // es odontólogo, la sección no forma parte de su experiencia (no se renderiza).
+  const canEditOdontogram = hasCapability([normalizeDiscipline(me?.discipline)], 'odontogram')
+  const showOdontogram = canEditOdontogram || odontogram.length > 0
 
   const clinicName = (me?.clinics as any)?.name ?? me?.clinic_name ?? ''
   const myProfessionalName =
@@ -788,10 +797,16 @@ export default function PatientDetailClient({
           {/* Columna derecha — historial + tratamientos */}
           <div className="md:col-span-2 space-y-6 animate-fade-in-up" style={{ animationDelay: '80ms' }}>
 
-            {/* Odontograma */}
+            {/* Odontograma — gated por especialidad (solo odontología edita). */}
+            {showOdontogram && (
             <div className="bg-surface border border-app rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-app flex items-center justify-between">
-                <h3 className="font-semibold">Odontograma</h3>
+                <h3 className="font-semibold flex items-center gap-2">
+                  Odontograma
+                  {!canEditOdontogram && (
+                    <span className="text-xs font-semibold text-app3 bg-surface2 px-2 py-0.5 rounded-md">Solo lectura</span>
+                  )}
+                </h3>
                 <div className="flex items-center gap-3">
                   {savingTooth && (
                     <span className="flex items-center gap-1.5 text-xs text-app3">
@@ -802,6 +817,7 @@ export default function PatientDetailClient({
                       Guardando...
                     </span>
                   )}
+                  {canEditOdontogram && (
                   <div className="flex items-center gap-1 bg-surface2 p-0.5 rounded-lg border border-gray-700">
                     {(['adult', 'child'] as const).map(t => (
                       <button key={t}
@@ -818,6 +834,7 @@ export default function PatientDetailClient({
                       >{t === 'adult' ? 'Adulto' : 'Niño'}</button>
                     ))}
                   </div>
+                  )}
                 </div>
               </div>
               <div className="p-4">
@@ -828,18 +845,21 @@ export default function PatientDetailClient({
                     <div className="h-3 bg-surface2 rounded w-4/6" />
                   </div>
                 ) : (
-                  <OdontogramView
-                    odontogram={odontogram}
-                    onSaveTooth={updateTooth}
-                    onSaveBulk={updateTeethBulk}
-                    odontogramType={odontogramActiveType}
-                  />
+                  <div className={canEditOdontogram ? undefined : 'pointer-events-none select-none'} aria-readonly={!canEditOdontogram}>
+                    <OdontogramView
+                      odontogram={odontogram}
+                      onSaveTooth={canEditOdontogram ? updateTooth : (async () => {})}
+                      onSaveBulk={canEditOdontogram ? updateTeethBulk : (async () => {})}
+                      odontogramType={odontogramActiveType}
+                    />
+                  </div>
                 )}
               </div>
             </div>
+            )}
 
             {/* Archivos y radiografías */}
-            <PatientFilesSection patientId={params.id as string} />
+            <PatientFilesSection patientId={params.id as string} showOdontogramPhoto={canEditOdontogram} />
 
             {/* Tratamientos activos */}
             {patient.treatments?.filter((t: any) => t.status === 'in_progress' || t.status === 'accepted').length > 0 && (

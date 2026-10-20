@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { ArrowLeft, FileDown } from 'lucide-react'
+import { useMe } from '@/lib/queries'
+import { normalizeDiscipline } from '@/lib/capabilities'
+import GenericClinicalHistory from '@/components/GenericClinicalHistory'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -45,9 +48,32 @@ const EMPTY_CLINICAL_HISTORY = {
 
 type Mode = 'form' | 'sign' | 'signatures' | 'sig-detail'
 
-// ── Main component ─────────────────────────────────────────────
+// ── Router por disciplina ──────────────────────────────────────
+// Odontología (y fallback por ausencia/desconocido) → formulario fijo
+// odontológico de abajo (DentalOS, byte-equivalente). Otras disciplinas →
+// historia clínica declarativa por especialidad (VitalOS §7.1).
 
 export default function ClinicalHistoryPage() {
+  const { data: me, isLoading } = useMe()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  const discipline = normalizeDiscipline(me?.discipline)
+  if (discipline !== 'dentistry') {
+    return <GenericClinicalHistory discipline={discipline} />
+  }
+  return <DentalClinicalHistory />
+}
+
+// ── Formulario odontológico (DentalOS) — sin cambios ───────────
+
+function DentalClinicalHistory() {
   const params = useParams()
   const router = useRouter()
   const patientId = params.id as string

@@ -9,6 +9,11 @@ import { useSearchParams } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { DISCIPLINES, DISCIPLINE_LABELS } from '@/lib/capabilities'
+
+// Activación progresiva: con el flag apagado, el registro solo ofrece odontología
+// (UX idéntica a VitalOS). La barrera real es el backend; esto solo oculta la UI.
+const MULTI_SPECIALTY_ENABLED = process.env.NEXT_PUBLIC_VITALOS_MULTI_SPECIALTY_SIGNUP === 'true'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -41,7 +46,7 @@ function LeftPanel() {
       <div className="relative flex flex-col h-full p-10 xl:p-12">
         {/* Logo */}
         <Link href="/" className="text-2xl font-extrabold tracking-tight text-white mb-14">
-          Dental<span className="text-[#00C4BC]">OS</span>
+          Vital<span className="text-[#00C4BC]">OS</span>
         </Link>
 
         {/* Headline */}
@@ -204,7 +209,7 @@ function RegisterForm() {
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken)
 
-  const [form, setForm] = useState({ clinic_name: '', first_name: '', last_name: '', email: '', password: '' })
+  const [form, setForm] = useState({ clinic_name: '', first_name: '', last_name: '', email: '', password: '', discipline: MULTI_SPECIALTY_ENABLED ? '' : 'dentistry' })
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -245,6 +250,7 @@ function RegisterForm() {
       const body: Record<string, string> = {
         email: form.email, password: form.password,
         first_name: form.first_name, last_name: form.last_name,
+        discipline: form.discipline,
       }
       if (inviteToken) { body.invite_token = inviteToken } else { body.clinic_name = form.clinic_name }
       await apiFetch('/auth/register', { method: 'POST', body: JSON.stringify(body) })
@@ -413,6 +419,35 @@ function RegisterForm() {
           </div>
         </div>
 
+        {/* Especialidad profesional */}
+        {MULTI_SPECIALTY_ENABLED && (
+        <div>
+          <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">
+            ¿Cuál es tu especialidad?
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {DISCIPLINES.map((code) => {
+              const active = form.discipline === code
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => setForm({ ...form, discipline: code })}
+                  aria-pressed={active}
+                  className={`rounded-xl px-3 py-3 text-sm font-semibold border-2 transition-all text-left ${
+                    active
+                      ? 'border-[#00C4BC] bg-[#E6F8F1] text-[#00C4BC]'
+                      : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280] hover:border-[#00C4BC]/40'
+                  }`}
+                >
+                  {DISCIPLINE_LABELS[code]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        )}
+
         {/* Clinic name */}
         {!inviteToken && (
           <div>
@@ -431,7 +466,7 @@ function RegisterForm() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || inviteLoading}
+          disabled={loading || inviteLoading || !form.discipline}
           className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-[#00C4BC]/20 mt-2"
         >
           {loading
@@ -444,7 +479,7 @@ function RegisterForm() {
 
         <p className="text-center text-xs text-[#9CA3AF]">
           Al registrarte aceptás nuestros{' '}
-          <a href="#" className="text-[#00C4BC] hover:underline">términos y condiciones</a>.
+          <Link href="/terms" target="_blank" className="text-[#00C4BC] hover:underline">términos y condiciones</Link>.
         </p>
       </form>
 
@@ -476,7 +511,7 @@ function RegisterForm() {
             </button>
             <div className="text-center mb-8">
               <h1 className="text-3xl font-extrabold text-[#0F1720]">
-                Dental<span className="text-[#00C4BC]">OS</span>
+                Vital<span className="text-[#00C4BC]">OS</span>
               </h1>
               <p className="text-[#6B7280] mt-2 text-sm">Ingresá a tu consultorio</p>
             </div>
@@ -539,7 +574,7 @@ export default function RegisterPage() {
         {/* Top bar (mobile logo + "already have account") */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#F3F4F6]">
           <Link href="/" className="lg:hidden text-xl font-extrabold text-[#0F1720]">
-            Dental<span className="text-[#00C4BC]">OS</span>
+            Vital<span className="text-[#00C4BC]">OS</span>
           </Link>
           <div className="lg:ml-auto text-sm text-[#6B7280]">
             ¿Ya tenés cuenta?{' '}

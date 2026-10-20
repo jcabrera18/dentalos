@@ -37,6 +37,12 @@ const jakarta = Plus_Jakarta_Sans({
   display: 'swap',
 })
 
+// VitalOS multi-especialidad: estos destinos son TRANSVERSALES a todas las
+// disciplinas (matriz en lib/capabilities.ts), así que no se gatean. El único
+// módulo específico de odontología (odontograma) no es un ítem de menú: vive en
+// la ficha del paciente y se gatea ahí. Si en el futuro se agrega un ítem propio
+// de una disciplina, filtrarlo acá con hasCapability([me.discipline], feature)
+// en vez de hardcodearlo.
 const NAV_ITEMS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
   { href: '/agenda', icon: CalendarDays, label: 'Agenda' },
@@ -433,7 +439,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className="px-5 py-5 border-b border-app">
           <span className="text-xl font-extrabold tracking-tight text-app">
-            Dental<span className="text-[#00C4BC]">OS</span>
+            Vital<span className="text-[#00C4BC]">OS</span>
           </span>
         </div>
 
@@ -560,7 +566,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ── MOBILE TOP BAR ──────────────────────────────────────── */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex border-b border-app bg-surface px-4 py-3 items-center justify-between">
         <span className="text-lg font-extrabold tracking-tight text-app">
-          Dental<span className="text-[#00C4BC]">OS</span>
+          Vital<span className="text-[#00C4BC]">OS</span>
         </span>
         <NotificationBell />
       </div>
@@ -576,7 +582,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span>
                 Tu período de prueba vence en{' '}
                 <strong>{subscription.trial.daysLeft} {subscription.trial.daysLeft === 1 ? 'día' : 'días'}</strong>.
-                Elegí un plan para seguir usando DentalOS.
+                Elegí un plan para seguir usando VitalOS.
               </span>
             </div>
             <button
@@ -779,7 +785,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {!paymentConfirmed && (
                   <p className="text-sm text-[#6B7280] mt-0.5">
                     {!selectedPlan
-                      ? 'Con solo 1 paciente recuperado por mes, DentalOS se paga solo.'
+                      ? 'Con solo 1 paciente recuperado por mes, VitalOS se paga solo.'
                       : paymentMethod === 'nave'
                       ? 'Escaneá el QR con tu app bancaria o de pago'
                       : 'Serás redirigido a MercadoPago para completar el pago'}
@@ -988,7 +994,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             Reintentar
                           </button>
                           <a
-                            href="mailto:soporte.dentalos@gmail.com"
+                            href="mailto:soporte@vitalos.com.ar"
                             className="text-xs text-[#6B7280] hover:text-[#0F1720] underline underline-offset-2 transition-colors"
                           >
                             ¿Sigue fallando? Contactanos
@@ -1144,7 +1150,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <h3 className="font-bold text-lg text-app mb-2">¿Cerrar sesión?</h3>
             <p className="text-app3 text-sm mb-6">
-              Vas a salir de DentalOS. Podés volver a entrar cuando quieras.
+              Vas a salir de VitalOS. Podés volver a entrar cuando quieras.
             </p>
             <div className="flex gap-3">
               <button
