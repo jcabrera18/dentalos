@@ -11,7 +11,7 @@
 // longitudinal se firma por encounter en EncountersSection.
 
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import type { ClinicalEncounter } from '@/lib/clinicalEncounters'
@@ -34,8 +34,13 @@ type Mode = 'form' | 'sign' | 'signatures' | 'sig-detail'
 export default function GenericClinicalHistory({ discipline }: { discipline: Discipline }) {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const patientId = params.id as string
   const supabase = createClient()
+
+  // Deep-link a una evolución puntual (desde el resumen clínico de la ficha):
+  // ?encounter=<id> abre la pestaña de evolución directamente en ese registro.
+  const initialEncounterId = searchParams.get('encounter')
 
   const template = clinicalTemplateFor(discipline)
   const sectionDefs = clinicalSectionsFor(discipline)
@@ -52,7 +57,9 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
   const [riskLevel, setRiskLevel] = useState<string | null>(null)
 
   const encountersEnabled = template.encounters.enabled
-  const [tab, setTab] = useState<'anamnesis' | 'encounters'>('anamnesis')
+  const [tab, setTab] = useState<'anamnesis' | 'encounters'>(
+    encountersEnabled && initialEncounterId ? 'encounters' : 'anamnesis',
+  )
 
   // Firma del paciente
   const [mode, setMode] = useState<Mode>('form')
@@ -346,6 +353,7 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
           discipline={discipline}
           patientId={patientId}
           fum={(sections['gineco_obstetricos_obs']?.fum as string) ?? null}
+          initialEncounterId={initialEncounterId}
         />
       )}
 

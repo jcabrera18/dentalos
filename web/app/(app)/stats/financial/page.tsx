@@ -5,6 +5,7 @@ import { Eye, EyeOff, MoreVertical } from 'lucide-react'
 import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { fetchProfile } from '@/lib/profileCache'
+import { useProfessionals } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -153,7 +154,8 @@ export default function FinancialStatsPage() {
   const [deletingPayment, setDeletingPayment] = useState(false)
   const [deletePaymentError, setDeletePaymentError] = useState('')
   const [patients, setPatients] = useState<any[]>([])
-  const [professionals, setProfessionals] = useState<any[]>([])
+  // Compartida y cacheable → React Query (dedup entre páginas).
+  const { data: professionals = [] } = useProfessionals()
   const [preselectedPatientId, setPreselectedPatientId] = useState<string | null>(null)
 
   const [masked, setMasked] = useState(false)
@@ -200,7 +202,6 @@ export default function FinancialStatsPage() {
       Promise.all([
         fetchMyProfile(t),
         fetchAfipConfig(t),
-        fetchProfessionals(t),
       ])
 
       // Handle ?patient_id= deeplink — needs patients loaded first
@@ -275,11 +276,6 @@ export default function FinancialStatsPage() {
     } finally {
       setPatientsLoading(false)
     }
-  }
-
-  async function fetchProfessionals(t: string) {
-    const data = await apiFetch('/professionals', { token: t })
-    setProfessionals(data.data ?? [])
   }
 
   async function fetchMyProfile(t: string) {

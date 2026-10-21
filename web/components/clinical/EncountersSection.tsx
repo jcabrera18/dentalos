@@ -5,10 +5,14 @@
 // para nutrición. Manejado por CLINICAL_TEMPLATES[discipline].encounters.
 
 import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { Plus, AlertTriangle, Lock, Trash2 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+
+// recharts es pesado y el chart solo aparece para disciplinas con peso (nutrición).
+// Lo cargamos dinámico para no inflar el bundle del detalle clínico general.
+const WeightChart = dynamic(() => import('./WeightChart'), { ssr: false })
 import { clinicalTemplateFor, DISCIPLINE_LABELS, type Discipline } from '@/lib/capabilities'
 import { VitalsInput, computeBmi, type Vitals } from '@/components/VitalsInput'
 import { FieldInput, Toggle } from '@/components/clinical/ClinicalFields'
@@ -23,7 +27,7 @@ type Mode = 'list' | 'form' | 'detail'
 const fmtDate = (d: string) =>
   new Date(d + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 
-export default function EncountersSection({ discipline, patientId, fum }: { discipline: Discipline; patientId: string; fum?: string | null }) {
+export default function EncountersSection({ discipline, patientId, fum, initialEncounterId }: { discipline: Discipline; patientId: string; fum?: string | null; initialEncounterId?: string | null }) {
   const supabase = createClient()
   const template = clinicalTemplateFor(discipline)
   const enc = template.encounters
@@ -69,6 +73,19 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
     reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId])
+
+  // Deep-link: abrir directamente el encounter indicado (una sola vez, para no
+  // reabrirlo al volver a la lista).
+  const openedInitial = useRef(false)
+  useEffect(() => {
+    if (openedInitial.current || !loaded || !initialEncounterId) return
+    openedInitial.current = true
+    const target = items.find((e) => e.id === initialEncounterId)
+    if (target) {
+      setSelected(target)
+      setMode('detail')
+    }
+  }, [loaded, items, initialEncounterId])
 
   function openNew() {
     setEditingId(null)
@@ -206,18 +223,7 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
       {showWeightChart && chartData.length >= 2 && (
         <section className="bg-surface border border-app rounded-2xl p-5">
           <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-4">Evolución de peso / IMC</div>
-          <div style={{ width: '100%', height: 220 }}>
-            <ResponsiveContainer>
-              <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e7eb)" opacity={0.3} />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="peso" stroke="#00C4BC" strokeWidth={2} dot={{ r: 3 }} name="Peso (kg)" />
-                <Line type="monotone" dataKey="imc" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="IMC" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <WeightChart data={chartData} />
         </section>
       )}
 

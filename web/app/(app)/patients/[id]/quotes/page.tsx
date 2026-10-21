@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
-import { useMe } from '@/lib/queries'
+import { useMe, useProfessionals } from '@/lib/queries'
 import { normalizeDiscipline, type Discipline } from '@/lib/capabilities'
 import {
   ArrowLeft, Plus, Trash2, Pencil, Printer, FileText,
@@ -495,7 +495,8 @@ export default function PatientQuotesPage() {
 
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [patient, setPatient] = useState<{ first_name: string; last_name: string; phone: string | null } | null>(null)
-  const [professionals, setProfessionals] = useState<Professional[]>([])
+  // Compartida y cacheable → React Query (dedup entre páginas).
+  const { data: professionals = [] } = useProfessionals() as { data: Professional[] | undefined }
   const [loading, setLoading] = useState(true)
   const [myProfessionalId, setMyProfessionalId] = useState('')
 
@@ -532,15 +533,13 @@ export default function PatientQuotesPage() {
       const profId: string = (session.user.app_metadata?.professional_id ?? session.user.user_metadata?.professional_id ?? session.user.id) as string
       setMyProfessionalId(profId)
 
-      const [patientRes, quotesRes, profsRes] = await Promise.all([
+      const [patientRes, quotesRes] = await Promise.all([
         apiFetch(`/patients/${patientId}`, { token }),
         apiFetch(`/quotes?patient_id=${patientId}`, { token }),
-        apiFetch('/professionals', { token }),
       ])
 
       setPatient(patientRes.data)
       setQuotes(quotesRes.data ?? [])
-      setProfessionals(profsRes.data ?? [])
       setForm(emptyForm(profId))
       setLoading(false)
     }

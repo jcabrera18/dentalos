@@ -778,6 +778,7 @@ export default function PatientDetailClient({
               discipline={normalizeDiscipline(me?.discipline)}
               snapshot={clinicalHistory}
               onOpenFull={() => navigateTo(`/patients/${params.id}/clinical-history`, 'clinical-history')}
+              onOpenEncounter={(encounterId) => navigateTo(`/patients/${params.id}/clinical-history?encounter=${encounterId}`, 'clinical-history')}
             />
 
             {/* Odontograma — gated por especialidad (solo odontología edita). */}
@@ -2037,10 +2038,12 @@ const OdontogramView = memo(function OdontogramView({ odontogram, onSaveTooth, o
     const p = prosthetics.find(pr => pr.id === id)
     if (!p) return
     startSaving()
-    Promise.all(p.teeth.map(tooth => {
+    // Un solo PUT bulk en vez de un request por pieza (evita N+1 + N invalidaciones).
+    const bulkPayload = p.teeth.map(tooth => {
       const state = teeth[tooth] ?? {}
-      return onSaveTooth(tooth, { surfaces: buildSurfaces(state) }, state.note ?? '')
-    })).finally(() => {
+      return { toothNumber: tooth, surfaces: buildSurfaces(state), note: state.note ?? '' }
+    })
+    onSaveBulk(bulkPayload).finally(() => {
       setProsthetics(prev => prev.filter(pr => pr.id !== id))
       doneSaving()
     })
@@ -2269,29 +2272,29 @@ const OdontogramView = memo(function OdontogramView({ odontogram, onSaveTooth, o
           {odontogramType === 'adult' ? (
             <>
               <div className="flex gap-3 justify-center">
-                <Quadrant teeth={Q1} label="Q1" />
+                {Quadrant({ teeth: Q1, label: 'Q1' })}
                 <div className="w-px bg-surface3" />
-                <Quadrant teeth={Q2} label="Q2" />
+                {Quadrant({ teeth: Q2, label: 'Q2' })}
               </div>
               <div className="border-t border-dashed border-app my-1" />
               <div className="flex gap-3 justify-center">
-                <Quadrant teeth={Q4} label="Q4" />
+                {Quadrant({ teeth: Q4, label: 'Q4' })}
                 <div className="w-px bg-surface3" />
-                <Quadrant teeth={Q3} label="Q3" />
+                {Quadrant({ teeth: Q3, label: 'Q3' })}
               </div>
             </>
           ) : (
             <>
               <div className="flex gap-3 justify-center">
-                <Quadrant teeth={CQ1} label="Q5" />
+                {Quadrant({ teeth: CQ1, label: 'Q5' })}
                 <div className="w-px bg-surface3" />
-                <Quadrant teeth={CQ2} label="Q6" />
+                {Quadrant({ teeth: CQ2, label: 'Q6' })}
               </div>
               <div className="border-t border-dashed border-app my-1" />
               <div className="flex gap-3 justify-center">
-                <Quadrant teeth={CQ4} label="Q8" />
+                {Quadrant({ teeth: CQ4, label: 'Q8' })}
                 <div className="w-px bg-surface3" />
-                <Quadrant teeth={CQ3} label="Q7" />
+                {Quadrant({ teeth: CQ3, label: 'Q7' })}
               </div>
             </>
           )}
@@ -2303,7 +2306,7 @@ const OdontogramView = memo(function OdontogramView({ odontogram, onSaveTooth, o
         <div className="mt-4 bg-surface2 rounded-xl border border-yellow-700/50 p-4">
           <div className="flex items-start gap-4">
             <div className="flex flex-col items-center gap-1 flex-shrink-0">
-              <BigToothEditor n={selectedTooth} />
+              {BigToothEditor({ n: selectedTooth })}
               <span className="text-xs text-yellow-400 font-mono font-bold">Pieza {selectedTooth}</span>
             </div>
 

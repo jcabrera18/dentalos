@@ -457,3 +457,43 @@ export function clinicalSectionsFor(
     .filter((s): s is ClinicalSection => Boolean(s))
 }
 // <SYNC:capabilities> END
+
+// ── Tipos de consulta por disciplina (solo UI) ─────────────────────────────
+// Pueblan el dropdown "Tipo de consulta" de agenda, alta de turno, pago y
+// booking público. El backend guarda appointment_type/concept como texto libre
+// (max 100): esto NO es fuente de verdad ni se valida contra el server, por eso
+// vive FUERA de la región <SYNC:capabilities> y no necesita espejo en la API.
+// Agregar/editar una especialidad = editar su lista acá.
+export const CONSULTATION_TYPES: Record<Discipline, readonly string[]> = {
+  dentistry: [
+    'Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia',
+    'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia',
+    'Control', 'Armonización facial', 'Otro',
+  ],
+  psychology: [
+    'Consulta', 'Primera entrevista', 'Sesión', 'Evaluación',
+    'Control', 'Urgencia', 'Otro',
+  ],
+  kinesiology: [
+    'Consulta', 'Evaluación', 'Sesión', 'Rehabilitación',
+    'Control', 'Urgencia', 'Otro',
+  ],
+  general_medicine: [
+    'Consulta', 'Control', 'Chequeo', 'Certificado',
+    'Seguimiento', 'Urgencia', 'Otro',
+  ],
+  nutrition: [
+    'Consulta', 'Primera consulta', 'Control', 'Plan alimentario',
+    'Seguimiento', 'Otro',
+  ],
+  obstetrics: [
+    'Consulta', 'Control prenatal', 'Primera consulta', 'Ecografía',
+    'Puerperio', 'Urgencia', 'Otro',
+  ],
+}
+
+export function consultationTypesFor(
+  discipline: Discipline | null | undefined,
+): readonly string[] {
+  return CONSULTATION_TYPES[normalizeDiscipline(discipline)]
+}

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { Plus_Jakarta_Sans } from 'next/font/google'
+import { consultationTypesFor, type Discipline } from '@/lib/capabilities'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -47,12 +48,6 @@ function filterSlotsByWorkingHours(slots: string[], date: string, wh: WorkingHou
   })
 }
 
-const APPOINTMENT_TYPES = [
-  'Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia',
-  'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis',
-  'Blanqueamiento', 'Urgencia', 'Control', 'Armonización facial', 'Otro',
-]
-
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -66,6 +61,7 @@ type Professional = {
   first_name: string
   last_name: string
   specialty: string | null
+  discipline: Discipline | null
   color: string | null
   clinics: { name: string } | null
 }
@@ -631,7 +627,7 @@ export default function BookingPage() {
                   onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
                 >
                   <option value="">Seleccioná...</option>
-                  {APPOINTMENT_TYPES.map(t => (
+                  {consultationTypesFor(professional?.discipline).map(t => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>

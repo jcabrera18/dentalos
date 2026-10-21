@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useProfessionals, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { consultationTypesFor } from '@/lib/capabilities'
 
 const HOURS = ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -1357,7 +1358,7 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
 
   const todayStr = getTodayStr()
 
-  const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
+  const TIPOS = consultationTypesFor(professionals.find((p: any) => p.id === professionalId)?.discipline)
   const DURACIONES = [
     { value: '15',  label: '15 min' },
     { value: '20',  label: '20 min' },

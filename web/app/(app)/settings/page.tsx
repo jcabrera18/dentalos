@@ -861,6 +861,10 @@ function SpecialtySection({
       // Refrescar capacidades en toda la app: cache de perfil (módulo) + React Query me.
       invalidateProfileCache()
       await qc.invalidateQueries({ queryKey: queryKeys.me })
+      // La lista de profesionales (useProfessionals) alimenta el "Tipo de consulta"
+      // por disciplina en agenda/turnos: sin invalidarla queda cacheada con la
+      // disciplina vieja y sigue mostrando los ítems de la especialidad anterior.
+      await qc.invalidateQueries({ queryKey: queryKeys.professionals })
       onChanged(selected)
       setConfirming(false)
       setSaved(true)

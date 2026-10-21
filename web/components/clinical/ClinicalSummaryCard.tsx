@@ -8,11 +8,10 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, AlertTriangle, Stethoscope } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
-import { DISCIPLINE_LABELS, clinicalTemplateFor, type Discipline } from '@/lib/capabilities'
+import { DISCIPLINE_LABELS, clinicalTemplateFor, clinicalSectionsFor, type Discipline } from '@/lib/capabilities'
 import type { ClinicalEncounter } from '@/lib/clinicalEncounters'
-import type { Vitals } from '@/components/VitalsInput'
+import { computeBmi, type Vitals } from '@/components/VitalsInput'
 import { ClinicalHistoryReadout, type ClinicalHistorySnapshot } from './ClinicalHistoryReadout'
-import { EncounterVitals } from './EncounterReadout'
 
 // Forma cruda del endpoint /clinical-history: odontología (campos al nivel raíz) o
 // el resto de disciplinas ({ discipline_sections }).
@@ -48,21 +47,129 @@ function alertLabels(snap: ClinicalHistorySnapshot): string[] {
   ].filter((x): x is string => typeof x === 'string')
 }
 
+// ── Highlights para disciplinas declarativas (medicina general, etc.) ──
+// La franja de alertas de odontología usa snapshot.alerts; las demás disciplinas
+// guardan todo en `sections`. Derivamos lo clínicamente prioritario desde ahí:
+// alergias/infecto (alerta roja), antecedentes activos, medicación y hábitos.
+const DANGER_KEYS = new Set(['hiv', 'tbc', 'chagas', 'ets', 'hepatitis_b', 'hepatitis_c'])
+const HABIT_SECTION = 'consumo_sustancias'
+const MED_KEYS = new Set(['medicacion', 'psicofarmacos'])
+const ALLERGY_SKIP = new Set(['alergia', 'alergia_medicamentos']) // tratadas aparte
+
+type Highlights = { alerts: string[]; conditions: string[]; medication: string | null; habits: string[] }
+
+function deriveHighlights(snap: ClinicalHistorySnapshot, discipline: Discipline): Highlights {
+  const defs = clinicalSectionsFor(discipline)
+  const sec = snap.sections ?? {}
+  const alerts: string[] = []
+  const conditions: string[] = []
+  const habits: string[] = []
+  let medication: string | null = null
+
+  // Alergias primero (seguridad): mostramos el detalle a medicamentos si existe.
+  const alergiaMed = sec['quirurgicos_internaciones']?.['alergia_medicamentos']
+  const alergiaBool = sec['antecedentes_patologicos']?.['alergia'] === true
+  if (typeof alergiaMed === 'string' && alergiaMed.trim()) alerts.push(`Alergias: ${alergiaMed.trim()}`)
+  else if (alergiaBool) alerts.push('Alergias')
+
+  for (const s of defs) {
+    for (const f of s.fields) {
+      if (ALLERGY_SKIP.has(f.key)) continue
+      const v = sec[s.id]?.[f.key]
+      if (MED_KEYS.has(f.key)) {
+        if (typeof v === 'string' && v.trim()) medication = v.trim()
+        continue
+      }
+      if (f.type !== 'bool' || v !== true) continue
+      if (DANGER_KEYS.has(f.key)) alerts.push(f.label)
+      else if (s.id === HABIT_SECTION) habits.push(f.label)
+      else conditions.push(f.label)
+    }
+  }
+
+  // Detalle de tabaquismo (cigarrillos/día) y drogas.
+  const cig = sec[HABIT_SECTION]?.['tabaco_cant_dia']
+  const tabIdx = habits.indexOf('Tabaquismo')
+  if (tabIdx >= 0 && typeof cig === 'number' && cig > 0) habits[tabIdx] = `Tabaquismo (${cig}/día)`
+  const drogas = sec[HABIT_SECTION]?.['drogas']
+  if (typeof drogas === 'string' && drogas.trim()) habits.push(`Drogas: ${drogas.trim()}`)
+
+  return { alerts, conditions, medication, habits }
+}
+
+// ── Flags de vitales anormales (para resaltar en las filas de evolución) ──
+const SEV_CLS: Record<'red' | 'amber', string> = {
+  red: 'text-red-600 dark:text-red-400 font-semibold',
+  amber: 'text-amber-600 dark:text-amber-400 font-semibold',
+}
+
+function bpSeverity(s?: number | null, d?: number | null): 'red' | 'amber' | null {
+  if (s == null && d == null) return null
+  if ((s ?? 0) >= 140 || (d ?? 0) >= 90) return 'red'
+  if ((s ?? 0) >= 130 || (d ?? 0) >= 85) return 'amber'
+  return null
+}
+
+function bmiSeverity(b?: number | null): 'red' | 'amber' | null {
+  if (b == null) return null
+  if (b >= 35 || b < 16) return 'red'
+  if (b >= 25 || b < 18.5) return 'amber'
+  return null
+}
+
+// Vitales de un encounter con los valores fuera de rango resaltados. Espeja el
+// formato de VitalsDisplay pero colorea TA e IMC según severidad.
+function EncounterVitalsFlagged({ encounter }: { encounter: ClinicalEncounter }) {
+  const config = clinicalTemplateFor(encounter.discipline).encounters
+  if (!config.enabled || !config.vitalsPerEncounter.length) return null
+  const v = encounter.vitals ?? {}
+  const items: { label: string; text: string; sev: 'red' | 'amber' | null }[] = []
+  for (const f of config.vitalsPerEncounter) {
+    if (f === 'bp') {
+      if (v.systolic_bp != null || v.diastolic_bp != null)
+        items.push({ label: 'TA', text: `${v.systolic_bp ?? '—'}/${v.diastolic_bp ?? '—'} mmHg`, sev: bpSeverity(v.systolic_bp, v.diastolic_bp) })
+    } else if (f === 'bmi') {
+      const bmi = v.bmi ?? computeBmi(v.weight_kg, v.height_cm)
+      if (bmi != null) items.push({ label: 'IMC', text: `${bmi} kg/m²`, sev: bmiSeverity(bmi) })
+    } else if (f === 'weight' && v.weight_kg != null) {
+      items.push({ label: 'Peso', text: `${v.weight_kg} kg`, sev: null })
+    } else if (f === 'height' && v.height_cm != null) {
+      items.push({ label: 'Talla', text: `${v.height_cm} cm`, sev: null })
+    }
+  }
+  if (!items.length) return <span className="text-app3">Sin signos vitales</span>
+  return (
+    <span className="inline-flex flex-wrap gap-x-3 gap-y-0.5">
+      {items.map((it) => (
+        <span key={it.label}>
+          <span className="text-app3">{it.label}:</span>{' '}
+          <span className={it.sev ? SEV_CLS[it.sev] : ''}>{it.text}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export function ClinicalSummaryCard({
   patientId,
   token,
   discipline,
   snapshot,
   onOpenFull,
+  onOpenEncounter,
 }: {
   patientId: string
   token: string
   discipline: Discipline
   snapshot: RawHistory | null
   onOpenFull: () => void
+  onOpenEncounter?: (encounterId: string) => void
 }) {
   const snap = toSnapshot(snapshot, discipline)
-  const alerts = snap ? alertLabels(snap) : []
+  const isDental = discipline === 'dentistry'
+  // Odontología: alertas desde snapshot.alerts. Resto: derivadas de las secciones.
+  const highlights = snap && !isDental ? deriveHighlights(snap, discipline) : null
+  const alerts = snap ? (isDental ? alertLabels(snap) : highlights!.alerts) : []
   // Odontología no usa evoluciones longitudinales (usa odontograma) → no mostramos la sección.
   const encountersEnabled = clinicalTemplateFor(discipline).encounters.enabled
   const [encounters, setEncounters] = useState<ClinicalEncounter[] | null>(null)
@@ -116,6 +223,42 @@ export function ClinicalSummaryCard({
           </div>
         )}
 
+        {/* Antecedentes activos — chips (disciplinas declarativas) */}
+        {highlights && highlights.conditions.length > 0 && (
+          <section>
+            <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Antecedentes</div>
+            <div className="flex flex-wrap gap-1.5">
+              {highlights.conditions.map((c) => (
+                <span key={c} className="text-xs font-medium text-app2 bg-surface2 border border-app px-2 py-0.5 rounded-md">
+                  {c}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Medicación actual */}
+        {highlights?.medication && (
+          <section>
+            <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-1.5">Medicación actual</div>
+            <p className="text-sm text-app whitespace-pre-line">{highlights.medication}</p>
+          </section>
+        )}
+
+        {/* Hábitos de riesgo */}
+        {highlights && highlights.habits.length > 0 && (
+          <section>
+            <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-2">Hábitos</div>
+            <div className="flex flex-wrap gap-1.5">
+              {highlights.habits.map((h) => (
+                <span key={h} className="text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                  {h}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Última evolución (disciplinas con evoluciones longitudinales) */}
         {encountersEnabled && (
         <section>
@@ -132,7 +275,7 @@ export function ClinicalSummaryCard({
               {recent.map((e) => (
                 <button
                   key={e.id}
-                  onClick={onOpenFull}
+                  onClick={() => (onOpenEncounter ? onOpenEncounter(e.id) : onOpenFull())}
                   className="w-full text-left bg-surface2 hover:bg-surface3 border border-app rounded-xl px-3 py-2.5 transition-colors cursor-pointer"
                 >
                   <div className="text-sm font-semibold text-app flex items-center gap-2">
@@ -140,7 +283,7 @@ export function ClinicalSummaryCard({
                     {e.risk_flag && <AlertTriangle size={13} className="text-amber-400 shrink-0" />}
                   </div>
                   <div className="text-xs text-app3 mt-0.5 truncate">
-                    <EncounterVitals encounter={e} />
+                    <EncounterVitalsFlagged encounter={e} />
                   </div>
                 </button>
               ))}

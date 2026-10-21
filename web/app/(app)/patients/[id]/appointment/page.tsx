@@ -4,10 +4,14 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useParams } from 'next/navigation'
+import { consultationTypesFor } from '@/lib/capabilities'
+import { useMe, useProfessionals } from '@/lib/queries'
 
 export default function NewAppointmentPage() {
+  // me y professionals son compartidos y cacheables → vía React Query (dedup entre páginas).
+  const { data: me } = useMe()
+  const { data: professionals = [] } = useProfessionals()
   const [patient, setPatient] = useState<any>(null)
-  const [professionals, setProfessionals] = useState<any[]>([])
   const [professionalId, setProfessionalId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -41,24 +45,22 @@ export default function NewAppointmentPage() {
       if (!session) { router.push('/'); return }
       setToken(session.access_token)
 
-      const [patientData, meData, professionalsData] = await Promise.all([
-        apiFetch(`/patients/${params.id}`, { token: session.access_token }),
-        apiFetch('/auth/me', { token: session.access_token }),
-        apiFetch('/professionals', { token: session.access_token }),
-      ])
-
+      const patientData = await apiFetch(`/patients/${params.id}`, { token: session.access_token })
       setPatient(patientData.data)
-      const professionalList = professionalsData.data ?? []
-      setProfessionals(professionalList)
-      setProfessionalId(
-        professionalList.find((p: any) => p.id === meData.data.id)?.id ??
-        professionalList[0]?.id ??
-        ''
-      )
       setLoading(false)
     }
     load()
   }, [])
+
+  // Pre-seleccionamos al profesional logueado (o el primero) una vez que llega la lista.
+  useEffect(() => {
+    if (professionalId || professionals.length === 0) return
+    setProfessionalId(
+      professionals.find((p: any) => p.id === me?.id)?.id ??
+      professionals[0]?.id ??
+      ''
+    )
+  }, [professionals, me, professionalId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -122,7 +124,7 @@ export default function NewAppointmentPage() {
     )
   }
 
-const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia', 'Control', 'Armonizacion facial', 'Otro']
+const TIPOS = consultationTypesFor(professionals.find((p: any) => p.id === professionalId)?.discipline)
   const DURACIONES = [
     { value: '30', label: '30 min' },
     { value: '45', label: '45 min' },
@@ -188,7 +190,7 @@ const TIPOS = ['Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia', 
                 required
               >
                 <option value="" disabled>Seleccionar profesional</option>
-                {professionals.map(p => (
+                {professionals.map((p: any) => (
                   <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
                 ))}
               </select>

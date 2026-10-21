@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
@@ -67,7 +67,15 @@ export default function ClinicalHistoryPage() {
 
   const discipline = normalizeDiscipline(me?.discipline)
   if (discipline !== 'dentistry') {
-    return <GenericClinicalHistory discipline={discipline} />
+    return (
+      <Suspense fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="w-8 h-8 border-2 border-[#00C4BC] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
+        <GenericClinicalHistory discipline={discipline} />
+      </Suspense>
+    )
   }
   return <DentalClinicalHistory />
 }
@@ -82,7 +90,9 @@ function DentalClinicalHistory() {
 
   // Patient
   const [patient, setPatient] = useState<any>(null)
-  const [professionalName, setProfessionalName] = useState('')
+  // me es compartido y cacheable → React Query; derivamos el nombre del profesional.
+  const { data: me } = useMe()
+  const professionalName = me ? `${me.first_name} ${me.last_name}` : ''
 
   // History
   const [clinicalHistory, setClinicalHistory] = useState<any>(null)
@@ -112,11 +122,10 @@ function DentalClinicalHistory() {
       if (!session) { router.push('/'); return }
       const token = session.access_token
 
-      const [patientRes, historyRes, sigsRes, meRes] = await Promise.all([
+      const [patientRes, historyRes, sigsRes] = await Promise.all([
         apiFetch(`/patients/${patientId}`, { token }),
         apiFetch(`/patients/${patientId}/clinical-history`, { token }),
         apiFetch(`/patients/${patientId}/clinical-history/signatures`, { token }),
-        apiFetch('/auth/me', { token }),
       ])
 
       setPatient(patientRes.data)
@@ -124,7 +133,6 @@ function DentalClinicalHistory() {
       setClinicalHistory(existing)
       setForm(existing ?? EMPTY_CLINICAL_HISTORY)
       setSignatures(sigsRes.data ?? [])
-      if (meRes.data) setProfessionalName(`${meRes.data.first_name} ${meRes.data.last_name}`)
       setLoaded(true)
     }
     load()

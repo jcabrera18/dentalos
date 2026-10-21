@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { useMe } from '@/lib/queries'
 import {
   ArrowLeft, Plus, FileText, ChevronDown, ChevronUp, X,
   Printer, Share2, Download, Copy, Check,
@@ -394,7 +395,9 @@ export default function PatientConsentsPage() {
   const [showSignModal, setShowSignModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [professionalName, setProfessionalName] = useState('')
+  // me es compartido y cacheable → React Query; derivamos el nombre del profesional.
+  const { data: me } = useMe()
+  const professionalName = me ? `${me.first_name} ${me.last_name}` : ''
 
   // Signature canvas
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -410,17 +413,13 @@ export default function PatientConsentsPage() {
 
       const token = session.access_token
 
-      const [patientRes, consentsRes, meRes] = await Promise.all([
+      const [patientRes, consentsRes] = await Promise.all([
         apiFetch(`/patients/${patientId}`, { token }),
         apiFetch(`/consents?patient_id=${patientId}`, { token }),
-        apiFetch('/auth/me', { token }),
       ])
 
       setPatient(patientRes.data)
       setConsents(consentsRes.data ?? [])
-      if (meRes.data) {
-        setProfessionalName(`${meRes.data.first_name} ${meRes.data.last_name}`)
-      }
       setLoading(false)
     }
     load()

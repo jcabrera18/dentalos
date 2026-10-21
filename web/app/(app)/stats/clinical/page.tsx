@@ -5,7 +5,7 @@ import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import {
-  ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie,
 } from 'recharts'
 
@@ -87,7 +87,7 @@ export default function ClinicalStatsPage() {
   const [byDayCache, setByDayCache] = useState<DayEntry[]>([])
 
   // Static 90-day charts
-  const [appointmentsByMonth, setAppointmentsByMonth] = useState<{ month: string; total: number }[]>([])
+  const [appointmentsByMonth, setAppointmentsByMonth] = useState<{ month: string; total: number; newPatients: number }[]>([])
   const [topTypes, setTopTypes] = useState<{ type: string; count: number }[]>([])
   const [byProfessional, setByProfessional] = useState<{ name: string; color: string; count: number }[]>([])
   const [totalPatients, setTotalPatients] = useState<number | null>(null)
@@ -121,8 +121,12 @@ export default function ClinicalStatsPage() {
       setTotalPatients(patientsRes.meta?.total ?? null)
 
       // Static charts
-      const rawByMonth: { month: string; total: number }[] =
-        (d.by_month ?? []).map((r: any) => ({ month: formatMonthLabel(r.month), total: Number(r.total) }))
+      const rawByMonth: { month: string; total: number; newPatients: number }[] =
+        (d.by_month ?? []).map((r: any) => ({
+          month: formatMonthLabel(r.month),
+          total: Number(r.total),
+          newPatients: Number(r.new_patients ?? 0),
+        }))
       setAppointmentsByMonth(rawByMonth)
       setTopTypes((d.top_types ?? []).map((r: any) => ({ type: r.type, count: Number(r.count) })))
       setByProfessional((d.by_professional ?? []).map((r: any) => ({ name: r.name, color: r.color, count: Number(r.count) })))
@@ -283,22 +287,19 @@ export default function ClinicalStatsPage() {
                 </span>
               )}
             </div>
-            <div className="text-xs text-app3 mb-4">Últimos 90 días · excluye cancelados</div>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={appointmentsByMonth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <div className="text-xs text-app3 mb-4">Últimos 90 días · atendidos = pacientes completados</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={appointmentsByMonth} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--text3)' }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--text3)' }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', color: 'var(--text)' }}
-                  formatter={(val: any) => [val, 'Atendidos']}
                   cursor={{ fill: 'var(--surface2)' }}
                 />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                  {appointmentsByMonth.map((_, i) => (
-                    <Cell key={i} fill={i === appointmentsByMonth.length - 1 ? '#00C4BC' : '#6366f1'} />
-                  ))}
-                </Bar>
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                <Bar dataKey="total"       name="Atendidos"        fill="#00C4BC" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="newPatients" name="Pacientes nuevos"  fill="#6366f1" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </section>

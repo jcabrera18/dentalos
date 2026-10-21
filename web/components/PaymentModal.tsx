@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import { downloadReceiptPNG } from '@/components/generateReceipt'
 import { InvoiceModal } from '@/components/InvoiceModal'
+import { consultationTypesFor } from '@/lib/capabilities'
 
 export const METODOS = [
   { value: 'cash', label: '💵 Efectivo' },
@@ -14,11 +15,12 @@ export const METODOS = [
   { value: 'other', label: '📝 Otro' },
 ]
 
-export const TIPOS = [
-  'Consulta', 'Limpieza', 'Endodoncia', 'Exodoncia', 'Ortodoncia',
-  'Implante', 'Operatoria', 'Prótesis', 'Blanqueamiento', 'Urgencia',
-  'Control', 'Armonizacion facial', 'Otro',
-]
+// Solo dígitos en el estado; se muestra con separadores de miles (es-AR).
+function formatThousands(value: string) {
+  const digits = (value ?? '').replace(/\D/g, '')
+  if (!digits) return ''
+  return Number(digits).toLocaleString('es-AR')
+}
 
 export function PaymentModal({ token, patients: initialPatients, professionals, payment, preselectedPatientId, prefillAmount, clinicName, myProfessionalName, profesionalIvaCondition, hasAfipConfig, onClose, onSaved }: {
   token: string
@@ -68,6 +70,13 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
   }
 
   const selectedPatient = selectedPatientData
+
+  // Tipo de consulta según la disciplina del profesional del cobro. Si no hay uno
+  // seleccionado pero la clínica tiene uno solo, se usa ese; si no, odontología (default).
+  const activeProfessional =
+    professionals.find((p: any) => p.id === form.professional_id) ??
+    (professionals.length === 1 ? professionals[0] : undefined)
+  const TIPOS = consultationTypesFor(activeProfessional?.discipline)
 
   useEffect(() => {
     if (!form.patient_id || isEditing) { setPatientBalance(null); return }
@@ -381,39 +390,74 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
 
             {/* Total + Entregado */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">
-                  Total <span className="font-normal normal-case text-app3">(opcional)</span>
-                </label>
-                <div className="relative">
+              <div className="flex flex-col">
+                <div className="h-9">
+                  <label className="block text-xs font-semibold text-app3 uppercase tracking-wider leading-tight">
+                    Total <span className="font-normal normal-case text-app3">(opcional)</span>
+                  </label>
+                  <p className="text-[11px] text-app3 leading-tight mt-0.5">Precio del tratamiento.</p>
+                </div>
+                <div className="relative mt-1.5">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 font-bold text-sm">$</span>
-                  <input type="number" value={form.total_amount} onChange={e => set('total_amount', e.target.value)}
+                  <input type="text" inputMode="numeric" value={formatThousands(form.total_amount)}
+                    onChange={e => set('total_amount', e.target.value.replace(/\D/g, ''))}
                     placeholder="0"
-                    className="no-spinner w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
-                    min="0" />
+                    className="no-spinner w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]" />
                 </div>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5 min-h-[16px]">
-                  <label className="text-xs font-semibold text-app3 uppercase tracking-wider">Entregado</label>
-                  {totalAmount > 0 && (
-                    <button type="button" onClick={() => set('amount', String(totalAmount))}
-                      className="text-xs font-semibold text-[#00C4BC] hover:underline active:scale-95 transition-transform">
-                      Total: ${totalAmount.toLocaleString('es-AR')}
-                    </button>
-                  )}
+              <div className="flex flex-col">
+                <div className="h-9">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-app3 uppercase tracking-wider leading-tight">Entregado</label>
+                    {totalAmount > 0 && (
+                      <button type="button" onClick={() => set('amount', String(totalAmount))}
+                        className="text-xs font-semibold text-[#00C4BC] hover:underline active:scale-95 transition-transform">
+                        Total: ${totalAmount.toLocaleString('es-AR')}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-app3 leading-tight mt-0.5">Lo que paga ahora.</p>
                 </div>
-                <div className="relative">
+                <div className="relative mt-1.5">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-app3 font-bold text-sm">$</span>
-                  <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
+                  <input type="text" inputMode="numeric" value={formatThousands(form.amount)}
+                    onChange={e => set('amount', e.target.value.replace(/\D/g, ''))}
                     onFocus={() => { if (form.amount === '0') set('amount', '') }}
                     onBlur={() => { if (form.amount === '') set('amount', '0') }}
                     placeholder="0"
                     className="no-spinner w-full bg-surface2 border border-app rounded-xl pl-7 pr-3 py-2.5 text-app text-lg font-bold focus:outline-none focus:border-[#00C4BC]"
-                    min="0" required />
+                    required />
                 </div>
               </div>
             </div>
+
+            {/* Mensajes de ayuda según qué falte */}
+            {totalAmount === 0 && paidAmount > 0 && (
+              <div className="flex items-start gap-2 bg-surface2 border border-app rounded-xl px-3 py-2">
+                <span className="text-app3 text-sm leading-none mt-0.5">💡</span>
+                <span className="text-[11px] text-app2 leading-snug">
+                  Se registra el cobro de <span className="font-semibold">${paidAmount.toLocaleString('es-AR')}</span> sin saldo pendiente.
+                  Si el tratamiento cuesta más, cargá el <span className="font-semibold">Total</span> para llevar la cuenta corriente.
+                </span>
+              </div>
+            )}
+            {paidAmount === 0 && totalAmount > 0 && (
+              <div className="flex items-start gap-2 bg-surface2 border border-app rounded-xl px-3 py-2">
+                <span className="text-app3 text-sm leading-none mt-0.5">💡</span>
+                <span className="text-[11px] text-app2 leading-snug">
+                  No entregó nada todavía: queda <span className="font-semibold">${totalAmount.toLocaleString('es-AR')}</span> en cuenta corriente.
+                  Cargá en <span className="font-semibold">Entregado</span> lo que pague ahora.
+                </span>
+              </div>
+            )}
+            {paidAmount === 0 && totalAmount === 0 && (
+              <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+                <span className="text-amber-500 text-sm leading-none mt-0.5">⚠️</span>
+                <span className="text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
+                  Cargá cuánto <span className="font-semibold">entregó</span> el paciente, o el <span className="font-semibold">total</span> del tratamiento para dejarlo en cuenta corriente.
+                </span>
+              </div>
+            )}
 
             {(totalAmount > 0 || (patientBalance !== null && patientBalance !== 0)) && (() => {
               const showNet = patientBalance !== null && patientBalance !== 0
