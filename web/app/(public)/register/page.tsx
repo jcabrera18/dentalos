@@ -477,10 +477,23 @@ function RegisterForm() {
           {!loading && <ArrowRight className="h-4 w-4" />}
         </button>
 
-        <p className="text-center text-xs text-[#9CA3AF]">
-          Al registrarte aceptás nuestros{' '}
-          <Link href="/terms" target="_blank" className="text-[#00C4BC] hover:underline">términos y condiciones</Link>.
-        </p>
+        <div className="text-center text-xs text-[#9CA3AF] leading-relaxed space-y-2">
+          <p>
+            Al crear la cuenta aceptás los{' '}
+            <Link href="/terms" target="_blank" className="text-[#00C4BC] hover:underline">Términos</Link>, la{' '}
+            <Link href="/privacy" target="_blank" className="text-[#00C4BC] hover:underline">Política de Privacidad</Link>{' '}
+            y el{' '}
+            <Link href="/dpa" target="_blank" className="text-[#00C4BC] hover:underline">Acuerdo de Tratamiento de Datos</Link>.
+          </p>
+          <p>
+            Registrás tu consultorio como{' '}
+            <span className="font-semibold text-[#6B7280]">responsable</span> de los datos de tus pacientes: sos
+            vos quien debe contar con el consentimiento de cada paciente para cargar sus datos y contactarlo
+            —incluidos los recordatorios por WhatsApp—, asegurar que la información clínica que registres sea
+            correcta y conservar la historia clínica por el plazo legal. VitalOS actúa como encargado del
+            tratamiento según tus instrucciones, en los términos del DPA.
+          </p>
+        </div>
       </form>
 
       {/* Trust badges */}

@@ -114,6 +114,11 @@ export default function HomePage() {
     return (annualBilling ? p.annual : p.monthly).toLocaleString('es-AR')
   }
 
+  // total facturado al año cuando se paga anual (= 10 meses del precio mensual)
+  function annualTotal(plan: keyof typeof PRICES) {
+    return (PRICES[plan].monthly * 10).toLocaleString('es-AR')
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -138,7 +143,7 @@ export default function HomePage() {
     },
     {
       q: '¿Lo puedo usar desde el celular?',
-      a: 'Sí. Funciona igual de bien en el celular que en la computadora o la tablet. Muchos odontólogos lo manejan solo desde el teléfono.',
+      a: 'Sí. Funciona igual de bien en el celular que en la computadora o la tablet. Muchos profesionales lo manejan solo desde el teléfono.',
     },
     {
       q: '¿Tengo que instalar o descargar algo?',
@@ -155,6 +160,10 @@ export default function HomePage() {
     {
       q: '¿Mis datos están seguros?',
       a: 'Sí. Tus datos se guardan con respaldo automático en la nube. Vos sos el único dueño de tu información y podés exportarla cuando quieras.',
+    },
+    {
+      q: '¿Los datos de mis pacientes están encriptados?',
+      a: 'Sí. Toda la información viaja cifrada (HTTPS) y se almacena cifrada en reposo en servidores con estándares de la industria. Además, cada clínica queda completamente aislada de las demás: solo vos y tu equipo pueden ver los datos de tus pacientes.',
     },
   ]
 
@@ -753,7 +762,7 @@ export default function HomePage() {
               Testimonios
             </span>
             <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
-              Odontólogos que dejaron el papel
+              Profesionales de la salud que dejaron el papel
             </h2>
             <p className="text-[#6B7280] mt-3">Y no quieren volver.</p>
           </div>
@@ -768,14 +777,14 @@ export default function HomePage() {
               },
               {
                 quote: '"Los recordatorios por WhatsApp solos ya lo justifican. Casi no tengo más turnos perdidos."',
-                name: 'Dr. Rubén Acosta',
-                role: 'Ortodoncia · Mar del Plata',
+                name: 'Lic. Rubén Acosta',
+                role: 'Kinesiología · Mar del Plata',
                 initials: 'RA',
               },
               {
                 quote: '"Trabajo sola hace 22 años. Por fin tengo cada ficha en el celular, sin revolver carpetas."',
                 name: 'Dra. Silvina Ferreyra',
-                role: 'Odontopediatría · Rosario',
+                role: 'Nutrición · Rosario',
                 initials: 'SF',
               },
             ].map((t, i) => (
@@ -891,9 +900,12 @@ export default function HomePage() {
               <div className="mb-1">
                 <span className="text-5xl font-extrabold text-[#0F1720]">${price('starter')}</span>
               </div>
-              <p className="text-[#6B7280] text-xs mb-7">
+              <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
                 ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
               </p>
+              {annualBilling && (
+                <p className="text-[#6B7280] text-xs mb-7">${annualTotal('starter')} ARS / año</p>
+              )}
 
               <div className="space-y-3 mb-5 flex-1">
                 {[
@@ -938,9 +950,12 @@ export default function HomePage() {
               <div className="mb-1">
                 <span className="text-5xl font-extrabold text-[#0F1720]">${price('growth')}</span>
               </div>
-              <p className="text-[#6B7280] text-xs mb-7">
+              <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
                 ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
               </p>
+              {annualBilling && (
+                <p className="text-[#6B7280] text-xs mb-7">${annualTotal('growth')} ARS / año</p>
+              )}
 
               <div className="space-y-3 mb-5 flex-1">
                 {[
@@ -979,9 +994,12 @@ export default function HomePage() {
               <div className="mb-1">
                 <span className="text-5xl font-extrabold text-[#0F1720]">${price('scale')}</span>
               </div>
-              <p className="text-[#6B7280] text-xs mb-7">
+              <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
                 ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
               </p>
+              {annualBilling && (
+                <p className="text-[#6B7280] text-xs mb-7">${annualTotal('scale')} ARS / año</p>
+              )}
 
               <div className="space-y-3 mb-5 flex-1">
                 {[
@@ -1074,7 +1092,7 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/register"
-              className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 text-base whitespace-nowrap"
+              className="inline-flex items-center justify-center bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 text-base whitespace-nowrap leading-none"
             >
               Quiero probarlo gratis
             </Link>
@@ -1082,9 +1100,9 @@ export default function HomePage() {
               href={waLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 bg-white border-2 border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10 font-bold px-7 py-3.5 rounded-xl transition-all text-base whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 bg-white border-2 border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10 font-bold px-7 py-3.5 rounded-xl transition-all text-base whitespace-nowrap leading-none"
             >
-              💬 Prefiero que me lo muestren
+              <span className="leading-none">💬</span> Prefiero que me lo muestren
             </a>
           </div>
           <p className="text-sm text-[#6B7280] mt-5">
