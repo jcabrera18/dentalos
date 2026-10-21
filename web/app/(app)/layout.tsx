@@ -156,7 +156,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       monthlyPrice: '$95.000',
       annualPrice:  '$950.000',
       description: 'Gestioná tu clínica como una empresa',
-      features: ['Todo lo de Growth', 'Profesionales ilimitados', '2.000 recordatorios WhatsApp/mes', 'Reportes avanzados', 'Onboarding personalizado', 'Soporte dedicado'],
+      features: ['Todo lo de Growth', 'Hasta 10 profesionales', '2.000 recordatorios WhatsApp/mes', 'Reportes avanzados', 'Onboarding personalizado', 'Soporte dedicado'],
       highlight: false,
     },
   ]
