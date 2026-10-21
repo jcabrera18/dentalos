@@ -994,10 +994,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             Reintentar
                           </button>
                           <a
-                            href="mailto:soporte@vitalos.com.ar"
+                            href="https://wa.me/5493438558913"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-xs text-[#6B7280] hover:text-[#0F1720] underline underline-offset-2 transition-colors"
                           >
-                            ¿Sigue fallando? Contactanos
+                            ¿Sigue fallando? Escribinos al WhatsApp
                           </a>
                         </div>
                       )}
