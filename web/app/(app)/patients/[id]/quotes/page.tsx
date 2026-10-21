@@ -4,16 +4,62 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { useMe } from '@/lib/queries'
+import { normalizeDiscipline, type Discipline } from '@/lib/capabilities'
 import {
   ArrowLeft, Plus, Trash2, Pencil, Printer, FileText,
   ChevronDown, ChevronUp, X, Share2, Download, Copy, Check,
 } from 'lucide-react'
 
+// ── Terminología del presupuesto por disciplina ──────────────
+// Odontología conserva el formulario histórico (DentalOS): columna "Pieza
+// dental" y label "Odontólogo/a". El resto de las especialidades ocultan la
+// pieza dental (concepto odontológico) y usan términos genéricos.
+
+interface QuoteTerms {
+  professionalLabel: string   // label del selector de profesional
+  showTooth: boolean          // mostrar campo/columna "Pieza dental"
+  toothLabel: string          // label del input (form)
+  toothColLabel: string       // encabezado corto en tablas / PDF / imagen
+  toothPlaceholder: string
+  treatmentPlaceholder: string // ejemplos del campo "Tratamiento"
+}
+
+const TREATMENT_EXAMPLES: Record<Exclude<Discipline, 'dentistry'>, string> = {
+  psychology: 'Ej: Sesión individual, Evaluación...',
+  kinesiology: 'Ej: Sesión de kinesiología, Rehabilitación...',
+  general_medicine: 'Ej: Consulta, Control clínico...',
+  nutrition: 'Ej: Plan nutricional, Control...',
+  obstetrics: 'Ej: Control prenatal, Ecografía...',
+}
+
+function quoteTermsFor(discipline: Discipline): QuoteTerms {
+  if (discipline === 'dentistry') {
+    return {
+      professionalLabel: 'Odontólogo/a',
+      showTooth: true,
+      toothLabel: 'Pieza dental',
+      toothColLabel: 'Pieza',
+      toothPlaceholder: 'Ej: 26',
+      treatmentPlaceholder: 'Ej: Endodoncia, Corona zirconio...',
+    }
+  }
+  return {
+    professionalLabel: 'Profesional',
+    showTooth: false,
+    toothLabel: '',
+    toothColLabel: '',
+    toothPlaceholder: '',
+    treatmentPlaceholder: TREATMENT_EXAMPLES[discipline],
+  }
+}
+
 // ── PDF generator (new window approach) ──────────────────────
 
-function generatePrintHtml(quote: Quote, patientName: string): string {
+function generatePrintHtml(quote: Quote, patientName: string, terms: QuoteTerms): string {
   const prof = quote.professionals
   const profName = prof ? `Dr/a. ${prof.first_name} ${prof.last_name}` : ''
+  const showTooth = terms.showTooth
 
   function fmtARS(n: number) {
     return '$ ' + Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -31,15 +77,16 @@ function generatePrintHtml(quote: Quote, patientName: string): string {
         <strong style="color:#111">${item.treatment_name}</strong>
         ${item.comment ? `<br><span style="font-size:11px;color:#999">${item.comment}</span>` : ''}
       </td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;color:#555">${item.tooth_number || '—'}</td>
+      ${showTooth ? `<td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;color:#555">${item.tooth_number || '—'}</td>` : ''}
       <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right;color:#555">${item.quantity}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right;color:#555">${fmtARS(item.unit_price)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;color:#111">${fmtARS(item.subtotal)}</td>
     </tr>`).join('')
 
+  const totalsSpan = showTooth ? 3 : 2
   const discountRow = Number(quote.global_discount_pct) > 0 ? `
     <tr>
-      <td colspan="3"></td>
+      <td colspan="${totalsSpan}"></td>
       <td style="padding:6px 12px;text-align:right;color:#555">Descuento (${quote.global_discount_pct}%)</td>
       <td style="padding:6px 12px;text-align:right;color:#059669;font-weight:600">− ${fmtARS(Number(quote.discount_amount))}</td>
     </tr>` : ''
@@ -88,7 +135,7 @@ function generatePrintHtml(quote: Quote, patientName: string): string {
     <thead>
       <tr style="background:#f9fafb;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb">
         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#6b7280">Tratamiento</th>
-        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#6b7280">Pieza</th>
+        ${showTooth ? `<th style="text-align:left;padding:10px 12px;font-weight:600;color:#6b7280">${terms.toothColLabel}</th>` : ''}
         <th style="text-align:right;padding:10px 12px;font-weight:600;color:#6b7280">Cant.</th>
         <th style="text-align:right;padding:10px 12px;font-weight:600;color:#6b7280">Precio unit.</th>
         <th style="text-align:right;padding:10px 12px;font-weight:600;color:#6b7280">Subtotal</th>
@@ -97,13 +144,13 @@ function generatePrintHtml(quote: Quote, patientName: string): string {
     <tbody>${itemRows}</tbody>
     <tfoot>
       <tr>
-        <td colspan="3"></td>
+        <td colspan="${totalsSpan}"></td>
         <td style="padding:8px 12px;text-align:right;color:#6b7280">Subtotal</td>
         <td style="padding:8px 12px;text-align:right;color:#111">${fmtARS(Number(quote.subtotal))}</td>
       </tr>
       ${discountRow}
       <tr style="border-top:2px solid #e5e7eb">
-        <td colspan="3"></td>
+        <td colspan="${totalsSpan}"></td>
         <td style="padding:10px 12px;text-align:right;font-weight:700;color:#111;font-size:15px">Total</td>
         <td style="padding:10px 12px;text-align:right;font-weight:700;color:#111;font-size:15px">${fmtARS(Number(quote.total))}</td>
       </tr>
@@ -114,6 +161,7 @@ function generatePrintHtml(quote: Quote, patientName: string): string {
 
   <div style="border-top:1px solid #f0f0f0;padding-top:20px;text-align:center">
     <p style="font-size:11px;color:#9ca3af">Este presupuesto tiene validez indicada en la fecha de vencimiento. Los precios están expresados en pesos argentinos (ARS).</p>
+    <p style="font-size:11px;margin-top:6px;color:#9ca3af">Generado con <strong style="color:#111">Vital<span style="color:#00C4BC">OS</span></strong> · <span style="color:#00C4BC;font-weight:600">vitalos.com.ar</span></p>
   </div>
 
 </div>
@@ -127,7 +175,9 @@ function generatePrintHtml(quote: Quote, patientName: string): string {
 async function generateQuoteImage(
   quote: Quote,
   patientName: string,
+  terms: QuoteTerms,
 ): Promise<{ dataUrl: string; blob: Blob }> {
+  const showTooth = terms.showTooth
   const W = 800
   const PAD = 44
   const DPR = 2
@@ -161,7 +211,7 @@ async function generateQuoteImage(
     const lines = Math.max(1, Math.ceil(quote.notes.length / 65))
     H += GAP + 1 + GAP + 18 + lines * 20
   }
-  H += GAP + 1 + 36 + 32  // footer + bottom
+  H += GAP + 1 + 36 + 18 + 32  // footer (2 líneas) + bottom
 
   const canvas = document.createElement('canvas')
   canvas.width = W * DPR
@@ -185,8 +235,8 @@ async function generateQuoteImage(
   ctx.textAlign = 'left'
   ctx.font = `bold 26px ${FONT}`
   ctx.fillStyle = G1
-  ctx.fillText('Dental', PAD, y + 26)
-  const dw = ctx.measureText('Dental').width
+  ctx.fillText('Vital', PAD, y + 26)
+  const dw = ctx.measureText('Vital').width
   ctx.fillStyle = TEAL
   ctx.fillText('OS', PAD + dw, y + 26)
 
@@ -224,7 +274,7 @@ async function generateQuoteImage(
 
   hline(y); y += GAP
 
-  // Column X positions
+  // Column X positions. Sin "Pieza" el nombre del tratamiento gana ese ancho.
   const C = { name: PAD, tooth: W - PAD - 290, qty: W - PAD - 200, price: W - PAD - 100, sub: W - PAD }
 
   // Table header row
@@ -233,7 +283,7 @@ async function generateQuoteImage(
   ctx.font = `600 10px ${FONT}`; ctx.fillStyle = G3
   ctx.textAlign = 'left'
   ctx.fillText('TRATAMIENTO', C.name, y + 14)
-  ctx.fillText('PIEZA', C.tooth, y + 14)
+  if (showTooth) ctx.fillText(terms.toothColLabel.toUpperCase(), C.tooth, y + 14)
   ctx.textAlign = 'right'
   ctx.fillText('CANT.', C.qty, y + 14)
   ctx.fillText('PRECIO', C.price, y + 14)
@@ -244,8 +294,8 @@ async function generateQuoteImage(
   quote.items.forEach((item, idx) => {
     if (idx % 2 === 1) { ctx.fillStyle = '#F9FAFB'; ctx.fillRect(0, y, W, ITEM_H) }
 
-    // Treatment name (auto-truncate)
-    const maxNameW = C.tooth - C.name - 12
+    // Treatment name (auto-truncate). Sin pieza se extiende hasta "Cant.".
+    const maxNameW = (showTooth ? C.tooth : C.qty) - C.name - 12
     ctx.font = `500 13px ${FONT}`; ctx.fillStyle = G1
     let nm = item.treatment_name
     while (ctx.measureText(nm).width > maxNameW && nm.length > 4) nm = nm.slice(0, -1)
@@ -259,8 +309,10 @@ async function generateQuoteImage(
       ctx.fillText(cm, C.name, y + 36)
     }
 
-    ctx.font = `12px ${FONT}`; ctx.fillStyle = G2
-    ctx.fillText(item.tooth_number || '—', C.tooth, y + 19)
+    if (showTooth) {
+      ctx.font = `12px ${FONT}`; ctx.fillStyle = G2
+      ctx.fillText(item.tooth_number || '—', C.tooth, y + 19)
+    }
 
     ctx.textAlign = 'right'
     ctx.fillText(String(item.quantity), C.qty, y + 19)
@@ -323,6 +375,18 @@ async function generateQuoteImage(
   hline(y); y += 16
   ctx.font = `11px ${FONT}`; ctx.fillStyle = G4; ctx.textAlign = 'center'
   ctx.fillText('Los precios están expresados en pesos argentinos (ARS).', W / 2, y)
+  y += 18
+  // Marca para difusión — aparece en la imagen que se envía por WhatsApp.
+  const brand = 'Generado con VitalOS · vitalos.com.ar'
+  ctx.font = `600 11px ${FONT}`
+  const brandW = ctx.measureText(brand).width
+  const prefix = 'Generado con '
+  const prefixW = ctx.measureText(prefix).width
+  const bx = W / 2 - brandW / 2
+  ctx.textAlign = 'left'
+  ctx.fillStyle = G3; ctx.fillText(prefix, bx, y)
+  ctx.fillStyle = TEAL; ctx.fillText('VitalOS · vitalos.com.ar', bx + prefixW, y)
+  ctx.textAlign = 'left'
 
   const dataUrl = canvas.toDataURL('image/png')
   const blob = await new Promise<Blob>(res => canvas.toBlob(b => res(b!), 'image/png'))
@@ -393,6 +457,19 @@ function todayISO() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
+// Fecha (ISO yyyy-mm-dd) a N días desde hoy, en horario de Argentina.
+function addDaysISO(days: number) {
+  const base = new Date(`${todayISO()}T00:00:00`)
+  base.setDate(base.getDate() + days)
+  return base.toLocaleDateString('en-CA')
+}
+
+const VALID_UNTIL_PRESETS = [
+  { label: '15 días', days: 15 },
+  { label: '30 días', days: 30 },
+  { label: '60 días', days: 60 },
+] as const
+
 // ── Empty form state ─────────────────────────────────────────
 
 function emptyForm(professionalId: string) {
@@ -411,6 +488,10 @@ export default function PatientQuotesPage() {
   const params = useParams()
   const router = useRouter()
   const patientId = params.id as string
+
+  const { data: me } = useMe()
+  const discipline = normalizeDiscipline(me?.discipline)
+  const terms = quoteTermsFor(discipline)
 
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [patient, setPatient] = useState<{ first_name: string; last_name: string; phone: string | null } | null>(null)
@@ -569,6 +650,7 @@ export default function PatientQuotesPage() {
           body: JSON.stringify(payload),
         })
         setQuotes(qs => [res.data, ...qs])
+        setExpandedId(res.data.id) // abrir el recién creado
       }
 
       setShowForm(false)
@@ -602,12 +684,14 @@ export default function PatientQuotesPage() {
   async function handleShareImage(q: Quote) {
     setImageGenerating(q.id)
     try {
-      const { dataUrl, blob } = await generateQuoteImage(q, patientName)
+      const { dataUrl, blob } = await generateQuoteImage(q, patientName, terms)
       const file = new File([blob], `presupuesto-${q.quote_number}.png`, { type: 'image/png' })
 
       // Mobile: native share sheet (WhatsApp, etc.)
+      // Compartimos SOLO el archivo: agregar title/text junto a files hace que
+      // WhatsApp envíe la imagen dos veces (una como archivo, otra como texto).
       if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Presupuesto ${q.quote_number}` })
+        await navigator.share({ files: [file] })
         return
       }
 
@@ -644,7 +728,7 @@ export default function PatientQuotesPage() {
   // ── Print ──────────────────────────────────
 
   function handlePrint(quote: Quote) {
-    const html = generatePrintHtml(quote, patientName)
+    const html = generatePrintHtml(quote, patientName, terms)
     const win = window.open('', '_blank', 'width=860,height=960')
     if (!win) return
     win.document.write(html)
@@ -748,7 +832,7 @@ export default function PatientQuotesPage() {
                         <thead>
                           <tr className="text-app3 text-xs border-b border-app">
                             <th className="text-left pb-2 px-2 font-semibold">Tratamiento</th>
-                            <th className="text-left pb-2 px-2 font-semibold">Pieza</th>
+                            {terms.showTooth && <th className="text-left pb-2 px-2 font-semibold">{terms.toothColLabel}</th>}
                             <th className="text-right pb-2 px-2 font-semibold">Cant.</th>
                             <th className="text-right pb-2 px-2 font-semibold">Precio unit.</th>
                             <th className="text-right pb-2 px-2 font-semibold">Subtotal</th>
@@ -761,7 +845,7 @@ export default function PatientQuotesPage() {
                                 <p className="font-medium text-app">{item.treatment_name}</p>
                                 {item.comment && <p className="text-xs text-app3 mt-0.5">{item.comment}</p>}
                               </td>
-                              <td className="py-2 px-2 text-app2">{item.tooth_number || '—'}</td>
+                              {terms.showTooth && <td className="py-2 px-2 text-app2">{item.tooth_number || '—'}</td>}
                               <td className="py-2 px-2 text-right text-app2">{item.quantity}</td>
                               <td className="py-2 px-2 text-right text-app2">{formatARS(item.unit_price)}</td>
                               <td className="py-2 px-2 text-right font-semibold text-app">{formatARS(item.subtotal)}</td>
@@ -863,7 +947,7 @@ export default function PatientQuotesPage() {
               {/* Header fields */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="sm:col-span-1">
-                  <label className="block text-xs font-semibold text-app2 mb-1.5">Odontólogo/a</label>
+                  <label className="block text-xs font-semibold text-app2 mb-1.5">{terms.professionalLabel}</label>
                   <select
                     value={form.professional_id}
                     onChange={e => setForm(f => ({ ...f, professional_id: e.target.value }))}
@@ -886,6 +970,26 @@ export default function PatientQuotesPage() {
                     onChange={e => setForm(f => ({ ...f, valid_until: e.target.value }))}
                     className="w-full min-w-0 appearance-none bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
                   />
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {VALID_UNTIL_PRESETS.map(({ label, days }) => {
+                      const iso = addDaysISO(days)
+                      const active = form.valid_until === iso
+                      return (
+                        <button
+                          key={days}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, valid_until: active ? '' : iso }))}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                            active
+                              ? 'bg-[#E6F8F1] dark:bg-[#00C4BC]/15 border-[#00C4BC]/40 text-[#00C4BC]'
+                              : 'bg-surface2 border-app text-app3 hover:border-app2 hover:text-app2'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div>
@@ -923,28 +1027,30 @@ export default function PatientQuotesPage() {
                   {form.items.map((item, idx) => (
                     <div key={item.id} className="bg-surface2 border border-app rounded-xl p-4 space-y-3">
 
-                      {/* Row 1: treatment + tooth */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="sm:col-span-2">
+                      {/* Row 1: treatment (+ tooth solo en odontología) */}
+                      <div className={`grid grid-cols-1 gap-3 ${terms.showTooth ? 'sm:grid-cols-3' : ''}`}>
+                        <div className={terms.showTooth ? 'sm:col-span-2' : ''}>
                           <label className="block text-xs text-app3 mb-1">Tratamiento *</label>
                           <input
                             type="text"
                             value={item.treatment_name}
-                            placeholder="Ej: Endodoncia, Corona zirconio..."
+                            placeholder={terms.treatmentPlaceholder}
                             onChange={e => updateItem(idx, 'treatment_name', e.target.value)}
                             className="w-full bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs text-app3 mb-1">Pieza dental</label>
-                          <input
-                            type="text"
-                            value={item.tooth_number}
-                            placeholder="Ej: 26"
-                            onChange={e => updateItem(idx, 'tooth_number', e.target.value)}
-                            className="w-full bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
-                          />
-                        </div>
+                        {terms.showTooth && (
+                          <div>
+                            <label className="block text-xs text-app3 mb-1">{terms.toothLabel}</label>
+                            <input
+                              type="text"
+                              value={item.tooth_number}
+                              placeholder={terms.toothPlaceholder}
+                              onChange={e => updateItem(idx, 'tooth_number', e.target.value)}
+                              className="w-full bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                            />
+                          </div>
+                        )}
                       </div>
 
                       {/* Row 2: qty + price + subtotal */}
@@ -962,12 +1068,14 @@ export default function PatientQuotesPage() {
                         <div>
                           <label className="block text-xs text-app3 mb-1">Precio unit. ($)</label>
                           <input
-                            type="number"
-                            min={0}
-                            step={100}
-                            value={item.unit_price === 0 ? '' : item.unit_price}
+                            type="text"
+                            inputMode="numeric"
+                            value={item.unit_price === 0 ? '' : item.unit_price.toLocaleString('es-AR')}
                             placeholder="0"
-                            onChange={e => updateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                            onChange={e => {
+                              const digits = e.target.value.replace(/\D/g, '')
+                              updateItem(idx, 'unit_price', digits ? parseInt(digits, 10) : 0)
+                            }}
                             className="w-full bg-surface border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
                           />
                         </div>

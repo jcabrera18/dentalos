@@ -6,7 +6,8 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:clinical": "node --test tests/clinical.test.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

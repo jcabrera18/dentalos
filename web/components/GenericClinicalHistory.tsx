@@ -14,31 +14,22 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import type { ClinicalEncounter } from '@/lib/clinicalEncounters'
 import { ArrowLeft, FileDown } from 'lucide-react'
 import {
   clinicalSectionsFor,
   clinicalTemplateFor,
-  normalizeDiscipline,
   DISCIPLINE_LABELS,
   type Discipline,
 } from '@/lib/capabilities'
-import { VitalsInput, VitalsDisplay, type Vitals } from '@/components/VitalsInput'
-import { SectionCard, FieldsReadout, inputCls } from '@/components/clinical/ClinicalFields'
+import { VitalsInput, type Vitals } from '@/components/VitalsInput'
+import { SectionCard, inputCls } from '@/components/clinical/ClinicalFields'
+import { ClinicalHistoryReadout, type ClinicalHistorySnapshot } from '@/components/clinical/ClinicalHistoryReadout'
 import EncountersSection from '@/components/clinical/EncountersSection'
 import { computeFpp, computeEg, formatEg, formatDateAR } from '@/lib/obstetrics'
 
 type Sections = Record<string, Record<string, unknown>>
 type Mode = 'form' | 'sign' | 'signatures' | 'sig-detail'
-
-// Snapshot firmado: forma propia de la historia genérica (self-contained para
-// re-renderizar el detalle sin depender del estado actual del formulario).
-interface Snap {
-  discipline?: Discipline
-  summary?: string
-  risk_level?: string | null
-  sections?: Sections
-  vitals?: Vitals
-}
 
 export default function GenericClinicalHistory({ discipline }: { discipline: Discipline }) {
   const params = useParams()
@@ -66,7 +57,7 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
   // Firma del paciente
   const [mode, setMode] = useState<Mode>('form')
   const [signatures, setSignatures] = useState<{ id: string; signed_at: string }[]>([])
-  const [sigSelected, setSigSelected] = useState<{ signed_at: string; signature_data: string; history_snapshot: Snap } | null>(null)
+  const [sigSelected, setSigSelected] = useState<{ signed_at: string; signature_data: string; history_snapshot: ClinicalHistorySnapshot } | null>(null)
   const [sigLoading, setSigLoading] = useState(false)
   const [sigHasSignature, setSigHasSignature] = useState(false)
   const [savingSig, setSavingSig] = useState(false)
@@ -166,7 +157,7 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const snapshot: Snap = { discipline, summary, risk_level: riskLevel, sections, vitals }
+      const snapshot: ClinicalHistorySnapshot = { discipline, summary, risk_level: riskLevel, sections, vitals }
       await apiFetch(`/patients/${patientId}/clinical-history/signatures`, {
         method: 'POST',
         token: session.access_token,
@@ -244,7 +235,7 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      let encounters: unknown[] = []
+      let encounters: ClinicalEncounter[] = []
       if (encountersEnabled) {
         const r = await apiFetch(`/patients/${patientId}/encounters`, { token: session.access_token })
         encounters = r.data ?? []
@@ -255,8 +246,8 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const element: any = createElement(GenericClinicalHistoryPDF, {
         patient, discipline, sections, summary, riskLevel,
-        vitals: vitals as Record<string, unknown>,
-        encounters: encounters as never,
+        vitals,
+        encounters,
         generatedAt: new Date().toISOString(),
       })
       const blob = await pdf(element).toBlob()
@@ -420,7 +411,7 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
           </div>
 
           <div className="bg-surface border border-app rounded-2xl p-5">
-            <HistoryReadout snap={{ discipline, summary, sections, vitals }} />
+            <ClinicalHistoryReadout snap={{ discipline, summary, sections, vitals }} />
           </div>
 
           {/* Canvas */}
@@ -528,7 +519,7 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
               {sigSelected.history_snapshot && (
                 <div className="bg-surface border border-app rounded-2xl p-5">
                   <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-4">Contenido firmado</div>
-                  <HistoryReadout snap={sigSelected.history_snapshot} />
+                  <ClinicalHistoryReadout snap={sigSelected.history_snapshot} />
                 </div>
               )}
 
@@ -541,46 +532,6 @@ export default function GenericClinicalHistory({ discipline }: { discipline: Dis
             </>
           ) : null}
         </div>
-      )}
-    </div>
-  )
-}
-
-// Vista de solo lectura de una anamnesis (preview de firma + detalle). Deriva las
-// secciones/vitales de la disciplina del snapshot; omite secciones sin datos.
-function HistoryReadout({ snap }: { snap: Snap }) {
-  const disc = normalizeDiscipline(snap.discipline)
-  const defs = clinicalSectionsFor(disc)
-  const tmpl = clinicalTemplateFor(disc)
-  const snapSections = snap.sections ?? {}
-  const visible = defs.filter((s) =>
-    s.fields.some((f) => {
-      const v = snapSections[s.id]?.[f.key]
-      return v !== undefined && v !== null && v !== '' && v !== false
-    })
-  )
-  return (
-    <div className="space-y-4 text-sm">
-      {tmpl.vitals.length > 0 && (
-        <section>
-          <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-1.5">Signos vitales</div>
-          <VitalsDisplay fields={tmpl.vitals} value={snap.vitals ?? {}} />
-        </section>
-      )}
-      {visible.map((s) => (
-        <section key={s.id}>
-          <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-1.5">{s.label}</div>
-          <FieldsReadout fields={s.fields} values={snapSections[s.id] ?? {}} />
-        </section>
-      ))}
-      {snap.summary && (
-        <section>
-          <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-1.5">Resumen clínico</div>
-          <p className="text-app">{snap.summary}</p>
-        </section>
-      )}
-      {!visible.length && !snap.summary && tmpl.vitals.length === 0 && (
-        <div className="text-app3 text-xs">Sin datos registrados</div>
       )}
     </div>
   )

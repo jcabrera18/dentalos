@@ -362,7 +362,7 @@ export const CLINICAL_TEMPLATES: Record<Discipline, ClinicalTemplate> = {
     vitals: ['bp', 'weight', 'height', 'bmi', 'heart_rate', 'resp_rate', 'temperature', 'spo2'],
     encounters: {
       enabled: true, type: 'soap', label: 'Consultas', singular: 'Consulta',
-      vitalsPerEncounter: ['bp', 'weight', 'bmi'],
+      vitalsPerEncounter: ['bp', 'weight', 'height', 'bmi'],
       contentFields: [
         { key: 'motivo',        label: 'Motivo de consulta', type: 'textarea', max: 500 },
         { key: 'examen_fisico', label: 'Examen físico',       type: 'textarea', max: 1000 },
@@ -424,7 +424,7 @@ export const CLINICAL_TEMPLATES: Record<Discipline, ClinicalTemplate> = {
     vitals: ['weight', 'height', 'bmi', 'waist', 'hip', 'body_fat', 'muscle_mass'],
     encounters: {
       enabled: true, type: 'nutrition_control', label: 'Controles', singular: 'Control',
-      vitalsPerEncounter: ['weight', 'bmi', 'waist', 'body_fat'],
+      vitalsPerEncounter: ['weight', 'height', 'bmi', 'waist', 'body_fat'],
       contentFields: [
         { key: 'adherencia',    label: 'Adherencia al plan', type: 'select', options: [{ value: 'buena', label: 'Buena' }, { value: 'regular', label: 'Regular' }, { value: 'mala', label: 'Mala' }] },
         { key: 'ajustes',       label: 'Ajustes del plan',   type: 'textarea', max: 1000 },

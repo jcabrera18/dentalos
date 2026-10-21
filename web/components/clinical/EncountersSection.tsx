@@ -9,21 +9,14 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { Plus, AlertTriangle, Lock, Trash2 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { clinicalTemplateFor, type Discipline, type ClinicalField, type VitalField } from '@/lib/capabilities'
-import { VitalsInput, VitalsDisplay, computeBmi, type Vitals } from '@/components/VitalsInput'
-import { FieldInput, FieldsReadout, Toggle } from '@/components/clinical/ClinicalFields'
+import { clinicalTemplateFor, DISCIPLINE_LABELS, type Discipline } from '@/lib/capabilities'
+import { VitalsInput, computeBmi, type Vitals } from '@/components/VitalsInput'
+import { FieldInput, Toggle } from '@/components/clinical/ClinicalFields'
 import { computeEg, formatEg } from '@/lib/obstetrics'
 
-interface Encounter {
-  id: string
-  encounter_date: string
-  encounter_type: string | null
-  risk_flag: boolean
-  vitals: Vitals | null
-  content: Record<string, unknown> | null
-  signed: boolean
-  signed_at: string | null
-}
+import type { ClinicalEncounter as Encounter } from '@/lib/clinicalEncounters'
+import { todayArgDate } from '@/lib/dates'
+import { EncounterReadout, EncounterVitals } from './EncounterReadout'
 
 type Mode = 'list' | 'form' | 'detail'
 
@@ -34,7 +27,6 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
   const supabase = createClient()
   const template = clinicalTemplateFor(discipline)
   const enc = template.encounters
-  const contentFields = enc.enabled ? enc.contentFields : []
   const perVitals = enc.enabled ? enc.vitalsPerEncounter : []
   const singular = enc.enabled ? enc.singular : 'Registro'
   const showWeightChart = perVitals.includes('weight')
@@ -46,6 +38,13 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
   const [selected, setSelected] = useState<Encounter | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [formDiscipline, setFormDiscipline] = useState<Discipline>(discipline)
+  const [view, setView] = useState<'all' | 'prenatal'>('all')
+  const formTemplate = clinicalTemplateFor(formDiscipline).encounters
+  const contentFields = formTemplate.enabled ? formTemplate.contentFields : []
+  const formVitals = formTemplate.enabled ? formTemplate.vitalsPerEncounter : []
+  const formSingular = formTemplate.enabled ? formTemplate.singular : 'Registro'
+  const prenatalItems = items.filter(e => e.discipline === 'obstetrics' && e.encounter_type === 'prenatal_control')
 
   // Form state
   const [date, setDate] = useState('')
@@ -73,7 +72,8 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
 
   function openNew() {
     setEditingId(null)
-    setDate(new Date().toISOString().slice(0, 10))
+    setFormDiscipline(discipline)
+    setDate(todayArgDate())
     setRiskFlag(false)
     setVitals({})
     setContent({})
@@ -82,6 +82,7 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
 
   function openEdit(e: Encounter) {
     setEditingId(e.id)
+    setFormDiscipline(e.discipline)
     setDate(e.encounter_date)
     setRiskFlag(e.risk_flag)
     setVitals(e.vitals ?? {})
@@ -119,7 +120,7 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
   // ── Chart data (peso / IMC en el tiempo) ──
   const chartData = showWeightChart
     ? [...items]
-        .filter((e) => e.vitals?.weight_kg != null)
+        .filter((e) => e.discipline === discipline && e.vitals?.weight_kg != null)
         .sort((a, b) => a.encounter_date.localeCompare(b.encounter_date))
         .map((e) => ({
           date: fmtDate(e.encounter_date),
@@ -141,7 +142,7 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 space-y-6">
         <div className="bg-surface border border-app rounded-2xl p-5 space-y-3">
-          <div className="text-xs font-bold uppercase tracking-wider text-app3">{editingId ? `Editar ${singular.toLowerCase()}` : `Nuevo ${singular.toLowerCase()}`}</div>
+          <div className="text-xs font-bold uppercase tracking-wider text-app3">{editingId ? `Editar ${formSingular.toLowerCase()}` : `Nuevo ${formSingular.toLowerCase()}`} · {DISCIPLINE_LABELS[formDiscipline]}</div>
           <div>
             <label className="block text-xs text-app3 mb-1.5">Fecha</label>
             <input
@@ -151,7 +152,7 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
           </div>
         </div>
 
-        {perVitals.length > 0 && <VitalsInput fields={perVitals} value={vitals} onChange={setVitals} />}
+        {formVitals.length > 0 && <VitalsInput fields={formVitals} value={vitals} onChange={setVitals} />}
 
         {contentFields.length > 0 && (
           <section className="bg-surface border border-app rounded-2xl p-5">
@@ -191,8 +192,6 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
       <EncounterDetail
         patientId={patientId}
         encounter={selected}
-        contentFields={contentFields}
-        perVitals={perVitals}
         onBack={() => setMode('list')}
         onEdit={() => openEdit(selected)}
         onDelete={() => handleDelete(selected.id)}
@@ -227,9 +226,20 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
         <Plus size={18} /> Nuevo {singular.toLowerCase()}
       </button>
 
-      {items.length === 0 ? (
+      {isCarne && (
+        <div className="flex gap-2">
+          {(['all', 'prenatal'] as const).map(option => (
+            <button key={option} onClick={() => setView(option)} aria-pressed={view === option}
+              className={`px-3 py-2 rounded-lg text-sm font-semibold ${view === option ? 'bg-[#00C4BC] text-white' : 'bg-surface2 text-app3'}`}>
+              {option === 'all' ? 'Todas las evoluciones' : 'Carné prenatal'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {items.length === 0 || (isCarne && view === 'prenatal' && prenatalItems.length === 0) ? (
         <div className="text-center py-16 text-app3 text-sm">Sin registros de evolución todavía</div>
-      ) : isCarne ? (
+      ) : isCarne && view === 'prenatal' ? (
         <div className="bg-surface border border-app rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -245,7 +255,7 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
               </tr>
             </thead>
             <tbody>
-              {items.map((e) => {
+              {prenatalItems.map((e) => {
                 const c = (e.content ?? {}) as Record<string, unknown>
                 const v = e.vitals ?? {}
                 const mf = c.mov_fetales === 'pos' ? '+' : c.mov_fetales === 'neg' ? '−' : '—'
@@ -277,12 +287,12 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-app flex items-center gap-2">
-                    {fmtDate(e.encounter_date)}
+                    {fmtDate(e.encounter_date)} · {DISCIPLINE_LABELS[e.discipline]}
                     {e.risk_flag && <AlertTriangle size={14} className="text-amber-400 shrink-0" />}
                     {e.signed && <Lock size={13} className="text-app3 shrink-0" />}
                   </div>
                   <div className="text-xs text-app3 mt-0.5 truncate">
-                    <VitalsDisplay fields={perVitals} value={e.vitals ?? {}} />
+                    <EncounterVitals encounter={e} />
                   </div>
                 </div>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-app3 shrink-0"><polyline points="9 18 15 12 9 6"/></svg>
@@ -297,12 +307,10 @@ export default function EncountersSection({ discipline, patientId, fum }: { disc
 
 // ── Detalle + firma de un encounter ──
 function EncounterDetail({
-  patientId, encounter, contentFields, perVitals, onBack, onEdit, onDelete, onSigned,
+  patientId, encounter, onBack, onEdit, onDelete, onSigned,
 }: {
   patientId: string
   encounter: Encounter
-  contentFields: readonly ClinicalField[]
-  perVitals: readonly VitalField[]
   onBack: () => void
   onEdit: () => void
   onDelete: () => void
@@ -366,25 +374,14 @@ function EncounterDetail({
 
       <div className="bg-surface border border-app rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-app">{fmtDate(encounter.encounter_date)}</div>
+          <div className="text-sm font-semibold text-app">{fmtDate(encounter.encounter_date)} · {DISCIPLINE_LABELS[encounter.discipline]}</div>
           <div className="flex items-center gap-2">
             {encounter.risk_flag && <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">Signo de alarma</span>}
             {encounter.signed && <span className="text-xs text-app3 flex items-center gap-1"><Lock size={12} /> Firmado</span>}
           </div>
         </div>
 
-        {perVitals.length > 0 && (
-          <div>
-            <div className="text-xs font-semibold text-app3 mb-1.5">Signos vitales</div>
-            <VitalsDisplay fields={perVitals} value={encounter.vitals ?? {}} />
-          </div>
-        )}
-        {contentFields.length > 0 && (
-          <div>
-            <div className="text-xs font-semibold text-app3 mb-1.5">Nota</div>
-            <FieldsReadout fields={contentFields} values={encounter.content ?? {}} />
-          </div>
-        )}
+        <EncounterReadout encounter={encounter} />
       </div>
 
       {/* Firma */}

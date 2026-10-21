@@ -14,6 +14,9 @@ import {
   type VitalField,
 } from '@/lib/capabilities'
 
+import type { Vitals } from '@/components/VitalsInput'
+import type { ClinicalEncounter } from '@/lib/clinicalEncounters'
+
 const styles = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 10, backgroundColor: '#fff', paddingTop: 36, paddingBottom: 48, paddingHorizontal: 40, color: '#1a1a2e' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 12, borderBottomWidth: 1.5, borderBottomColor: '#00C4BC' },
@@ -37,7 +40,7 @@ const styles = StyleSheet.create({
   footer: { position: 'absolute', bottom: 24, left: 40, right: 40, fontSize: 8, color: '#999', textAlign: 'center', borderTopWidth: 0.5, borderTopColor: '#eee', paddingTop: 6 },
 })
 
-const VITAL_META: Record<Exclude<VitalField, 'bp'>, { key: string; label: string; unit: string }> = {
+const VITAL_META: Record<Exclude<VitalField, 'bp'>, { key: keyof Vitals; label: string; unit: string }> = {
   weight: { key: 'weight_kg', label: 'Peso', unit: 'kg' },
   height: { key: 'height_cm', label: 'Talla', unit: 'cm' },
   bmi: { key: 'bmi', label: 'IMC', unit: 'kg/m²' },
@@ -51,7 +54,7 @@ const VITAL_META: Record<Exclude<VitalField, 'bp'>, { key: string; label: string
   muscle_mass: { key: 'muscle_mass_kg', label: 'Masa musc.', unit: 'kg' },
 }
 
-function vitalsToPairs(fields: readonly VitalField[], v: Record<string, unknown> | null | undefined): string[] {
+function vitalsToPairs(fields: readonly VitalField[], v: Vitals | null | undefined): string[] {
   const out: string[] = []
   const val = v ?? {}
   for (const f of fields) {
@@ -78,23 +81,14 @@ const fmtDate = (d: string) => {
   return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-interface Encounter {
-  id: string
-  encounter_date: string
-  risk_flag?: boolean
-  vitals?: Record<string, unknown> | null
-  content?: Record<string, unknown> | null
-  signed?: boolean
-}
-
 export interface GenericClinicalHistoryPDFProps {
   patient: { first_name: string; last_name: string; document_number?: string | null; date_of_birth?: string | null }
   discipline: Discipline
   sections: Record<string, Record<string, unknown>>
-  vitals: Record<string, unknown> | null
+  vitals: Vitals | null
   summary?: string | null
   riskLevel?: string | null
-  encounters?: Encounter[]
+  encounters?: ClinicalEncounter[]
   professionalName?: string
   generatedAt: string
 }
@@ -104,9 +98,6 @@ export function GenericClinicalHistoryPDF({
 }: GenericClinicalHistoryPDFProps) {
   const template = clinicalTemplateFor(discipline)
   const sectionDefs = clinicalSectionsFor(discipline)
-  const enc = template.encounters
-  const contentFields = enc.enabled ? enc.contentFields : []
-  const perVitals = enc.enabled ? enc.vitalsPerEncounter : []
   const baseVitalPairs = template.vitals.length ? vitalsToPairs(template.vitals, vitals) : []
 
   const riskColor = riskLevel === 'high' ? '#cc2200' : riskLevel === 'medium' ? '#b86000' : '#008060'
@@ -174,17 +165,20 @@ export function GenericClinicalHistoryPDF({
           </View>
         ) : null}
 
-        {enc.enabled && encounters.length > 0 && (
+        {encounters.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{enc.label} ({encounters.length})</Text>
+            <Text style={styles.sectionTitle}>Evoluciones ({encounters.length})</Text>
             {encounters.map((e) => {
+              const config = clinicalTemplateFor(e.discipline).encounters
+              const contentFields = config.enabled ? config.contentFields : []
+              const perVitals = config.enabled ? config.vitalsPerEncounter : []
               const vp = vitalsToPairs(perVitals, e.vitals)
               const cp = contentFields
                 .map((f) => ({ label: f.label, text: fmtField(f, (e.content ?? {})[f.key]) }))
                 .filter((r) => r.text !== null)
               return (
                 <View key={e.id} style={styles.encItem} wrap={false}>
-                  <Text style={styles.encHead}>{fmtDate(e.encounter_date)}{e.risk_flag ? '  ⚠ alarma' : ''}{e.signed ? '  ✓ firmado' : ''}</Text>
+                  <Text style={styles.encHead}>{fmtDate(e.encounter_date)} · {DISCIPLINE_LABELS[e.discipline]}{e.risk_flag ? '  ⚠ alarma' : ''}{e.signed ? '  ✓ firmado' : ''}</Text>
                   {vp.length > 0 && <Text style={styles.rowValue}>{vp.join('  ·  ')}</Text>}
                   {cp.map((r, i) => (
                     <View key={i} style={styles.row}>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useLocalPatients } from '@/lib/useLocalPatients'
-import { filterLocalPatients } from '@/lib/patientsLocalDb'
+import { filterLocalPatients, type LocalPatient } from '@/lib/patientsLocalDb'
 import { useRouter } from 'next/navigation'
 import { UserPlus, Search, ChevronRight, Loader2, ArrowRight, MessageCircle, Infinity, Users } from 'lucide-react'
 import { useSubscription } from '@/lib/useSubscription'
@@ -12,7 +12,7 @@ import { usePlansModal } from '@/app/providers'
 
 function daysAgoLabel(dateStr: string): string {
   const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000)
-  if (days === 0) return 'hoy'
+  if (days <= 0) return 'hoy'
   if (days === 1) return 'ayer'
   if (days < 365) return `hace ${days} días`
   const years = Math.floor(days / 365)
@@ -20,6 +20,81 @@ function daysAgoLabel(dateStr: string): string {
 }
 
 const SEARCH_MIN_LENGTH = 3
+
+function computePatientStats(patients: LocalPatient[]) {
+  const cutoff = Date.now() - 30 * 86_400_000
+  let seen30 = 0
+  let withInsurance = 0
+  for (const p of patients) {
+    if (p.last_appointment_at && new Date(p.last_appointment_at).getTime() >= cutoff) seen30++
+    if (p.insurance_name) withInsurance++
+  }
+  return { total: patients.length, seen30, withInsurance }
+}
+
+function PatientRow({ p, navigating, onOpen }: {
+  p: LocalPatient
+  navigating: boolean
+  onOpen: (id: string) => void
+}) {
+  return (
+    <div
+      onClick={() => onOpen(p.id)}
+      className={`px-5 py-3.5 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 transition-all cursor-pointer group border-l-2 ${
+        navigating
+          ? 'bg-[#00C4BC]/8 border-l-[#00C4BC]'
+          : 'hover:bg-[#00C4BC]/5 hover:border-l-[#00C4BC] border-l-transparent'
+      }`}
+    >
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
+        p.gender === 'F'
+          ? 'bg-pink-500/20 text-pink-400'
+          : p.gender === 'M'
+          ? 'bg-blue-500/20 text-blue-400'
+          : 'bg-surface3 text-app2'
+      }`}>
+        {p.first_name[0]}{p.last_name[0]}
+      </div>
+      <div className="min-w-0">
+        <div className="font-semibold text-app truncate">{p.first_name} {p.last_name}</div>
+        <div className="text-sm text-app3 truncate">{p.phone}</div>
+      </div>
+      <div className="hidden sm:block w-32 text-right flex-shrink-0">
+        <span className="text-xs text-app3">{p.insurance_name ?? '—'}</span>
+      </div>
+      <div className="hidden md:block w-36 text-right flex-shrink-0">
+        {p.last_appointment_at ? (
+          <>
+            <div className="text-xs text-app3">
+              {new Date(p.last_appointment_at).toLocaleDateString('es-AR')}
+            </div>
+            <div className="text-xs font-medium text-app2">
+              {daysAgoLabel(p.last_appointment_at)}
+            </div>
+          </>
+        ) : (
+          <span className="text-xs text-app3">—</span>
+        )}
+      </div>
+      {navigating
+        ? <Loader2 size={16} className="text-[#00C4BC] animate-spin flex-shrink-0" />
+        : <ChevronRight size={16} className="text-app3 group-hover:text-[#00C4BC] transition-colors flex-shrink-0" />
+      }
+    </div>
+  )
+}
+
+function ListHeader() {
+  return (
+    <div className="px-5 py-2.5 border-b border-app bg-surface2/50 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4">
+      <div className="w-10" />
+      <div className="text-xs font-semibold text-app3 uppercase tracking-wider">Paciente</div>
+      <div className="text-xs font-semibold text-app3 uppercase tracking-wider hidden sm:block w-32 text-right">Obra social</div>
+      <div className="text-xs font-semibold text-app3 uppercase tracking-wider hidden md:block w-36 text-right">Último turno</div>
+      <div className="w-5" />
+    </div>
+  )
+}
 
 export default function PatientsPage() {
   const [search, setSearch]         = useState('')
@@ -33,7 +108,7 @@ export default function PatientsPage() {
   const limitReached = sub?.alerts.patientsLimitReached ?? false
 
   // Cartera espejada en IndexedDB → búsqueda local instantánea (y offline).
-  const { patients: localPatients, syncing, resync } = useLocalPatients()
+  const { patients: localPatients, ready, syncing, resync } = useLocalPatients()
 
   useEffect(() => {
     async function load() {
@@ -55,6 +130,33 @@ export default function PatientsPage() {
 
   // Solo mostramos skeleton la primera vez (descarga inicial sin nada en IndexedDB todavía).
   const searching = hasQuery && syncing && localPatients.length === 0
+
+  // ── Estado por defecto (sin búsqueda): todo derivado de la cartera local, sin pegarle al server ──
+
+  // Stats de la franja superior.
+  const stats = useMemo(() => computePatientStats(localPatients), [localPatients])
+
+  // "Vistos recientemente": últimos pacientes por fecha de último turno.
+  const recentPatients = useMemo(
+    () =>
+      localPatients
+        .filter(p => p.last_appointment_at)
+        .sort(
+          (a, b) =>
+            new Date(b.last_appointment_at!).getTime() - new Date(a.last_appointment_at!).getTime()
+        )
+        .slice(0, 8),
+    [localPatients]
+  )
+
+  // Primera carga sin nada aún en IndexedDB.
+  const loadingDefault = !hasQuery && !ready && localPatients.length === 0
+
+  function openPatient(id: string) {
+    setNavigatingTo(id)
+    window.dispatchEvent(new Event('navigation-start'))
+    router.push(`/patients/${id}`)
+  }
 
   return (
     <div className="min-h-screen bg-app text-app">
@@ -129,22 +231,68 @@ export default function PatientsPage() {
           />
         </div>
 
+        {/* Franja de stats — solo en el estado por defecto (sin búsqueda) */}
+        {!hasQuery && stats.total > 0 && (
+          <div className="mb-5 grid grid-cols-3 gap-3">
+            {[
+              { label: 'En tu cartera', value: stats.total },
+              { label: 'Atendidos (30 días)', value: stats.seen30 },
+              { label: 'Con obra social', value: stats.withInsurance },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-surface border border-app rounded-xl px-4 py-3">
+                <div className="text-2xl font-bold text-app">{value}</div>
+                <div className="text-xs text-app3 mt-0.5">{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Lista */}
         <div className="bg-surface border border-app rounded-xl overflow-hidden">
           {!hasQuery ? (
-            <div className="px-6 py-16 text-center">
-              <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-3">
-                <Search size={20} className="text-app3" />
+            loadingDefault ? (
+              <div className="divide-y divide-app/40 animate-pulse">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="px-5 py-3.5 flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-surface2 flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-surface2 rounded w-40" />
+                      <div className="h-3 bg-surface2 rounded w-24" />
+                    </div>
+                    <div className="hidden sm:block h-3 bg-surface2 rounded w-20" />
+                    <div className="hidden md:block h-3 bg-surface2 rounded w-24" />
+                    <div className="w-4 h-4 bg-surface2 rounded" />
+                  </div>
+                ))}
               </div>
-              <p className="text-app font-medium">
-                {normalizedSearch.length === 0 ? 'Escribí para buscar pacientes' : 'Seguí escribiendo...'}
-              </p>
-              <p className="text-app3 text-sm mt-1">
-                {normalizedSearch.length === 0
-                  ? 'Buscá por nombre, teléfono o DNI'
-                  : `Ingresá al menos ${SEARCH_MIN_LENGTH} caracteres`}
-              </p>
-            </div>
+            ) : stats.total === 0 ? (
+              <div className="px-6 py-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-3">
+                  <Users size={20} className="text-app3" />
+                </div>
+                <p className="text-app font-medium">Todavía no tenés pacientes</p>
+                <p className="text-app3 text-sm mt-1">Creá tu primer paciente con el botón de arriba</p>
+              </div>
+            ) : recentPatients.length === 0 ? (
+              <div className="px-6 py-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-3">
+                  <Search size={20} className="text-app3" />
+                </div>
+                <p className="text-app font-medium">Buscá un paciente</p>
+                <p className="text-app3 text-sm mt-1">Por nombre, teléfono o DNI</p>
+              </div>
+            ) : (
+              <>
+                <div className="px-5 py-2.5 border-b border-app bg-surface2/50">
+                  <span className="text-xs font-semibold text-app3 uppercase tracking-wider">Atendidos recientemente</span>
+                </div>
+                <div className="divide-y divide-app/40">
+                  {recentPatients.map((p) => (
+                    <PatientRow key={p.id} p={p} navigating={navigatingTo === p.id} onOpen={openPatient} />
+                  ))}
+                </div>
+              </>
+            )
           ) : searching ? (
             <div className="divide-y divide-app/40 animate-pulse">
               {[...Array(5)].map((_, i) => (
@@ -169,64 +317,10 @@ export default function PatientsPage() {
             </div>
           ) : (
             <>
-              {/* Header de columnas */}
-              <div className="px-5 py-2.5 border-b border-app bg-surface2/50 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4">
-                <div className="w-10" />
-                <div className="text-xs font-semibold text-app3 uppercase tracking-wider">Paciente</div>
-                <div className="text-xs font-semibold text-app3 uppercase tracking-wider hidden sm:block w-32 text-right">Obra social</div>
-                <div className="text-xs font-semibold text-app3 uppercase tracking-wider hidden md:block w-36 text-right">Último turno</div>
-                <div className="w-5" />
-              </div>
+              <ListHeader />
               <div className="divide-y divide-app/40">
                 {patients.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => {
-                      setNavigatingTo(p.id)
-                      window.dispatchEvent(new Event('navigation-start'))
-                      router.push(`/patients/${p.id}`)
-                    }}
-                    className={`px-5 py-3.5 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 transition-all cursor-pointer group border-l-2 ${
-                      navigatingTo === p.id
-                        ? 'bg-[#00C4BC]/8 border-l-[#00C4BC]'
-                        : 'hover:bg-[#00C4BC]/5 hover:border-l-[#00C4BC] border-l-transparent'
-                    }`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                      p.gender === 'F'
-                        ? 'bg-pink-500/20 text-pink-400'
-                        : p.gender === 'M'
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-surface3 text-app2'
-                    }`}>
-                      {p.first_name[0]}{p.last_name[0]}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-app truncate">{p.first_name} {p.last_name}</div>
-                      <div className="text-sm text-app3 truncate">{p.phone}</div>
-                    </div>
-                    <div className="hidden sm:block w-32 text-right flex-shrink-0">
-                      <span className="text-xs text-app3">{p.insurance_name ?? '—'}</span>
-                    </div>
-                    <div className="hidden md:block w-36 text-right flex-shrink-0">
-                      {p.last_appointment_at ? (
-                        <>
-                          <div className="text-xs text-app3">
-                            {new Date(p.last_appointment_at).toLocaleDateString('es-AR')}
-                          </div>
-                          <div className="text-xs font-medium text-app2">
-                            {daysAgoLabel(p.last_appointment_at)}
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-xs text-app3">—</span>
-                      )}
-                    </div>
-                    {navigatingTo === p.id
-                      ? <Loader2 size={16} className="text-[#00C4BC] animate-spin flex-shrink-0" />
-                      : <ChevronRight size={16} className="text-app3 group-hover:text-[#00C4BC] transition-colors flex-shrink-0" />
-                    }
-                  </div>
+                  <PatientRow key={p.id} p={p} navigating={navigatingTo === p.id} onOpen={openPatient} />
                 ))}
               </div>
             </>

@@ -1263,6 +1263,7 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
   const [search, setSearch]               = useState(editingAppt?.patient_name ?? '')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching]         = useState(false)
+  const [highlightIndex, setHighlightIndex] = useState(-1)
   const [selectedPatientData, setSelectedPatientData] = useState<any>(
     editingAppt ? { id: editingAppt.patient_id, full_name: editingAppt.patient_name } : null
   )
@@ -1320,6 +1321,28 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
       .catch(() => setSearchResults([]))
       .finally(() => setSearching(false))
   }, [search, token])
+
+  useEffect(() => { setHighlightIndex(searchResults.length ? 0 : -1) }, [searchResults])
+
+  function selectPatient(p: any) {
+    setPatientId(p.id); setSelectedPatientData(p); setSearch('')
+  }
+
+  function handlePatientKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!searchResults.length) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightIndex(i => (i + 1) % searchResults.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightIndex(i => (i - 1 + searchResults.length) % searchResults.length)
+    } else if (e.key === 'Enter') {
+      if (highlightIndex >= 0 && highlightIndex < searchResults.length) {
+        e.preventDefault()
+        selectPatient(searchResults[highlightIndex])
+      }
+    }
+  }
 
   useEffect(() => {
     const d = new Date(form.date + 'T12:00:00')
@@ -1457,15 +1480,18 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
           ) : (
             <div className="relative">
               <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                onKeyDown={handlePatientKeyDown}
                 placeholder="Buscar por nombre o teléfono..."
                 className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
                 autoFocus />
               {search && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-app rounded-xl shadow-xl z-50 overflow-hidden max-h-56 overflow-y-auto">
                   {searching && <div className="px-4 py-3 text-app3 text-sm">Buscando...</div>}
-                  {!searching && searchResults.map(p => (
-                    <div key={p.id} onClick={() => { setPatientId(p.id); setSelectedPatientData(p); setSearch('') }}
-                      className="px-4 py-3 hover:bg-surface2 cursor-pointer text-sm border-b border-app last:border-0 text-app">
+                  {!searching && searchResults.map((p, i) => (
+                    <div key={p.id} onClick={() => selectPatient(p)}
+                      onMouseEnter={() => setHighlightIndex(i)}
+                      ref={el => { if (i === highlightIndex) el?.scrollIntoView({ block: 'nearest' }) }}
+                      className={`px-4 py-3 cursor-pointer text-sm border-b border-app last:border-0 text-app ${i === highlightIndex ? 'bg-surface2' : 'hover:bg-surface2'}`}>
                       <span className="font-medium">{p.first_name} {p.last_name}</span>
                       <span className="text-app2 ml-2">{p.phone}</span>
                     </div>

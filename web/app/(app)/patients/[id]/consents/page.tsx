@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import {
   ArrowLeft, Plus, FileText, ChevronDown, ChevronUp, X,
+  Printer, Share2, Download, Copy, Check,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -38,6 +39,331 @@ function formatDate(iso: string) {
   })
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+}
+
+// Reglas de formato del contenido del consentimiento (HTML de plantilla).
+// Compartidas entre la impresión y la imagen para WhatsApp.
+const CONSENT_CONTENT_CSS = `
+  .consent-body h2 { font-size:18px; font-weight:700; margin:0 0 12px; color:#111; }
+  .consent-body h3 { font-size:15px; font-weight:600; margin:16px 0 8px; color:#111; }
+  .consent-body ul { list-style:disc; padding-left:20px; margin:8px 0; }
+  .consent-body li { margin-bottom:4px; }
+  .consent-body p { margin:0 0 12px; }
+  .consent-body strong { font-weight:600; }
+`
+
+// ── Print document (new window) ───────────────────────────────
+
+function generatePrintHtml(
+  detail: ConsentDetail,
+  patientName: string,
+  templateName: string,
+): string {
+  const signedLine = detail.signed_at
+    ? `Firmado el ${formatDateTime(detail.signed_at)}`
+    : ''
+
+  const signatureHtml = detail.signature_data
+    ? `<img src="${detail.signature_data}" alt="Firma del paciente" style="max-width:320px;max-height:140px;object-fit:contain" />`
+    : '<p style="color:#9ca3af;font-style:italic;margin:0">Sin firma registrada</p>'
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Consentimiento · ${patientName}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#111; background:#fff; font-size:14px; line-height:1.6; }
+    ${CONSENT_CONTENT_CSS}
+    @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+  </style>
+</head>
+<body>
+<div style="max-width:760px;margin:0 auto;padding:48px 40px">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:24px;border-bottom:2px solid #f0f0f0">
+    <div>
+      <h1 style="font-size:26px;font-weight:900;color:#111;letter-spacing:-0.5px">Vital<span style="color:#00C4BC">OS</span></h1>
+    </div>
+    <div style="text-align:right">
+      <p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:4px">Consentimiento</p>
+      <p style="font-size:16px;font-weight:700;color:#111">${templateName}</p>
+    </div>
+  </div>
+
+  <div style="margin-bottom:28px">
+    <p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:6px">Paciente</p>
+    <p style="font-size:16px;font-weight:700;color:#111">${patientName}</p>
+  </div>
+
+  <div class="consent-body" style="margin-bottom:36px;color:#1f2937">${detail.content_html}</div>
+
+  <div style="margin-top:40px">
+    <p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:10px">Firma del paciente</p>
+    ${signatureHtml}
+    ${signedLine ? `<p style="font-size:12px;color:#6b7280;margin-top:8px">${signedLine}</p>` : ''}
+  </div>
+
+  <div style="border-top:1px solid #f0f0f0;padding-top:20px;margin-top:40px;text-align:center">
+    <p style="font-size:11px;color:#9ca3af">Generado con <strong style="color:#111">Vital<span style="color:#00C4BC">OS</span></strong> · <span style="color:#00C4BC;font-weight:600">vitalos.com.ar</span></p>
+  </div>
+
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`
+}
+
+// ── Image generator (canvas, no dependencies) ─────────────────
+// Mismo enfoque que el presupuesto: todo se dibuja a mano en un canvas (el
+// render de HTML vía <foreignObject> sale en blanco en muchos navegadores).
+// El content_html de la plantilla se parsea a bloques de texto (títulos,
+// párrafos, ítems de lista) y se dibuja con wrapping. La firma es un data: URL,
+// así que se carga y dibuja sin problemas.
+
+interface ConsentBlock {
+  kind: 'h2' | 'h3' | 'p' | 'li'
+  text: string
+}
+
+// Convierte el HTML de la plantilla en bloques de texto planos para el canvas.
+function parseConsentBlocks(html: string): ConsentBlock[] {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  const blocks: ConsentBlock[] = []
+
+  function textOf(el: Element) {
+    return (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+  }
+
+  function walk(parent: ParentNode) {
+    parent.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = (node.textContent ?? '').replace(/\s+/g, ' ').trim()
+        if (t) blocks.push({ kind: 'p', text: t })
+        return
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+      const el = node as Element
+      const tag = el.tagName.toLowerCase()
+      switch (tag) {
+        case 'h1':
+        case 'h2': { const t = textOf(el); if (t) blocks.push({ kind: 'h2', text: t }); break }
+        case 'h3':
+        case 'h4':
+        case 'h5': { const t = textOf(el); if (t) blocks.push({ kind: 'h3', text: t }); break }
+        case 'ul':
+        case 'ol':
+          el.querySelectorAll(':scope > li').forEach(li => {
+            const t = textOf(li); if (t) blocks.push({ kind: 'li', text: t })
+          })
+          break
+        case 'li': { const t = textOf(el); if (t) blocks.push({ kind: 'li', text: t }); break }
+        case 'br':
+          break
+        case 'div':
+        case 'section':
+        case 'article':
+          walk(el) // contenedores: bajar un nivel
+          break
+        default: { const t = textOf(el); if (t) blocks.push({ kind: 'p', text: t }) }
+      }
+    })
+  }
+
+  walk(doc.body)
+  return blocks
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const img = new Image()
+    img.onload = () => res(img)
+    img.onerror = () => rej(new Error('No se pudo cargar la firma'))
+    img.src = src
+  })
+}
+
+async function generateConsentImage(
+  detail: ConsentDetail,
+  patientName: string,
+  templateName: string,
+): Promise<{ dataUrl: string; blob: Blob }> {
+  const W = 760
+  const PAD = 44
+  const DPR = 2
+  const TEAL = '#00C4BC'
+  const G1 = '#111827'
+  const G2 = '#374151'
+  const G3 = '#6B7280'
+  const G4 = '#9CA3AF'
+  const LINE_C = '#E5E7EB'
+  const FONT = '-apple-system, Arial, sans-serif'
+  const contentW = W - PAD * 2
+
+  // Estilo por tipo de bloque.
+  const STYLE: Record<ConsentBlock['kind'], { font: string; color: string; lineH: number; gapBefore: number; gapAfter: number; bullet: boolean }> = {
+    h2: { font: `bold 18px ${FONT}`, color: G1, lineH: 25, gapBefore: 18, gapAfter: 8, bullet: false },
+    h3: { font: `600 15px ${FONT}`, color: G1, lineH: 22, gapBefore: 14, gapAfter: 6, bullet: false },
+    p:  { font: `14px ${FONT}`, color: G2, lineH: 21, gapBefore: 0, gapAfter: 11, bullet: false },
+    li: { font: `14px ${FONT}`, color: G2, lineH: 21, gapBefore: 0, gapAfter: 7, bullet: true },
+  }
+  const BULLET_INDENT = 18
+
+  const blocks = parseConsentBlocks(detail.content_html)
+  const signature = detail.signature_data ? await loadImage(detail.signature_data) : null
+
+  // Firma escalada (máx 320×140).
+  let sigW = 0, sigH = 0
+  if (signature) {
+    const maxW = 320, maxH = 140
+    const scale = Math.min(maxW / signature.width, maxH / signature.height, 1)
+    sigW = Math.round(signature.width * scale)
+    sigH = Math.round(signature.height * scale)
+  }
+
+  // Canvas de medición para calcular el wrapping y la altura total.
+  const measureCtx = document.createElement('canvas').getContext('2d')!
+  function wrap(text: string, font: string, maxW: number): string[] {
+    measureCtx.font = font
+    const words = text.split(' ')
+    const lines: string[] = []
+    let line = ''
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word
+      if (measureCtx.measureText(test).width > maxW && line) { lines.push(line); line = word }
+      else line = test
+    }
+    if (line) lines.push(line)
+    return lines.length ? lines : ['']
+  }
+
+  // Pre-cálculo de líneas de los bloques (para altura y dibujo).
+  const laidOut = blocks.map(b => {
+    const st = STYLE[b.kind]
+    const maxW = st.bullet ? contentW - BULLET_INDENT : contentW
+    return { ...b, st, lines: wrap(b.text, st.font, maxW) }
+  })
+
+  // ── Altura total ────────────────────────────
+  const signatureLabel = 'FIRMA DEL PACIENTE'
+  const signedLine = detail.signed_at ? `Firmado el ${formatDateTime(detail.signed_at)}` : ''
+
+  let H = 48 + 90 + 20 + 1 + 20          // top + header + divider + patient label gap
+  H += 15 + 22 + 20                       // patient name + gap
+  H += 1 + 20                             // divider antes del contenido
+  for (const b of laidOut) H += b.st.gapBefore + b.lines.length * b.st.lineH + b.st.gapAfter
+  H += 24 + 16 + (sigH || 18) + (signedLine ? 24 : 0)  // firma label + firma/placeholder + fecha
+  H += 24 + 1 + 16 + 18                   // footer
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(DPR, DPR)
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, W, H)
+
+  function hline(yy: number) {
+    ctx.strokeStyle = LINE_C; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(PAD, yy); ctx.lineTo(W - PAD, yy); ctx.stroke()
+  }
+
+  let y = 48
+
+  // ── Header ──────────────────────────────────
+  ctx.textAlign = 'left'
+  ctx.font = `bold 26px ${FONT}`; ctx.fillStyle = G1
+  ctx.fillText('Vital', PAD, y + 26)
+  const dw = ctx.measureText('Vital').width
+  ctx.fillStyle = TEAL; ctx.fillText('OS', PAD + dw, y + 26)
+
+  ctx.textAlign = 'right'
+  ctx.font = `600 10px ${FONT}`; ctx.fillStyle = G4
+  ctx.fillText('CONSENTIMIENTO', W - PAD, y + 12)
+  // Nombre de plantilla: hasta 2 líneas para que nunca se corte.
+  const nameFont = `bold 16px ${FONT}`
+  const maxNameW = 440
+  let nameLines = wrap(templateName, nameFont, maxNameW)
+  if (nameLines.length > 2) {
+    ctx.font = nameFont
+    let second = nameLines.slice(1).join(' ')
+    while (ctx.measureText(`${second}…`).width > maxNameW && second.length > 1) second = second.slice(0, -1)
+    nameLines = [nameLines[0], `${second}…`]
+  }
+  ctx.font = nameFont; ctx.fillStyle = G1
+  let ny = y + 34
+  for (const line of nameLines) { ctx.fillText(line, W - PAD, ny); ny += 20 }
+  ctx.textAlign = 'left'
+  y += 90
+
+  // ── Patient ─────────────────────────────────
+  hline(y); y += 20
+  ctx.font = `600 10px ${FONT}`; ctx.fillStyle = G4
+  ctx.fillText('PACIENTE', PAD, y); y += 20
+  ctx.font = `bold 15px ${FONT}`; ctx.fillStyle = G1
+  ctx.fillText(patientName, PAD, y); y += 22
+  y += 20
+
+  // ── Content blocks ──────────────────────────
+  hline(y); y += 20
+  for (const b of laidOut) {
+    y += b.st.gapBefore
+    ctx.font = b.st.font; ctx.fillStyle = b.st.color
+    if (b.st.bullet) {
+      ctx.fillStyle = TEAL
+      ctx.fillText('•', PAD, y + 14)
+      ctx.fillStyle = b.st.color
+    }
+    const x = b.st.bullet ? PAD + BULLET_INDENT : PAD
+    for (const line of b.lines) {
+      ctx.fillText(line, x, y + 14)
+      y += b.st.lineH
+    }
+    y += b.st.gapAfter
+  }
+
+  // ── Signature ───────────────────────────────
+  y += 4
+  ctx.font = `600 10px ${FONT}`; ctx.fillStyle = G4
+  ctx.fillText(signatureLabel, PAD, y + 10); y += 24
+  if (signature) {
+    ctx.drawImage(signature, PAD, y, sigW, sigH)
+    y += sigH
+  } else {
+    ctx.font = `italic 13px ${FONT}`; ctx.fillStyle = G4
+    ctx.fillText('Sin firma registrada', PAD, y + 12); y += 18
+  }
+  if (signedLine) {
+    y += 6
+    ctx.font = `12px ${FONT}`; ctx.fillStyle = G3
+    ctx.fillText(signedLine, PAD, y + 12); y += 18
+  }
+
+  // ── Footer ──────────────────────────────────
+  y += 24
+  hline(y); y += 16
+  const brand = 'Generado con VitalOS · vitalos.com.ar'
+  ctx.font = `600 11px ${FONT}`
+  const brandW = ctx.measureText(brand).width
+  const prefix = 'Generado con '
+  const prefixW = ctx.measureText(prefix).width
+  const bx = W / 2 - brandW / 2
+  ctx.textAlign = 'left'
+  ctx.fillStyle = G3; ctx.fillText(prefix, bx, y + 8)
+  ctx.fillStyle = TEAL; ctx.fillText('VitalOS · vitalos.com.ar', bx + prefixW, y + 8)
+
+  const dataUrl = canvas.toDataURL('image/png')
+  const blob = await new Promise<Blob>(res => canvas.toBlob(b => res(b!), 'image/png'))
+  return { dataUrl, blob }
+}
+
 // ── Main component ────────────────────────────────────────────
 
 export default function PatientConsentsPage() {
@@ -54,6 +380,11 @@ export default function PatientConsentsPage() {
   // Detail view state
   const [detailLoading, setDetailLoading] = useState(false)
   const [detail, setDetail] = useState<ConsentDetail | null>(null)
+
+  // Share / image state (misma lógica que presupuestos)
+  const [imagePreview, setImagePreview] = useState<{ url: string; blob: Blob; name: string } | null>(null)
+  const [imageGenerating, setImageGenerating] = useState(false)
+  const [imageCopied, setImageCopied] = useState(false)
 
   // New consent flow
   const [showSelectModal, setShowSelectModal] = useState(false)
@@ -246,6 +577,64 @@ export default function PatientConsentsPage() {
     }
   }
 
+  // ── Share / Print (misma lógica que presupuestos) ───────────
+
+  function patientFullName() {
+    return patient ? `${patient.first_name} ${patient.last_name}` : '—'
+  }
+
+  async function handleShareImage(d: ConsentDetail, templateName: string) {
+    setImageGenerating(true)
+    try {
+      const { dataUrl, blob } = await generateConsentImage(d, patientFullName(), templateName)
+      const fileName = `consentimiento-${patientFullName().replace(/\s+/g, '-').toLowerCase()}.png`
+      const file = new File([blob], fileName, { type: 'image/png' })
+
+      // Mobile: hoja de compartir nativa (WhatsApp, etc.). Compartimos SOLO el
+      // archivo para que WhatsApp no envíe la imagen dos veces.
+      if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] })
+        return
+      }
+
+      // Desktop: modal de preview para copiar/descargar.
+      setImagePreview({ url: dataUrl, blob, name: fileName })
+    } catch {
+      // usuario canceló share nativo — no-op
+    } finally {
+      setImageGenerating(false)
+    }
+  }
+
+  async function handleCopyImage() {
+    if (!imagePreview) return
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': imagePreview.blob })])
+      setImageCopied(true)
+      setTimeout(() => setImageCopied(false), 2500)
+    } catch {
+      handleDownloadImage()
+    }
+  }
+
+  function handleDownloadImage() {
+    if (!imagePreview) return
+    const url = URL.createObjectURL(imagePreview.blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = imagePreview.name
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handlePrint(d: ConsentDetail, templateName: string) {
+    const html = generatePrintHtml(d, patientFullName(), templateName)
+    const win = window.open('', '_blank', 'width=860,height=960')
+    if (!win) return
+    win.document.write(html)
+    win.document.close()
+  }
+
   // ── Render ──────────────────────────────────────────────────
 
   if (loading) {
@@ -377,6 +766,25 @@ export default function PatientConsentsPage() {
                               })}
                             </p>
                           )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-2 justify-end flex-wrap pt-1">
+                          <button
+                            onClick={() => handleShareImage(detail, templateName)}
+                            disabled={imageGenerating}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-[#00C4BC]/40 bg-[#E6F8F1] dark:bg-[#00C4BC]/10 hover:bg-[#d0f0ee] dark:hover:bg-[#00C4BC]/20 text-[#00C4BC] transition-colors disabled:opacity-60"
+                          >
+                            <Share2 size={14} />
+                            {imageGenerating ? 'Generando...' : 'Imagen / WhatsApp'}
+                          </button>
+                          <button
+                            onClick={() => handlePrint(detail, templateName)}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-app hover:bg-surface2 text-app2 transition-colors"
+                          >
+                            <Printer size={14} />
+                            Imprimir / PDF
+                          </button>
                         </div>
                       </>
                     ) : null}
@@ -515,6 +923,57 @@ export default function PatientConsentsPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          IMAGE PREVIEW MODAL (desktop)
+      ════════════════════════════════════════ */}
+      {imagePreview && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-app shrink-0">
+              <div>
+                <p className="font-bold text-app">Imagen del consentimiento</p>
+                <p className="text-xs text-app3 mt-0.5">Copiá o descargá para enviar por WhatsApp</p>
+              </div>
+              <button
+                onClick={() => setImagePreview(null)}
+                className="w-8 h-8 rounded-full hover:bg-surface2 flex items-center justify-center text-app3 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Image preview */}
+            <div className="p-4 bg-surface2 overflow-y-auto">
+              <img
+                src={imagePreview.url}
+                alt="Consentimiento"
+                className="w-full rounded-xl border border-app shadow-sm"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 py-4 flex gap-3 shrink-0">
+              <button
+                onClick={handleCopyImage}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#00C4BC] hover:bg-[#00aaa3] text-white text-sm font-bold transition-all active:scale-95"
+              >
+                {imageCopied ? <Check size={15} /> : <Copy size={15} />}
+                {imageCopied ? '¡Copiada!' : 'Copiar imagen'}
+              </button>
+              <button
+                onClick={handleDownloadImage}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-app hover:bg-surface2 text-app2 text-sm font-semibold transition-colors"
+              >
+                <Download size={15} />
+                Descargar
+              </button>
             </div>
           </div>
         </div>

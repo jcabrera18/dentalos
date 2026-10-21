@@ -92,7 +92,7 @@ export function PatientAppointmentsSection({ patientId, token }: {
   return (
     <div className="bg-surface border border-app rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-app">
-        <h3 className="font-semibold">Historial clínico</h3>
+        <h3 className="font-semibold">Turnos</h3>
       </div>
       {loading ? (
         <div className="divide-y divide-app">

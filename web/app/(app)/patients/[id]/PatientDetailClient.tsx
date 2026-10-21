@@ -13,6 +13,7 @@ import { downloadAccountStatementPNG, downloadReceiptPNG } from '@/components/ge
 import { PatientNotesSection } from '@/components/PatientNotesSection'
 import { PatientFilesSection } from '@/components/PatientFilesSection'
 import { PatientAppointmentsSection } from '@/components/PatientAppointmentsSection'
+import { ClinicalSummaryCard } from '@/components/clinical/ClinicalSummaryCard'
 import { hasCapability, normalizeDiscipline } from '@/lib/capabilities'
 
 const EMPTY_ACCOUNT_SUMMARY = {
@@ -692,33 +693,6 @@ export default function PatientDetailClient({
               </div>
             )}
 
-            {/* Badges de alertas clínicas activas */}
-            {clinicalHistory?.alerts && (() => {
-              const a = clinicalHistory.alerts
-              const active = [
-                a.aspirin && 'Aspirina',
-                a.anticoagulants && 'Anticoagulantes',
-                a.pregnancy && 'Embarazo',
-                a.cardiac && 'Cardíaco',
-                a.hypertension && 'Presión alta',
-                a.seizures && 'Epilepsia',
-                a.diabetes?.active && `Diabetes${!a.diabetes.controlled ? ' (no controlada)' : ''}`,
-                a.infectious_disease?.active && (a.infectious_disease.detail || 'Enf. infectocontagiosa'),
-              ].filter(Boolean) as string[]
-              return active.length > 0 ? (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                  <div className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2">⚠️ Alertas clínicas</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {active.map(label => (
-                      <span key={label} className="text-xs font-semibold text-red-700 dark:text-red-300 bg-red-500/15 border border-red-500/20 px-2 py-0.5 rounded-md">
-                        {label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null
-            })()}
-
             {patient.current_medications && (
               <div className="bg-surface border border-app rounded-xl p-4">
                 <div className="text-xs text-app3 uppercase tracking-wider font-semibold mb-2">Medicación</div>
@@ -796,6 +770,15 @@ export default function PatientDetailClient({
 
           {/* Columna derecha — historial + tratamientos */}
           <div className="md:col-span-2 space-y-6 animate-fade-in-up" style={{ animationDelay: '80ms' }}>
+
+            {/* Resumen clínico — pantallazo read-only de la HC (alertas + última evolución + antecedentes). */}
+            <ClinicalSummaryCard
+              patientId={params.id as string}
+              token={token}
+              discipline={normalizeDiscipline(me?.discipline)}
+              snapshot={clinicalHistory}
+              onOpenFull={() => navigateTo(`/patients/${params.id}/clinical-history`, 'clinical-history')}
+            />
 
             {/* Odontograma — gated por especialidad (solo odontología edita). */}
             {showOdontogram && (

@@ -309,7 +309,7 @@ export default function DashboardPage() {
         {/* Greeting */}
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold">Buenos días, Od. {user?.first_name}</h2>
+            <h2 className="text-2xl font-bold">Buenos días, {user?.first_name}</h2>
             <p className="text-app2 mt-0.5 capitalize">{today}</p>
           </div>
           {/* Campana solo en desktop; en mobile vive en la top bar del layout */}

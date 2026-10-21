@@ -8,6 +8,7 @@ import { ArrowLeft, FileDown } from 'lucide-react'
 import { useMe } from '@/lib/queries'
 import { normalizeDiscipline } from '@/lib/capabilities'
 import GenericClinicalHistory from '@/components/GenericClinicalHistory'
+import { ClinicalHistoryReadout } from '@/components/clinical/ClinicalHistoryReadout'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -831,92 +832,7 @@ function DentalClinicalHistory() {
                 {sigSelected.history_snapshot && (
                   <div className="bg-surface border border-app rounded-2xl p-5">
                     <div className="text-xs font-bold uppercase tracking-wider text-app3 mb-4">Contenido firmado</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-
-                      <section>
-                        <div className="text-xs font-semibold text-red-400 mb-1.5">Alertas clínicas</div>
-                        <div className="space-y-1">
-                          {[
-                            { key: 'aspirin',        label: 'Toma aspirina' },
-                            { key: 'anticoagulants', label: 'Anticoagulantes' },
-                            { key: 'pregnancy',      label: 'Embarazo' },
-                            { key: 'cardiac',        label: 'Cardíaco' },
-                            { key: 'hypertension',   label: 'Presión alta' },
-                            { key: 'seizures',       label: 'Convulsiones / Epilepsia' },
-                          ].filter(f => sigSelected.history_snapshot.alerts?.[f.key]).map(f => (
-                            <div key={f.key} className="flex items-center gap-2 text-app"><span className="text-red-400 text-xs">●</span>{f.label}</div>
-                          ))}
-                          {sigSelected.history_snapshot.alerts?.diabetes?.active && (
-                            <div className="flex items-center gap-2 text-app"><span className="text-red-400 text-xs">●</span>Diabetes{sigSelected.history_snapshot.alerts.diabetes.controlled ? ' (controlada)' : ''}</div>
-                          )}
-                          {sigSelected.history_snapshot.alerts?.infectious_disease?.active && (
-                            <div className="flex items-center gap-2 text-app"><span className="text-red-400 text-xs">●</span>Enf. infectocontagiosa{sigSelected.history_snapshot.alerts.infectious_disease.detail ? `: ${sigSelected.history_snapshot.alerts.infectious_disease.detail}` : ''}</div>
-                          )}
-                          {!['aspirin','anticoagulants','pregnancy','cardiac','hypertension','seizures'].some((k: string) => sigSelected.history_snapshot.alerts?.[k]) && !sigSelected.history_snapshot.alerts?.diabetes?.active && !sigSelected.history_snapshot.alerts?.infectious_disease?.active && (
-                            <div className="text-app3 text-xs">Sin alertas</div>
-                          )}
-                        </div>
-                      </section>
-
-                      <section>
-                        <div className="text-xs font-semibold text-app3 mb-1.5">Antecedentes personales</div>
-                        <div className="space-y-1">
-                          {[
-                            { key: 'renal', label: 'Renal' },
-                            { key: 'hepatic', label: 'Hepático' },
-                            { key: 'respiratory', label: 'Respiratorio' },
-                            { key: 'neurological', label: 'Neurológico' },
-                            { key: 'transfusions', label: 'Transfusiones' },
-                            { key: 'sexually_transmitted', label: 'Sífilis / Gonorrea' },
-                          ].filter(f => sigSelected.history_snapshot.medical_history?.[f.key]).map(f => (
-                            <div key={f.key} className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>{f.label}</div>
-                          ))}
-                          {sigSelected.history_snapshot.medical_history?.current_disease?.active && (
-                            <div className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>Enfermedad actual{sigSelected.history_snapshot.medical_history.current_disease.detail ? `: ${sigSelected.history_snapshot.medical_history.current_disease.detail}` : ''}</div>
-                          )}
-                          {sigSelected.history_snapshot.medical_history?.current_treatment?.active && (
-                            <div className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>Medicación actual{sigSelected.history_snapshot.medical_history.current_treatment.detail ? `: ${sigSelected.history_snapshot.medical_history.current_treatment.detail}` : ''}</div>
-                          )}
-                          {sigSelected.history_snapshot.medical_history?.surgeries && (
-                            <div className="flex items-center gap-2 text-app"><span className="text-[#00C4BC] text-xs">●</span>Cirugías: {sigSelected.history_snapshot.medical_history.surgeries}</div>
-                          )}
-                          {!['renal','hepatic','respiratory','neurological','transfusions','sexually_transmitted'].some((k: string) => sigSelected.history_snapshot.medical_history?.[k]) && !sigSelected.history_snapshot.medical_history?.current_disease?.active && !sigSelected.history_snapshot.medical_history?.current_treatment?.active && !sigSelected.history_snapshot.medical_history?.surgeries && (
-                            <div className="text-app3 text-xs">Sin antecedentes</div>
-                          )}
-                        </div>
-                      </section>
-
-                      <section>
-                        <div className="text-xs font-semibold text-app3 mb-1.5">Hábitos</div>
-                        <div className="space-y-1">
-                          {sigSelected.history_snapshot.habits?.smoker && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Fumador</div>}
-                          {sigSelected.history_snapshot.habits?.alcohol && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Consume alcohol</div>}
-                          {sigSelected.history_snapshot.habits?.oral_hygiene && <div className="flex items-center gap-2 text-app"><span className="text-amber-400 text-xs">●</span>Higiene oral: {sigSelected.history_snapshot.habits.oral_hygiene}</div>}
-                          {!sigSelected.history_snapshot.habits?.smoker && !sigSelected.history_snapshot.habits?.alcohol && !sigSelected.history_snapshot.habits?.oral_hygiene && (
-                            <div className="text-app3 text-xs">Sin datos</div>
-                          )}
-                        </div>
-                      </section>
-
-                      <section>
-                        <div className="text-xs font-semibold text-app3 mb-1.5">Antecedentes familiares</div>
-                        <div className="space-y-1">
-                          {sigSelected.history_snapshot.family_history?.cardiac && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>Cardíaco</div>}
-                          {sigSelected.history_snapshot.family_history?.diabetes && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>Diabetes</div>}
-                          {sigSelected.history_snapshot.family_history?.other && <div className="flex items-center gap-2 text-app"><span className="text-purple-400 text-xs">●</span>{sigSelected.history_snapshot.family_history.other}</div>}
-                          {!sigSelected.history_snapshot.family_history?.cardiac && !sigSelected.history_snapshot.family_history?.diabetes && !sigSelected.history_snapshot.family_history?.other && (
-                            <div className="text-app3 text-xs">Sin antecedentes familiares</div>
-                          )}
-                        </div>
-                      </section>
-
-                      {sigSelected.history_snapshot.summary && (
-                        <section className="md:col-span-2">
-                          <div className="text-xs font-semibold text-app3 mb-1.5">Resumen clínico</div>
-                          <p className="text-app">{sigSelected.history_snapshot.summary}</p>
-                        </section>
-                      )}
-                    </div>
+                    <ClinicalHistoryReadout snap={sigSelected.history_snapshot} />
                   </div>
                 )}
 

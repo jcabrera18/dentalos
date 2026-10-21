@@ -7,7 +7,7 @@ import { apiFetch } from '@/lib/api'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal, useAppTheme } from '@/app/providers'
-import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown, UserPlus, Sun, Moon, LogOut, Stethoscope } from 'lucide-react'
+import { Upload, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Users, Infinity, Plus, X, ChevronDown, UserPlus, Sun, Moon, LogOut, Stethoscope, IdCard } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/queries'
 import { invalidateProfileCache } from '@/lib/profileCache'
@@ -594,12 +594,14 @@ function AfipConfigSection({ token }: { token: string }) {
             <AlertCircle size={15} className="mt-0.5 flex-shrink-0 text-app3" />
             <div className="text-sm text-app3">
               ¿No sabés cómo obtener el certificado AFIP?{' '}
-              Escribinos a{' '}
+              Escribinos al WhatsApp{' '}
               <a
-                href="mailto:soporte@vitalos.com.ar"
+                href="https://wa.me/5493438558913"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-[#00C4BC] font-medium hover:underline"
               >
-                soporte@vitalos.com.ar
+                +54 9 3438 55-8913
               </a>{' '}
               y te ayudamos a configurarlo.
             </div>
@@ -950,6 +952,85 @@ function SpecialtySection({
   )
 }
 
+// ── Mi matrícula profesional ────────────────────────────────────
+// La matrícula (license_number) identifica al profesional tratante. Es un dato
+// exigible en los consentimientos escritos (Decreto 1089/2012) y en la
+// facturación; por eso se captura acá y queda en `professionals.license_number`.
+function LicenseSection({
+  token, professionalId, currentLicense, onSaved,
+}: {
+  token: string
+  professionalId: string
+  currentLicense: string
+  onSaved: (license: string) => void
+}) {
+  const [value, setValue]   = useState(currentLicense)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+  const [error, setError]   = useState('')
+
+  // Si cambian los datos cargados, sincronizamos el input.
+  useEffect(() => { setValue(currentLicense) }, [currentLicense])
+
+  const dirty = value.trim() !== currentLicense
+
+  async function handleSave() {
+    setSaving(true); setError('')
+    try {
+      const license = value.trim()
+      await apiFetch(`/professionals/${professionalId}`, {
+        method: 'PATCH', token,
+        body: JSON.stringify({ license_number: license }),
+      })
+      onSaved(license)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la matrícula')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-surface border border-app rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-app">
+        <h2 className="font-semibold text-app flex items-center gap-2">
+          <IdCard size={16} className="text-[#00C4BC]" /> Mi matrícula profesional
+        </h2>
+        <p className="text-xs text-app3 mt-1">
+          Tu número de matrícula aparece en los consentimientos y comprobantes como profesional tratante.
+        </p>
+      </div>
+      <div className="p-5 space-y-4">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Ej.: M.N. 12345 / M.P. 6789"
+          maxLength={50}
+          className="w-full px-4 py-2.5 rounded-xl bg-surface2 border border-app text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+        />
+
+        {error && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-sm">{error}</div>
+        )}
+
+        <div className="flex items-center justify-end">
+          <button
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 ${
+              saved ? 'bg-[#E6F8F1] text-[#00C4BC] border border-[#00C4BC]/30' : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
+            }`}>
+            {saved ? '✓ Matrícula guardada' : 'Guardar matrícula'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [token, setToken]               = useState('')
   const [professionals, setProfessionals] = useState<any[]>([])
@@ -1081,6 +1162,10 @@ export default function SettingsPage() {
     setProfessionals((prev: any[]) => prev.map(p => p.id === myId ? { ...p, discipline: d } : p))
   }
 
+  function handleLicenseChanged(license: string) {
+    setProfessionals(prev => prev.map(p => p.id === myId ? { ...p, license_number: license } : p))
+  }
+
   if (loading) {
     return (
       <div className="px-6 py-8 animate-pulse">
@@ -1130,9 +1215,8 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-        {/* Left column: account & billing */}
-        <div className="space-y-4">
-          <h2 className="text-base font-semibold text-app">Cuenta y facturación</h2>
+        {/* Left column: plan & AFIP billing */}
+        <div className="space-y-6">
           <PlanCard />
           {MULTI_SPECIALTY_ENABLED && token && myId && (
             <SpecialtySection
@@ -1142,14 +1226,19 @@ export default function SettingsPage() {
               onChanged={handleDisciplineChanged}
             />
           )}
+          {token && myId && (
+            <LicenseSection
+              token={token}
+              professionalId={myId}
+              currentLicense={selfProfessional?.license_number ?? ''}
+              onSaved={handleLicenseChanged}
+            />
+          )}
           {token && <AfipConfigSection token={token} />}
-          <AccountActionsSection />
         </div>
 
-        {/* Right column: agenda */}
-        <div className="space-y-4">
-          <h2 className="text-base font-semibold text-app">Agenda</h2>
-
+        {/* Right column: agenda + account/session */}
+        <div className="space-y-6">
           {/* Unified agenda card: duration + working hours + save */}
           <div className="bg-surface border border-app rounded-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-app">
@@ -1272,8 +1361,9 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-        </div>
 
+          <AccountActionsSection />
+        </div>
 
       </div>
     </div>
