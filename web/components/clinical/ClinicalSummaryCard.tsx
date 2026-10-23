@@ -6,7 +6,7 @@
 // quiere ver antes de atender. No escribe nada; linkea a la HC completa.
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, AlertTriangle, Stethoscope } from 'lucide-react'
+import { ChevronDown, ChevronRight, AlertTriangle, Stethoscope, Eye, EyeOff, ShieldAlert } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { DISCIPLINE_LABELS, clinicalTemplateFor, clinicalSectionsFor, type Discipline } from '@/lib/capabilities'
 import type { ClinicalEncounter } from '@/lib/clinicalEncounters'
@@ -177,6 +177,11 @@ export function ClinicalSummaryCard({
   const encountersEnabled = clinicalTemplateFor(discipline).encounters.enabled
   const [encounters, setEncounters] = useState<ClinicalEncounter[] | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  // Privacidad: el resumen arranca oculto para evitar que lo vea el paciente o
+  // alguien detrás del dispositivo. El profesional lo revela a propósito tras
+  // confirmar que está en un espacio seguro.
+  const [revealed, setRevealed] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
     if (!encountersEnabled) return
@@ -195,21 +200,39 @@ export function ClinicalSummaryCard({
     !!snap.medical_history || !!snap.habits || !!snap.family_history
   )
 
+  // ¿Hay algo sensible que ocultar? Si la HC está vacía no gateamos: mostramos el
+  // CTA de "Iniciar historia clínica" sin fricción. Mientras cargan evoluciones
+  // asumimos que puede haber contenido para no filtrarlas en el primer frame.
+  const maybeSensitive = hasBaseHistory || recent.length > 0 || (encountersEnabled && encounters === null)
+  const gated = maybeSensitive && !revealed
+
   return (
-    <div className="bg-surface border border-app rounded-xl overflow-hidden">
+    <div className="relative bg-surface border border-app rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-app flex items-center justify-between">
         <h3 className="font-semibold flex items-center gap-2">
           <Stethoscope size={16} className="text-[#00C4BC]" /> Resumen clínico
         </h3>
-        <button
-          onClick={onOpenFull}
-          className="text-xs font-semibold text-[#00C4BC] hover:underline cursor-pointer"
-        >
-          Ver completa ›
-        </button>
+        <div className="flex items-center gap-3">
+          {maybeSensitive && revealed && (
+            <button
+              onClick={() => setRevealed(false)}
+              className="text-xs font-semibold text-app3 hover:text-app flex items-center gap-1 cursor-pointer"
+              title="Ocultar información del paciente"
+            >
+              <EyeOff size={14} /> Ocultar
+            </button>
+          )}
+          <button
+            onClick={onOpenFull}
+            className="text-xs font-semibold text-[#00C4BC] hover:underline cursor-pointer"
+          >
+            Ver completa ›
+          </button>
+        </div>
       </div>
 
-      <div className="p-5 space-y-4">
+      <div className="relative">
+      <div className={`p-5 space-y-4 ${gated ? 'blur-md select-none pointer-events-none' : ''}`} aria-hidden={gated}>
         {/* Alertas — siempre visibles, seguridad del paciente */}
         {alerts.length > 0 && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
@@ -323,6 +346,56 @@ export function ClinicalSummaryCard({
           </button>
         )}
       </div>
+
+        {/* Capa de privacidad — oculta el contenido hasta que el profesional lo revele */}
+        {gated && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface/70 backdrop-blur-[2px] px-6 text-center">
+            <ShieldAlert size={28} className="text-app3" />
+            <p className="text-sm text-app2 max-w-xs">Información clínica oculta por privacidad del paciente.</p>
+            <button
+              onClick={() => setConfirming(true)}
+              className="inline-flex items-center gap-2 bg-[#00C4BC] hover:bg-[#00b0a9] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors cursor-pointer"
+            >
+              <Eye size={16} /> Ver información
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Confirmación — evita que la vea el paciente o alguien detrás del dispositivo */}
+      {confirming && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto bg-black/40 p-4"
+          onClick={() => setConfirming(false)}
+        >
+          <div
+            className="bg-surface border border-app rounded-2xl shadow-xl max-w-xs w-full p-4 text-center space-y-2.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <ShieldAlert size={18} className="text-amber-500 shrink-0" />
+              <h4 className="font-semibold text-app text-sm">¿Estás en un espacio seguro?</h4>
+            </div>
+            <p className="text-xs text-app2 leading-snug">
+              Se va a revelar información clínica del paciente. Asegurate de que nadie más pueda ver tu pantalla.
+            </p>
+            <div className="flex gap-2 pt-0.5">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 border border-app text-app2 hover:bg-surface2 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setRevealed(true); setConfirming(false) }}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#00C4BC] hover:bg-[#00b0a9] text-white text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                <Eye size={15} /> Revelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

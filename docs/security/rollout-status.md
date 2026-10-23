@@ -58,13 +58,23 @@ index); importes financieros; enums clínicos; FKs y timestamps. Ver `data-copie
 
 ## 5. Lo que FALTA (contract — irreversible)
 
-El contract **no es solo `DROP COLUMN`**. Con el código actual (dual-write) un DROP rompería los
+El contract **no es solo `DROP COLUMN`**. Con el código dual-write un DROP rompería los
 writes (intentan escribir columnas inexistentes). Secuencia:
 
 1. **Cambio de código a "enc-only"**: dejar de escribir / seleccionar / hacer fallback a las columnas
-   en claro (escribir y leer solo `*_enc`). *(A implementar.)*
-2. Deploy + verificar que la app lee solo de `*_enc`.
-3. **`DROP COLUMN`** de las columnas en claro:
+   en claro (escribir y leer solo `*_enc`). ✅ **Implementado (pendiente de deploy).**
+   - `lib/crypto/index.ts`: helpers `encryptTenantText`/`decryptTenantText` (prod descifra y
+     **propaga** errores; dev sin KMS guarda/lee el plano dentro de `*_enc`).
+   - `patients/routes.ts`: PHI de patients, historia clínica y firmas escriben/leen solo `*_enc`;
+     SELECT e INSERT/UPSERT sin columnas en claro; lectura sin fallback a plano.
+   - `professionals/routes.ts` + `invoices/routes.ts`: secretos AFIP solo `*_enc`.
+   - `appointments/routes.ts` + `treatments/routes.ts`: la alerta de `allergies` se lee de
+     `allergies_enc` (eran los únicos consumidores del plano fuera de patients).
+   - **Migración `064_enc_only_drop_not_null.sql`**: aflojar `NOT NULL` de las columnas en claro
+     que dejamos de escribir (si no, un INSERT enc-only las violaría). **No** dropea columnas →
+     rollback = redeploy del build anterior. **Correr 064 ANTES de deployar el build enc-only.**
+2. Deploy + verificar que la app lee solo de `*_enc` (observación, ver abajo).
+3. **`DROP COLUMN`** de las columnas en claro (migración futura `065`, recién tras observación):
    ```sql
    ALTER TABLE patients DROP COLUMN allergies, DROP COLUMN current_medications, DROP COLUMN medical_notes;
    ALTER TABLE professionals DROP COLUMN afip_cert, DROP COLUMN afip_key;
@@ -108,7 +118,8 @@ con el `.env` apuntando a prod (REST API; el scrub necesita el SQL editor por el
 
 ## 8. Pendientes
 
-- [ ] **Contract** (enc-only code + DROP) — en unos días, tras observación.
+- [~] **Contract**: código enc-only + migración `064` **implementados** (pendiente: correr `064`,
+  deployar, observar). Falta el `DROP COLUMN` (migración `065`) tras observación.
 - [ ] Verificar que el login sigue OK tras `AUTH_ALLOW_USER_METADATA=false` (spot-check de sesiones).
 - [ ] Migración futura: quitar `user_metadata` del COALESCE en `current_clinic_id()`/
   `current_user_role()` (RLS). Hoy es inocuo (app_metadata tiene precedencia), baja prioridad.
@@ -121,8 +132,12 @@ con el `.env` apuntando a prod (REST API; el scrub necesita el SQL editor por el
 
 ## 9. Rollback
 
-- **Antes del contract**: `CRYPTO_ENABLED=false` → la API vuelve a leer/escribir texto plano al
-  instante (sigue ahí). Totalmente reversible.
+- **Con el build dual-write (anterior al enc-only)**: `CRYPTO_ENABLED=false` → la API vuelve a
+  leer/escribir texto plano al instante (sigue ahí). Totalmente reversible.
+- **Con el build enc-only desplegado (pre-DROP)**: `CRYPTO_ENABLED=false` **ya NO sirve de
+  rollback** (los writes dejaron de poblar el plano y las lecturas no caen a plano). El rollback es
+  **redeploy del build dual-write anterior**: las columnas en claro siguen existiendo (064 solo
+  afloja NOT NULL) y los datos nuevos están en `*_enc`, que ese build lee sin problema.
 - **F0.0**: quitar `AUTH_ALLOW_USER_METADATA` (vuelve el fallback a `user_metadata`).
 - **Después del contract**: no hay rollback por columna (el plano se borró) → recuperación = restore
   de backup. Por eso la observación y la verificación (1159/1159 OK) van antes.
