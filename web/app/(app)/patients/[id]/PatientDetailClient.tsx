@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useAfipConfig, usePatientOdontogram, queryKeys } from '@/lib/queries'
 import { useRouter, useParams } from 'next/navigation'
-import { Wallet, FileText, ClipboardList, Loader2, MoreVertical } from 'lucide-react'
+import { Wallet, FileText, ClipboardList, Loader2, MoreVertical, ShieldAlert, Stethoscope } from 'lucide-react'
 import { PaymentModal } from '@/components/PaymentModal'
 import { InvoiceModal } from '@/components/InvoiceModal'
 import { downloadAccountStatementPNG, downloadReceiptPNG } from '@/components/generateReceipt'
@@ -148,11 +148,20 @@ export default function PatientDetailClient({
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const [navLoading, setNavLoading] = useState<string | null>(null)
+  // Confirmación de privacidad antes de abrir la HC completa: evita que se muestre
+  // información clínica sensible si hay alguien detrás de la pantalla. Guarda el
+  // destino pendiente; se navega recién al confirmar. (Espeja el gate del resumen clínico.)
+  const [pendingClinicalPath, setPendingClinicalPath] = useState<string | null>(null)
 
   function navigateTo(path: string, key: string) {
     setNavLoading(key)
     window.dispatchEvent(new Event('navigation-start'))
     router.push(path)
+  }
+
+  // Pide confirmación antes de navegar a la historia clínica (contenido sensible).
+  function requestClinicalHistory(path: string) {
+    setPendingClinicalPath(path)
   }
 
   const router = useRouter()
@@ -713,7 +722,7 @@ export default function PatientDetailClient({
 
             {/* Historia clínica */}
             <button
-              onClick={() => navigateTo(`/patients/${params.id}/clinical-history`, 'clinical-history')}
+              onClick={() => requestClinicalHistory(`/patients/${params.id}/clinical-history`)}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
             >
               <span className="flex items-center gap-2">🩺  Historia clínica</span>
@@ -777,8 +786,8 @@ export default function PatientDetailClient({
               token={token}
               discipline={normalizeDiscipline(me?.discipline)}
               snapshot={clinicalHistory}
-              onOpenFull={() => navigateTo(`/patients/${params.id}/clinical-history`, 'clinical-history')}
-              onOpenEncounter={(encounterId) => navigateTo(`/patients/${params.id}/clinical-history?encounter=${encounterId}`, 'clinical-history')}
+              onOpenFull={() => requestClinicalHistory(`/patients/${params.id}/clinical-history`)}
+              onOpenEncounter={(encounterId) => requestClinicalHistory(`/patients/${params.id}/clinical-history?encounter=${encounterId}`)}
             />
 
             {/* Odontograma — gated por especialidad (solo odontología edita). */}
@@ -1200,6 +1209,38 @@ export default function PatientDetailClient({
           onClose={() => setInvoiceModalPayment(null)}
           onSuccess={(inv) => setInvoicesMap(prev => ({ ...prev, [inv.payment_id]: inv }))}
         />
+      )}
+
+      {/* Confirmación de privacidad antes de abrir la HC completa (contenido clínico sensible). */}
+      {pendingClinicalPath && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setPendingClinicalPath(null)}>
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-app">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <ShieldAlert size={18} className="text-amber-500 shrink-0" /> ¿Estás en un espacio seguro?
+              </h2>
+              <p className="text-sm text-app3 mt-1 leading-snug">
+                Se va a mostrar la historia clínica del paciente. Asegurate de que nadie más pueda ver tu pantalla.
+              </p>
+            </div>
+            <div className="px-6 py-4">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPendingClinicalPath(null)}
+                  className="flex-1 bg-surface2 hover:bg-surface3 border border-app rounded-xl text-sm font-semibold py-3 transition-all active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => { const p = pendingClinicalPath; setPendingClinicalPath(null); navigateTo(p, 'clinical-history') }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#00C4BC] hover:bg-[#00b0a9] text-white rounded-xl text-sm font-semibold py-3 transition-all active:scale-95"
+                >
+                  <Stethoscope size={15} /> Abrir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {paymentToDelete && (
