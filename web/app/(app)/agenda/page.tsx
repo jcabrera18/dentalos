@@ -581,7 +581,7 @@ export default function AgendaPage() {
               <select
                 value={selectedProfId}
                 onChange={e => setSelectedProfId(e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                className="select-chevron w-full bg-surface2 border border-app rounded-xl pl-3 pr-9 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
                 {professionals.map((p: any) => (
@@ -744,7 +744,7 @@ export default function AgendaPage() {
               <select
                 value={selectedProfId}
                 onChange={e => setSelectedProfId(e.target.value)}
-                className="bg-surface2 border border-app rounded-lg px-3 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                className="select-chevron bg-surface2 border border-app rounded-lg pl-3 pr-9 py-1.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
               >
                 <option value="">Todos los profesionales</option>
                 {professionals.map((p: any) => (
