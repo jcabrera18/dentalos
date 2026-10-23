@@ -22,14 +22,17 @@ type RawHistory = Pick<ClinicalHistorySnapshot, 'summary' | 'alerts' | 'medical_
 const fmtDate = (d: string) =>
   new Date(d + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 
-// Normalizamos ambas formas a un único snapshot.
+// Normalizamos ambas formas a un único snapshot. La disciplina (del profesional)
+// manda — no la presencia incidental de discipline_sections: una historia
+// odontológica puede traer un discipline_sections no-nulo y aún así sus campos
+// viven al nivel raíz (alerts/medical_history/habits/family_history).
 function toSnapshot(raw: RawHistory | null | undefined, discipline: Discipline): ClinicalHistorySnapshot | null {
   if (!raw) return null
-  if (raw.discipline_sections) {
-    const { vitals, ...sections } = raw.discipline_sections
-    return { discipline, summary: raw.summary ?? null, sections, vitals }
+  if (discipline === 'dentistry') {
+    return { discipline: 'dentistry', ...raw }
   }
-  return { discipline: 'dentistry', ...raw }
+  const { vitals, ...sections } = raw.discipline_sections ?? {}
+  return { discipline, summary: raw.summary ?? null, sections, vitals }
 }
 
 function alertLabels(snap: ClinicalHistorySnapshot): string[] {
