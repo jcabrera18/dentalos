@@ -1,7 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { ImageViewer } from '@/components/ImageViewer'
 
 type PatientFile = {
   name: string
@@ -15,8 +17,17 @@ export function PatientFilesSection({ patientId, showOdontogramPhoto = true }: {
   const [files, setFiles] = useState<PatientFile[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [fileToDelete, setFileToDelete] = useState<PatientFile | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const supabase = createClient()
+
+  // Solo imágenes, en el mismo orden que la grilla → navegación prev/next en el visor.
+  const imageFiles = useMemo(
+    () => files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name) && f.signed_url)
+      .map(f => ({ url: f.signed_url as string, name: f.name })),
+    [files],
+  )
 
   async function getToken(): Promise<string | undefined> {
     const { data } = await supabase.auth.getSession()
@@ -64,14 +75,22 @@ export function PatientFilesSection({ patientId, showOdontogramPhoto = true }: {
     }
   }
 
-  async function handleDelete(path: string) {
-    const token = await getToken()
-    await apiFetch(`/patients/${patientId}/files`, {
-      method: 'DELETE',
-      token,
-      body: JSON.stringify({ path }),
-    })
-    setFiles(prev => prev.filter(f => f.path !== path))
+  async function confirmDelete() {
+    if (!fileToDelete) return
+    const path = fileToDelete.path
+    setDeleting(true)
+    try {
+      const token = await getToken()
+      await apiFetch(`/patients/${patientId}/files`, {
+        method: 'DELETE',
+        token,
+        body: JSON.stringify({ path }),
+      })
+      setFiles(prev => prev.filter(f => f.path !== path))
+      setFileToDelete(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -118,7 +137,15 @@ export function PatientFilesSection({ patientId, showOdontogramPhoto = true }: {
                 <div key={file.path} className="group relative bg-surface2 rounded-xl overflow-hidden border border-app">
                   <button
                     className="w-full aspect-square flex items-center justify-center overflow-hidden bg-surface3"
-                    onClick={() => { if (url) { if (isImage) setPreview({ url, name: file.name }); else window.open(url, '_blank') } }}
+                    onClick={() => {
+                      if (!url) return
+                      if (isImage) {
+                        const i = imageFiles.findIndex(img => img.url === url)
+                        if (i >= 0) setViewerIndex(i)
+                      } else {
+                        window.open(url, '_blank')
+                      }
+                    }}
                   >
                     {isImage && url
                       ? <img src={url} alt={file.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -129,7 +156,7 @@ export function PatientFilesSection({ patientId, showOdontogramPhoto = true }: {
                     <div className="text-xs font-medium truncate text-app">{file.name}</div>
                     <div className="text-xs text-app3">{date} {size}</div>
                     <button
-                      onClick={() => handleDelete(file.path)}
+                      onClick={() => setFileToDelete(file)}
                       className="mt-1.5 w-full text-xs bg-red-900/20 hover:bg-red-900/40 active:scale-95 cursor-pointer text-red-400 py-1 rounded-lg transition-all"
                     >
                       Borrar
@@ -142,19 +169,48 @@ export function PatientFilesSection({ patientId, showOdontogramPhoto = true }: {
         )}
       </div>
 
-      {preview && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
-          <div className="relative max-w-4xl max-h-full w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
-            <img src={preview.url} alt={preview.name} className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl" />
-            <div className="absolute top-3 right-3 flex gap-2">
-              <a href={preview.url} target="_blank" rel="noopener noreferrer" className="bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all" onClick={e => e.stopPropagation()}>Abrir</a>
-              <button onClick={() => setPreview(null)} className="bg-black/60 hover:bg-black/80 text-white text-xl w-8 h-8 rounded-lg flex items-center justify-center transition-all">×</button>
+      {viewerIndex !== null && imageFiles[viewerIndex] && (
+        <ImageViewer
+          images={imageFiles}
+          index={viewerIndex}
+          onIndexChange={setViewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      )}
+
+      {fileToDelete && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-4"
+          onClick={() => { if (!deleting) setFileToDelete(null) }}
+        >
+          <div className="bg-surface border border-app rounded-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-app">
+              <h2 className="text-lg font-semibold">Eliminar archivo</h2>
+              <p className="text-sm text-app3 mt-1">
+                ¿Eliminar <span className="font-medium text-app2 break-all">{fileToDelete.name}</span> de forma definitiva? Esta acción no se puede deshacer.
+              </p>
             </div>
-            <div className="absolute bottom-3 left-0 right-0 text-center">
-              <span className="bg-black/60 text-white text-xs px-3 py-1 rounded-full">{preview.name}</span>
+            <div className="px-6 py-4">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFileToDelete(null)}
+                  disabled={deleting}
+                  className="flex-1 bg-surface2 hover:bg-surface3 border border-app rounded-xl text-sm font-semibold py-3 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold py-3 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )
