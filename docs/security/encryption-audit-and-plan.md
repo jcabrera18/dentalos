@@ -32,14 +32,20 @@ Convención: **[H]** = hecho verificado en código · **[I]** = inferencia · **
   `medical_notes`; carga inicial de la ficha migrada de lectura directa a Fastify.
 - **Fase 3 (historia clínica) — hecha y desplegada.** `patient_clinical_histories` y
   `clinical_history_signatures` (snapshot firmado, firma, IP/UA).
-- **Rollout en prod OK**: migraciones 051–058 aplicadas; backfills (patients 317, AFIP 5, historias
-  81, firmas 49; 0 fallos); scrub de `audit_log`; **verificación 1159/1159** descifran == plano.
-- **Falta el *contract*** (irreversible): cambio de código a *enc-only* + `DROP` de las columnas en
-  claro — planeado en días, tras observación. **Hasta entonces el PHI sigue en el dump** (columnas
-  en claro no dropeadas); hoy hay **dual-write** y lectura desde `*_enc`.
-- **Fase 3 restante**: `consents`, turnos/tratamientos/odontograma, receptores de `invoices`,
-  notificaciones, Storage, blind index DNI/teléfono. **Fase 4** (rotación/rewrap/revocación/restore)
-  sin empezar.
+- **Rollout en prod OK**: migraciones 051–067 aplicadas; backfills (F2: patients 317, AFIP 5,
+  historias 81, firmas 49; **1159/1159** OK).
+- **Actualización 2026-10-27 (ver `rollout-status.md` para el detalle vivo):**
+  - **Gate `CRYPTO_ENABLED` ELIMINADO (hallazgo F-01):** cifrado **siempre activo** vía KMS y
+    **fail-closed** (ya no hay dual-write ni fallback a plano; el server no arranca sin `KMS_PROVIDER=aws`).
+  - **F2 contract COMPLETO:** columnas en claro de patients PHI, anamnesis, firmas y AFIP **dropeadas**
+    (065/067). Ese PHI ya **no está en el dump**.
+  - **Carriles nuevos cifrados + backfilleados (contract pendiente):** `consents.*` (068/069),
+    `patient_clinical_histories.risk_level` (070/071), `invoices.receptor_*` (072/073),
+    `quotes.items/notes` (074/075).
+- **Fase 3 restante (en claro HOY):** **identidad de `patients`** (nombre/DNI/teléfono/email/DOB/
+  domicilio + blind index — hallazgo **F-02**, el riesgo dominante), `appointments` (chief_complaint/
+  clinical_notes/internal_notes), tratamientos/odontograma, notificaciones, Storage. **Fase 4**
+  (rotación/rewrap/revocación/restore + least-privilege KMS) sin empezar.
 
 Convención de abajo: **[x]** hecho · **[~]** parcial/en proceso · **[ ]** pendiente.
 

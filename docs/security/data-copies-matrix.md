@@ -11,6 +11,17 @@
 Convención: **[H]** verificado en esquema/código · **[I]** inferencia · **[?]** a verificar
 contra la base desplegada.
 
+> **⚠️ ESTADO 2026-10-27 — muchas filas marcadas "F3" ya están HECHAS.** Esta matriz es el plan
+> original (2026-10-19). El estado real de ejecución vive en `rollout-status.md`. Resumen de lo
+> ya cifrado (enc-only, AEAD): **F2 completo con contract** (patients allergies/current_medications/
+> medical_notes/notes, anamnesis, firmas, secretos AFIP — columnas planas **dropeadas**); y
+> post-auditoría: **`consents.*`**, **`patient_clinical_histories.risk_level`**, **`invoices.receptor_*`**,
+> **`quotes.items/notes`** (cifrados + backfilleados; contract pendiente de aplicar). Varias filas
+> `[?]` de §4 quedaron resueltas: `patient_clinical_histories` → AEAD hecho; `consents`/`invoices`
+> **no** tienen trigger de auditoría (confirmado). **Sigue PENDIENTE y en claro**: identidad de
+> `patients` (nombre/DNI/teléfono/email/DOB/domicilio, hallazgo **F-02**), contenido de
+> `appointments`, Storage, notificaciones.
+
 ## Leyenda de tratamientos
 
 | Código | Significado |
@@ -120,14 +131,20 @@ El cifrado de las tablas de origen **no sirve** si estas copias quedan en claro.
 
 ---
 
-## 5. Resumen de cobertura por fase
+## 5. Resumen de cobertura por fase (actualizado 2026-10-27)
 
-- **F0.4** (ya en Fase 0): `professionals.afip_cert/afip_key`.
-- **F2 (piloto)**: `patients.medical_notes/allergies/current_medications` + sus copias (audit_log, Redis).
-- **F3**: resto de `patients` (+BIDX DNI/teléfono), `patient_clinical_histories`, turnos,
-  tratamientos/sesiones/odontograma/diagnósticos, `consents.*`, `clinical_history_signatures.*`,
-  `invoices.receptor_*`, ambas tablas de notificaciones, Storage, y extensión de `audit_log`.
-- **F4**: backups/retención, rotaciones, observabilidad.
+- **F0.4 — ✅ HECHO + contract**: `professionals.afip_cert/afip_key`.
+- **F2 — ✅ HECHO + contract**: `patients.allergies/current_medications/medical_notes/notes`, anamnesis
+  (`patient_clinical_histories.*`), `clinical_history_signatures.*` + copias (audit_log → diffs sin PHI,
+  Redis sin PHI en claro). Columnas planas **dropeadas** (065/067).
+- **Post-auditoría (F-03/F-04/F-05) — ✅ cifrado + backfill, ⏳ contract pendiente**:
+  `patient_clinical_histories.risk_level`, `consents.*` (content_html/signature_data/signer_ip/signer_ua),
+  `invoices.receptor_name/cuit/address`, `quotes.items/notes`.
+- **F3 PENDIENTE (en claro hoy)**: **identidad de `patients`** (nombre/DNI/teléfono/email/DOB/domicilio/
+  obra social, +BIDX DNI/teléfono — hallazgo **F-02**, el riesgo dominante), `appointments`
+  (chief_complaint/clinical_notes/internal_notes), tratamientos/sesiones/odontograma/diagnósticos,
+  ambas tablas de notificaciones, Storage.
+- **F4**: backups/retención, rotaciones, observabilidad de KMS.
 
 Esta matriz es el insumo para los checklists de F2/F3 del plan maestro; se actualiza a medida
 que se verifiquen los ítems de §4.
