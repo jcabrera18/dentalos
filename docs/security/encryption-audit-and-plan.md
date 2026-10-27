@@ -39,9 +39,9 @@ Convención: **[H]** = hecho verificado en código · **[I]** = inferencia · **
     **fail-closed** (ya no hay dual-write ni fallback a plano; el server no arranca sin `KMS_PROVIDER=aws`).
   - **F2 contract COMPLETO:** columnas en claro de patients PHI, anamnesis, firmas y AFIP **dropeadas**
     (065/067). Ese PHI ya **no está en el dump**.
-  - **Carriles nuevos cifrados + backfilleados (contract pendiente):** `consents.*` (068/069),
-    `patient_clinical_histories.risk_level` (070/071), `invoices.receptor_*` (072/073),
-    `quotes.items/notes` (074/075).
+  - **Carriles nuevos cifrados + backfilleados + contract aplicado (2026-10-27, columnas planas
+    dropeadas):** `consents.*` (068/069), `patient_clinical_histories.risk_level` (070/071),
+    `invoices.receptor_*` (072/073), `quotes.items/notes` (074/075).
 - **Fase 3 restante (en claro HOY):** **identidad de `patients`** (nombre/DNI/teléfono/email/DOB/
   domicilio + blind index — hallazgo **F-02**, el riesgo dominante), `appointments` (chief_complaint/
   clinical_notes/internal_notes), tratamientos/odontograma, notificaciones, Storage. **Fase 4**

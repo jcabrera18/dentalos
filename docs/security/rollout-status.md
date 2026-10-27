@@ -20,8 +20,8 @@ Cambios desde la versión anterior de este doc (2026-10-19):
   medical_notes/notes), anamnesis (`patient_clinical_histories`), firmas y secretos AFIP ya fueron
   **dropeadas** (migraciones 065/067). Ese PHI ya **no está en el dump**.
 - **Nuevos carriles cifrados** (post-auditoría): `consents`, `patient_clinical_histories.risk_level`,
-  `invoices.receptor_*`, `quotes.items/notes`. Expand + backend + backfill **hechos**; falta el
-  **contract** (DROP) de cada uno — ver §3 y §5.
+  `invoices.receptor_*`, `quotes.items/notes`. Expand + backend + backfill + **contract aplicado el
+  2026-10-27** (columnas en claro dropeadas; smoke-test OK). Ese PHI ya **no está en el dump**.
 
 **Lo que TODAVÍA queda en claro en un dump hoy** (riesgo principal): la **identidad del paciente**
 (`patients.first_name/last_name/document_number/phone/email/date_of_birth/address/insurance_*`) — es el
@@ -49,13 +49,13 @@ Estado por fase: **expand** (columnas `*_enc` creadas) · **backend** (enc-only 
 |---|---|---|---|---|
 | `patients` | allergies, current_medications, medical_notes, notes | 054/064/065/066/067 | ✅ | ✅ **dropeadas** |
 | `patient_clinical_histories` | alerts, medical_history, family_history, habits, summary, discipline_sections | 056/064/065 | ✅ | ✅ **dropeadas** |
-| `patient_clinical_histories` | **risk_level** | 070/071 | ✅ 92/92 | ⏳ **071 pendiente** |
+| `patient_clinical_histories` | **risk_level** | 070/071 | ✅ 92/92 | ✅ **dropeada 27-10** |
 | `clinical_history_signatures` | history_snapshot, signature_data, signer_ip, signer_ua | 057/064/065 | ✅ | ✅ **dropeadas** |
 | `clinical_encounters` + firmas | vitals, content, signature | 061 | ✅ (nacieron enc) | n/a |
 | `professionals` | afip_cert, afip_key | 053/064/065 | ✅ | ✅ **dropeadas** |
-| `consents` | content_html, signature_data, signer_ip, signer_ua | 068/069 | ✅ 49/49 | ⏳ **069 pendiente** |
-| `invoices` | receptor_name, receptor_cuit, receptor_address | 072/073 | ✅ 247/247 | ⏳ **073 pendiente** |
-| `quotes` | items, notes | 074/075 | ✅ 94/94 | ⏳ **075 pendiente** |
+| `consents` | content_html, signature_data, signer_ip, signer_ua | 068/069 | ✅ 49/49 | ✅ **dropeadas 27-10** |
+| `invoices` | receptor_name, receptor_cuit, receptor_address | 072/073 | ✅ 247/247 | ✅ **dropeadas 27-10** |
+| `quotes` | items, notes | 074/075 | ✅ 94/94 | ✅ **dropeadas 27-10** |
 
 **En claro a propósito** (decisión de diseño): importes financieros (`payments`/`invoices`/`quotes`
 totales — se suman en SQL), enums clínicos/estado, FKs y timestamps. Ver `data-copies-matrix.md`.
@@ -75,24 +75,22 @@ Todos con `KMS_PROVIDER=aws` contra prod, dry-run → `--apply` → `verify-encr
 - `invoices`: 247/247, 0 errores, cobertura 0.
 - `quotes`: 94/94, 0 errores, cobertura 0.
 
-## 5. Lo que FALTA — contracts pendientes (irreversible)
+## 5. Contracts — ✅ APLICADOS (2026-10-27)
 
-Quedan 4 `DROP COLUMN` de columnas en claro ya cifradas y backfilleadas:
-`069_consents`, `071_risk_level`, `073_invoices_receptor`, `075_quotes_content`.
+Los 4 `DROP COLUMN` de columnas en claro (ya cifradas + backfilleadas) **se aplicaron el 2026-10-27**
+y se registraron en `_migrations`: `069_consents`, `071_risk_level`, `073_invoices_receptor`,
+`075_quotes_content`. Ese PHI ya **no está en el dump**.
 
-**Precondición de código (ya resuelta):** el build enc-only seguía **seleccionando** las columnas
-planas para el fallback legacy → un DROP rompería esos `select`. El commit `d891e82` (dentalos-api)
-**removió esos reads/fallback** (el backfill al 100% los volvió código muerto). → **Deployar `d891e82`
-antes de aplicar 069/073/075.** (`071` tolera el DROP incluso sin ese deploy: usa `select('*')`.)
-
-Secuencia para cerrar:
-1. Deploy de `d891e82` (enc-only sin reads al plano).
-2. **Smoke-test** (sustituye la observación de 1 día, dado el backfill verificado del set completo):
-   `GET /consents/:id`, `GET /invoices` (listado), `GET /quotes` + `PATCH /quotes/:id`, abrir una
-   historia clínica (risk_level). Todo debe devolver los valores descifrados, sin error.
-3. **Snapshot** de la DB (los DROP son irreversibles; backups previos conservan PHI hasta rotar).
-4. Aplicar 069/071/073/075 y registrarlos en `_migrations`.
-5. Verificar con marcador sintético que el dump ya no contiene ese PHI.
+Secuencia que se siguió (queda documentada como plantilla para futuros contracts, p.ej. F-02):
+1. ✅ Deploy de `d891e82` (enc-only sin reads al plano — el build con fallback seguía nombrando las
+   columnas planas en los `select`, un DROP las habría roto).
+2. ✅ **Smoke-test** (sustituyó la observación de 1 día, dado el backfill verificado del set completo):
+   `GET /consents/:id`, `GET /invoices` (listado) + PDF, `GET /quotes` + `PATCH`, historia clínica
+   (risk_level). Todo descifró sin error.
+3. ✅ **Snapshot** de la DB + export CSV de las columnas planas (red extra; backups previos conservan
+   PHI hasta rotar).
+4. ✅ `DROP COLUMN` 069/071/073/075 + `INSERT INTO _migrations`.
+5. ✅ Verificación post-DROP (smoke-test OK).
 
 ## 6. Variables de entorno (Railway, backend)
 
@@ -126,8 +124,8 @@ con el `.env` apuntando a prod (REST API).
 
 ## 8. Pendientes (ordenados por riesgo)
 
-- [ ] **Contracts 069/071/073/075** — tras deploy de `d891e82` + smoke-test (ver §5). *Cierra el dump
-  para consents, risk_level, invoices, quotes.*
+- [x] **Contracts 069/071/073/075** — ✅ aplicados 2026-10-27 (ver §5). Cerrado el dump para consents,
+  risk_level, invoices, quotes.
 - [ ] **F-02 — identidad de `patients` (RIESGO ALTO DOMINANTE).** `first_name/last_name/
   document_number/phone/email/date_of_birth/address/insurance_*` siguen en claro. Plan por tiers
   (A: display; B: DNI/tel/email con **blind index**; C: nombres con búsqueda/orden en el cliente) en

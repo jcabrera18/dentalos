@@ -16,7 +16,8 @@ contra la base desplegada.
 > ya cifrado (enc-only, AEAD): **F2 completo con contract** (patients allergies/current_medications/
 > medical_notes/notes, anamnesis, firmas, secretos AFIP — columnas planas **dropeadas**); y
 > post-auditoría: **`consents.*`**, **`patient_clinical_histories.risk_level`**, **`invoices.receptor_*`**,
-> **`quotes.items/notes`** (cifrados + backfilleados; contract pendiente de aplicar). Varias filas
+> **`quotes.items/notes`** (cifrados + backfilleados + **contract aplicado 2026-10-27**: columnas planas
+> dropeadas). Varias filas
 > `[?]` de §4 quedaron resueltas: `patient_clinical_histories` → AEAD hecho; `consents`/`invoices`
 > **no** tienen trigger de auditoría (confirmado). **Sigue PENDIENTE y en claro**: identidad de
 > `patients` (nombre/DNI/teléfono/email/DOB/domicilio, hallazgo **F-02**), contenido de
@@ -137,7 +138,7 @@ El cifrado de las tablas de origen **no sirve** si estas copias quedan en claro.
 - **F2 — ✅ HECHO + contract**: `patients.allergies/current_medications/medical_notes/notes`, anamnesis
   (`patient_clinical_histories.*`), `clinical_history_signatures.*` + copias (audit_log → diffs sin PHI,
   Redis sin PHI en claro). Columnas planas **dropeadas** (065/067).
-- **Post-auditoría (F-03/F-04/F-05) — ✅ cifrado + backfill, ⏳ contract pendiente**:
+- **Post-auditoría (F-03/F-04/F-05) — ✅ HECHO + contract (dropeadas 2026-10-27)**:
   `patient_clinical_histories.risk_level`, `consents.*` (content_html/signature_data/signer_ip/signer_ua),
   `invoices.receptor_name/cuit/address`, `quotes.items/notes`.
 - **F3 PENDIENTE (en claro hoy)**: **identidad de `patients`** (nombre/DNI/teléfono/email/DOB/domicilio/
