@@ -7,7 +7,7 @@ import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useProfessionals, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, CheckCircle2, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight, Share2, Download, Copy, CalendarPlus, MapPin } from 'lucide-react'
+import { Play, CheckCircle, CheckCircle2, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight, Share2, Download, Copy, MapPin } from 'lucide-react'
 import { consultationTypesFor, DISCIPLINE_LABELS, normalizeDiscipline } from '@/lib/capabilities'
 import { generateAppointmentImage, type AppointmentCardData } from '@/components/generateReceipt'
 
@@ -1251,34 +1251,6 @@ function AgendaPanel({
   )
 }
 
-// Link "Agregar al calendario" (Google Calendar) — tappable en el celu, abre
-// el calendario con el evento pre-cargado. Universal (Android/iOS/web).
-function buildCalendarUrl(c: {
-  startsAt: string | Date
-  durationMinutes: number
-  clinicName?: string | null
-  professionalName?: string | null
-  specialty?: string | null
-  clinicAddress?: string | null
-}): string {
-  const start = new Date(c.startsAt)
-  const end = new Date(start.getTime() + c.durationMinutes * 60000)
-  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
-  const title = `Turno${c.specialty ? ' ' + c.specialty.toLowerCase() : ''}${c.clinicName ? ' - ' + c.clinicName : ''}`
-  const details = [
-    c.professionalName ? `Profesional: ${c.professionalName}` : '',
-    'Agendado con VitalOS',
-  ].filter(Boolean).join('\n')
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: title,
-    dates: `${fmt(start)}/${fmt(end)}`,
-    details,
-  })
-  if (c.clinicAddress) params.set('location', c.clinicAddress)
-  return `https://calendar.google.com/calendar/render?${params.toString()}`
-}
-
 function PanelApptForm({ token, date, time, professionals, clinicName, clinicAddress, defaultProfessionalId, editingAppt, onClose, onCreated, onDurationChange, onSlotChange }: {
   token: string
   date: string
@@ -1322,11 +1294,10 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
   })
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState('')
-  const [created, setCreated]         = useState<(AppointmentCardData & { professionalId: string; durationMinutes: number }) | null>(null)
+  const [created, setCreated]         = useState<(AppointmentCardData & { professionalId: string }) | null>(null)
   const [imageGenerating, setImageGenerating] = useState(false)
   const [imagePreview, setImagePreview] = useState<{ url: string; blob: Blob } | null>(null)
   const [imageCopied, setImageCopied] = useState(false)
-  const [linksCopied, setLinksCopied] = useState(false)
   const [showDatePicker, setShowDatePicker]   = useState(false)
   const [showStartPicker, setShowStartPicker] = useState(false)
   const [showEndPicker, setShowEndPicker]     = useState(false)
@@ -1456,7 +1427,6 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
           : null
         setCreated({
           professionalId,
-          durationMinutes: Number(form.duration_minutes),
           patientName: selectedPatient?.full_name
             ?? `${selectedPatient?.first_name ?? ''} ${selectedPatient?.last_name ?? ''}`.trim(),
           startsAt,
@@ -1485,8 +1455,7 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
       const safe = created.patientName.replace(/\s+/g, '_').toLowerCase()
       const file = new File([blob], `turno-${safe}.png`, { type: 'image/png' })
       // Mobile: hoja de compartir nativa (WhatsApp, etc.). SOLO el archivo:
-      // combinar archivo + texto hace que WhatsApp pegue la imagen dos veces e
-      // ignore el texto. Los links van por separado (handleShareLinks).
+      // combinar archivo + texto hace que WhatsApp pegue la imagen dos veces.
       if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file] })
         return
@@ -1498,31 +1467,6 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
     } finally {
       setImageGenerating(false)
     }
-  }
-
-  // Links (calendario + ubicación) como mensaje de texto aparte — WhatsApp no
-  // acepta imagen + texto en un mismo share sin duplicar la imagen.
-  function buildLinksText(): string {
-    if (!created) return ''
-    const lines = [`Agregá tu turno al calendario: ${buildCalendarUrl(created)}`]
-    if (created.clinicAddress) {
-      lines.push(`Cómo llegar: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(created.clinicAddress)}`)
-    }
-    return lines.join('\n\n')
-  }
-
-  async function handleShareLinks() {
-    const text = buildLinksText()
-    if (!text) return
-    if (typeof navigator.share === 'function') {
-      try { await navigator.share({ text }); return } catch { /* cancelado */ return }
-    }
-    // Desktop sin Web Share → copiar al portapapeles
-    try {
-      await navigator.clipboard.writeText(text)
-      setLinksCopied(true)
-      setTimeout(() => setLinksCopied(false), 2500)
-    } catch { /* no-op */ }
   }
 
   async function handleCopyImage() {
@@ -1602,22 +1546,11 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
           type="button"
           onClick={handleShareImage}
           disabled={imageGenerating}
-          className="w-full flex items-center justify-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1eb855] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors cursor-pointer"
         >
           <Share2 className="w-4 h-4" />
-          {imageGenerating ? 'Generando...' : 'Imagen / WhatsApp'}
+          {imageGenerating ? 'Generando...' : 'Compartir imagen del turno'}
         </button>
-        <button
-          type="button"
-          onClick={handleShareLinks}
-          className="w-full mt-3 flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors cursor-pointer"
-        >
-          <CalendarPlus className="w-4 h-4" />
-          {linksCopied ? '¡Links copiados!' : 'Enviar calendario y ubicación'}
-        </button>
-        <p className="text-xs text-app3 text-center mt-2">
-          Primero la imagen, después este mensaje con los links.
-        </p>
         <button
           type="button"
           onClick={() => onCreated(created.professionalId)}
@@ -1663,28 +1596,17 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
                     Descargar
                   </button>
                 </div>
-                <div className="flex flex-col gap-2 mt-3">
+                {created.clinicAddress && (
                   <a
-                    href={buildCalendarUrl(created)}
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(created.clinicAddress)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
+                    className="flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold py-2.5 rounded-xl transition-colors cursor-pointer mt-3"
                   >
-                    <CalendarPlus className="w-4 h-4" />
-                    Agregar al calendario
+                    <MapPin className="w-4 h-4" />
+                    Cómo llegar
                   </a>
-                  {created.clinicAddress && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(created.clinicAddress)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
-                    >
-                      <MapPin className="w-4 h-4" />
-                      Cómo llegar
-                    </a>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           </div>
