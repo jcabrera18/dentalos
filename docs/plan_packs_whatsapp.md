@@ -11,7 +11,7 @@
 - **Límite mensual por plan** — `dentalos-api/src/modules/subscription/plans.ts`:
   - `free` / `basic` (Starter): WhatsApp **apagado** (`whatsapp: false`, quota 0).
   - `pro` (Growth): 500 recordatorios/mes.
-  - `clinic` (Scale): 2000 recordatorios/mes.
+  - `clinic` (Scale): 1000 recordatorios/mes.
   - `enterprise`: ilimitado (`waMsgMonthlyQuota: null`).
 - **Qué consume cuota** — solo los recordatorios `appointment_reminder_24h` y `appointment_reminder_2h`
   (`quota.ts → REMINDER_TYPES`). Confirmaciones, cancelaciones y envíos manuales NO consumen.

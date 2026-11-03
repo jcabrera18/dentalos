@@ -6,6 +6,12 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import {
+  CalendarCheck, MessageCircle, Clock, Headphones, Smartphone, Bell,
+  TrendingDown, Wallet, Monitor, Search, FileText, Check, X, Star,
+  ArrowRight, Play, FolderOpen, Calculator,
+  Phone, Signature, NotebookPen, HeartPulse,
+} from 'lucide-react'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -17,6 +23,44 @@ const jakarta = Plus_Jakarta_Sans({
 const WHATSAPP_NUMBER = '5493438558913'
 const WHATSAPP_MSG = encodeURIComponent('Hola! Quiero que me muestren cómo funciona VitalOS 🙂')
 const waLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`
+
+// ── Scroll reveal: fade-up al entrar en viewport ────────────
+function Reveal({
+  children,
+  className = '',
+  delay = 0,
+}: {
+  children: React.ReactNode
+  className?: string
+  delay?: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShown(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.12 }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return (
+    <div
+      ref={ref}
+      style={{ transitionDelay: `${delay}ms` }}
+      className={`transition-all duration-700 ease-out ${shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
 
 // ── Marco de celular reutilizable ──────────────────────────
 function PhoneShell({
@@ -79,6 +123,96 @@ function PhoneImage({ src, alt, badge, className }: { src: string; alt: string; 
   )
 }
 
+// ── Tarjeta de feature para el bento de resultados ─────────
+type FeatureMedia =
+  | { type: 'video'; src: string; badge: string }
+  | { type: 'image'; src: string; alt: string; badge: string }
+
+type Feature = {
+  tag: string
+  Icon: typeof CalendarCheck
+  title: string
+  desc: string
+  bullets: string[]
+  media: FeatureMedia
+  layout: 'split' | 'stack'
+  span: string
+  bg: string
+}
+
+function FeatureMediaView({ media, size }: { media: FeatureMedia; size: string }) {
+  if (media.type === 'video') {
+    return <PhoneVideo src={media.src} badge={media.badge} className={size} />
+  }
+  return <PhoneImage src={media.src} alt={media.alt} badge={media.badge} className={size} />
+}
+
+function TagChip({ Icon, children }: { Icon: typeof CalendarCheck; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1.5 rounded-full mb-4">
+      <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
+      {children}
+    </span>
+  )
+}
+
+function Bullets({ items }: { items: string[] }) {
+  return (
+    <ul className="space-y-3">
+      {items.map((item, i) => (
+        <li key={i} className="flex items-start gap-3 text-[15px] text-[#0F1720] leading-snug">
+          <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Check className="w-3 h-3 text-[#00C4BC]" strokeWidth={3} />
+          </span>
+          {item}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function FeatureCard({ feature }: { feature: Feature }) {
+  const { tag, Icon, title, desc, bullets, media, layout, span, bg } = feature
+
+  if (layout === 'split') {
+    return (
+      <Reveal className={`${span} col-span-1`}>
+        <div
+          className="h-full rounded-3xl border border-[#00C4BC]/12 shadow-lg shadow-[#00C4BC]/5 p-8 lg:p-10 flex flex-col lg:flex-row items-center gap-8 lg:gap-10 hover:shadow-xl hover:shadow-[#00C4BC]/10 hover:border-[#00C4BC]/25 transition-all"
+          style={{ background: bg }}
+        >
+          <div className="flex-1 w-full">
+            <TagChip Icon={Icon}>{tag}</TagChip>
+            <h3 className="text-2xl lg:text-4xl font-extrabold text-[#0F1720] leading-tight mb-4">{title}</h3>
+            <p className="text-[#4B5563] text-base lg:text-lg leading-relaxed mb-6">{desc}</p>
+            <Bullets items={bullets} />
+          </div>
+          <div className="flex justify-center flex-shrink-0 pt-4 lg:pt-0">
+            <FeatureMediaView media={media} size="w-[230px] sm:w-[250px]" />
+          </div>
+        </div>
+      </Reveal>
+    )
+  }
+
+  return (
+    <Reveal className={`${span} col-span-1`}>
+      <div
+        className="h-full rounded-3xl border border-[#00C4BC]/12 shadow-lg shadow-[#00C4BC]/5 p-8 flex flex-col hover:shadow-xl hover:shadow-[#00C4BC]/10 hover:border-[#00C4BC]/25 transition-all"
+        style={{ background: bg }}
+      >
+        <TagChip Icon={Icon}>{tag}</TagChip>
+        <h3 className="text-2xl font-extrabold text-[#0F1720] leading-tight mb-3">{title}</h3>
+        <p className="text-[#4B5563] text-[15px] leading-relaxed mb-6">{desc}</p>
+        <Bullets items={bullets} />
+        <div className="flex justify-center mt-auto pt-8">
+          <FeatureMediaView media={media} size="w-[215px] sm:w-[235px]" />
+        </div>
+      </div>
+    </Reveal>
+  )
+}
+
 export default function HomePage() {
   const router = useRouter()
   const supabase = createClient()
@@ -101,6 +235,14 @@ export default function HomePage() {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
   const [annualBilling, setAnnualBilling] = useState(true)
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   // annual = precio mensual equivalente cuando se factura anual (total = monthly × 10, ÷12 = ~2 meses gratis)
   const PRICES = {
@@ -131,6 +273,100 @@ export default function HomePage() {
     }
     router.push('/dashboard')
   }
+
+  // ── Resultados en bento grid (6 columnas; mezcla de tarjetas anchas y angostas) ──
+  const features: Feature[] = [
+    {
+      tag: 'Agenda',
+      Icon: CalendarCheck,
+      title: 'Dejá de perder turnos',
+      desc: 'Tus pacientes reciben el recordatorio solos. Vos llegás al consultorio con el día ya armado y nadie se olvida del turno.',
+      bullets: [
+        'Recordatorios automáticos por WhatsApp',
+        'Se agendan solos desde el celular',
+        'Nunca más dos pacientes a la misma hora',
+      ],
+      media: { type: 'video', src: '/demo-turno.mp4', badge: 'Un turno en 15 seg ⚡' },
+      layout: 'split',
+      span: 'lg:col-span-4',
+      bg: 'linear-gradient(135deg, #ffffff 0%, #F2FCF9 100%)',
+    },
+    {
+      tag: 'Pacientes',
+      Icon: Search,
+      title: 'Encontrá cualquier ficha en segundos',
+      desc: 'Buscás por nombre o teléfono y ahí está todo: visitas, tratamientos y pagos. Sin revolver carpetas.',
+      bullets: [
+        'Toda la info en un solo lugar',
+        'Historial siempre a mano',
+        'Lo abrís desde el celular',
+      ],
+      media: { type: 'video', src: '/demo-ficha.mp4', badge: 'Toda la ficha, a un toque' },
+      layout: 'stack',
+      span: 'lg:col-span-2',
+      bg: '#E6F8F1',
+    },
+    {
+      tag: 'Plata',
+      Icon: Wallet,
+      title: 'Sabé cuánto ganaste este mes',
+      desc: 'Sin calculadora ni planillas. Lo que entró, lo que falta cobrar y los gastos, siempre al día.',
+      bullets: [
+        'Lo que ganaste, de un vistazo',
+        'Quién te debe y cuánto',
+        'El reporte se arma solo',
+      ],
+      media: { type: 'video', src: '/demo-finanzas.mp4', badge: 'Tus números, al día' },
+      layout: 'stack',
+      span: 'lg:col-span-2',
+      bg: '#E6F8F1',
+    },
+    {
+      tag: 'Presupuestos',
+      Icon: FileText,
+      title: 'Pasá presupuestos en 10 segundos',
+      desc: 'Armás el presupuesto y se lo mandás por WhatsApp al toque. El paciente lo recibe al instante y vos no perdés tiempo.',
+      bullets: [
+        'Lo enviás por WhatsApp en un clic',
+        'El paciente lo recibe al instante',
+        'Queda guardado en su ficha',
+      ],
+      media: { type: 'video', src: '/demo-presupuesto.mp4', badge: 'Presupuesto en 10 seg → WhatsApp' },
+      layout: 'split',
+      span: 'lg:col-span-4',
+      bg: 'linear-gradient(135deg, #ffffff 0%, #F2FCF9 100%)',
+    },
+    {
+      tag: 'Cuenta corriente',
+      Icon: Calculator,
+      title: 'Sabé quién te debe y cuánto',
+      desc: 'Cada paciente tiene su cuenta corriente: lo que pagó, lo que debe y todos los cobros registrados. Nunca más perdés de vista una deuda.',
+      bullets: [
+        'El saldo pendiente, siempre claro',
+        'Registrás cada pago en segundos',
+        'Generás el estado de cuenta para mandárselo',
+      ],
+      media: { type: 'image', src: '/cuenta-corriente.png', alt: 'Cuenta corriente de un paciente', badge: 'Cuenta corriente del paciente' },
+      layout: 'split',
+      span: 'lg:col-span-4',
+      bg: 'linear-gradient(135deg, #ffffff 0%, #F2FCF9 100%)',
+    },
+    {
+      tag: 'Consentimientos',
+      Icon: Signature,
+      title: 'Quedás cubierto en cada tratamiento',
+      desc: 'El paciente firma en la pantalla en 5 segundos y queda guardado en su ficha. Con respaldo legal de todo lo que hacés.',
+      bullets: [
+        'Firma digital en 5 segundos',
+        'Respaldo legal de cada tratamiento',
+        'Archivado junto a la ficha',
+      ],
+      media: { type: 'video', src: '/demo-consentimiento.mp4', badge: 'Firmado en 5 seg' },
+      layout: 'stack',
+      span: 'lg:col-span-2',
+      bg: '#E6F8F1',
+    },
+  ]
 
   const faqs = [
     {
@@ -169,33 +405,45 @@ export default function HomePage() {
 
   return (
     <div className={`${jakarta.className} bg-white text-[#0F1720]`}>
+      <style>{`
+        @keyframes vos-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+        @keyframes vos-float-sm { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+      `}</style>
 
-      {/* ── NAVBAR ─────────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#E6F8F1]">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-2xl font-extrabold tracking-tight text-[#0F1720]">
+      {/* ── NAVBAR flotante (pill) ─────────────────────────────── */}
+      <nav className="fixed top-3 sm:top-4 left-0 right-0 z-50 px-4">
+        <div
+          className={`max-w-6xl mx-auto flex items-center justify-between rounded-full border backdrop-blur-xl transition-all duration-300 ${
+            scrolled
+              ? 'bg-white/85 border-[#E6F8F1] shadow-lg shadow-[#00C4BC]/8 px-3 sm:px-4 py-2'
+              : 'bg-white/70 border-white/70 shadow-md shadow-black/[0.04] px-4 sm:px-5 py-2.5'
+          }`}
+        >
+          <Link href="/" className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#0F1720] pl-2">
             Vital<span className="text-[#00C4BC]">OS</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#resultados" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
+          <div className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
+            <a href="#resultados" className="text-[#4B5563] hover:text-[#0F1720] transition-colors text-sm font-medium">
               Cómo se usa
             </a>
-            <a href="#pricing" className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium">
+            <a href="#pricing" className="text-[#4B5563] hover:text-[#0F1720] transition-colors text-sm font-medium">
               Precios
             </a>
           </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-[#6B7280] hover:text-[#0F1720] transition-colors text-sm font-medium"
-            >
-              Ingresar
-            </Link>
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <Link
               href="/register"
-              className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+              className="inline-flex items-center gap-1.5 bg-[#00C4BC] hover:bg-[#00aaa3] text-white pl-4 pr-4 sm:pr-5 py-2.5 rounded-full text-sm font-semibold transition-all shadow-md shadow-[#00C4BC]/25 hover:-translate-y-0.5"
             >
-              Probar gratis →
+              <Play className="w-4 h-4 fill-current" />
+              Probar gratis
+            </Link>
+            <Link
+              href="/login"
+              className="group inline-flex items-center gap-1.5 bg-[#0F1720] hover:bg-[#1c2733] text-white pl-4 pr-4 sm:pr-5 py-2.5 rounded-full text-sm font-semibold transition-all"
+            >
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.5} />
+              Ingresar
             </Link>
           </div>
         </div>
@@ -203,9 +451,21 @@ export default function HomePage() {
 
       {/* ── HERO ───────────────────────────────────────────────── */}
       <section className="pt-32 pb-16 bg-white overflow-hidden relative">
-        {/* subtle teal glow */}
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#00C4BC]/8 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-[#00C4BC]/5 rounded-full blur-[80px] pointer-events-none" />
+        {/* mesh gradient claro */}
+        <div className="absolute top-[-10%] right-[-5%] w-[650px] h-[650px] bg-[#00C4BC]/12 rounded-full blur-[130px] pointer-events-none" />
+        <div className="absolute top-[20%] left-[-10%] w-[420px] h-[420px] bg-[#34D399]/10 rounded-full blur-[110px] pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-[300px] h-[300px] bg-[#38BDF8]/8 rounded-full blur-[90px] pointer-events-none" />
+        {/* grid sutil */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.4]"
+          style={{
+            backgroundImage:
+              'linear-gradient(#0F172008 1px, transparent 1px), linear-gradient(90deg, #0F172008 1px, transparent 1px)',
+            backgroundSize: '44px 44px',
+            maskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, black 40%, transparent 75%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, black 40%, transparent 75%)',
+          }}
+        />
 
         <div className="max-w-5xl mx-auto px-6 relative">
           {/* badge */}
@@ -217,8 +477,8 @@ export default function HomePage() {
           </div>
 
           {/* headline — centrado en el problema */}
-          <h1 className="text-4xl md:text-6xl font-extrabold text-[#0F1720] text-center leading-[1.08] tracking-tight mb-6 max-w-3xl mx-auto">
-            ¿Todavía anotás los turnos<br className="hidden md:block" />{' '}
+          <h1 className="text-[2.6rem] leading-[1.05] md:text-7xl font-extrabold text-[#0F1720] text-center tracking-tighter mb-6 max-w-3xl mx-auto">
+            ¿Todavía anotás los turnos{' '}
             en <span className="text-[#00C4BC]">papel o por WhatsApp?</span>
           </h1>
 
@@ -233,31 +493,33 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-7">
             <Link
               href="/register"
-              className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-9 py-4 rounded-xl transition-all text-center text-base md:text-lg shadow-lg shadow-[#00C4BC]/20"
+              className="group inline-flex items-center justify-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-9 py-4 rounded-xl transition-all text-base md:text-lg shadow-lg shadow-[#00C4BC]/25 hover:shadow-xl hover:shadow-[#00C4BC]/30 hover:-translate-y-0.5"
             >
-              Probar gratis 14 días →
+              Probar gratis 14 días
+              <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
             </Link>
             <a
               href="#resultados"
-              className="border-2 border-[#00C4BC]/30 text-[#00C4BC] hover:bg-[#E6F8F1] font-semibold px-9 py-4 rounded-xl transition-all text-center text-base md:text-lg flex items-center justify-center gap-2"
+              className="inline-flex items-center justify-center gap-2 border-2 border-[#00C4BC]/30 text-[#00C4BC] hover:bg-[#E6F8F1] font-semibold px-9 py-4 rounded-xl transition-all text-base md:text-lg"
             >
-              ▶ Ver cómo se usa
+              <Play className="w-4 h-4 fill-current" /> Ver cómo se usa
             </a>
           </div>
 
           {/* trust chips */}
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm md:text-base text-[#6B7280] mb-14">
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Sin instalar nada</span>
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Sin tarjeta</span>
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Listo hoy mismo</span>
-            <span className="flex items-center gap-1.5"><span className="text-[#00C4BC] font-bold">✓</span> Soporte por WhatsApp</span>
+            {['Sin instalar nada', 'Sin tarjeta', 'Listo hoy mismo', 'Soporte por WhatsApp'].map((t, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-[#00C4BC]" strokeWidth={3} /> {t}
+              </span>
+            ))}
           </div>
 
           {/* hero visual — funciona en la computadora y en el celular */}
           <div className="max-w-5xl mx-auto">
-            <div className="relative md:pr-28 lg:pr-40">
+            <div className="relative md:pr-28 lg:pr-40" style={{ animation: 'vos-float 7s ease-in-out infinite' }}>
               {/* Desktop con barra de navegador */}
-              <div className="bg-white border border-[#E6F8F1] rounded-2xl overflow-hidden shadow-2xl shadow-[#00C4BC]/10">
+              <div className="bg-white border border-[#E6F8F1] rounded-2xl overflow-hidden shadow-2xl shadow-[#00C4BC]/15">
                 <div className="flex items-center gap-1.5 px-4 py-2.5 bg-[#F3F4F6] border-b border-[#E6F8F1]">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
                   <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
@@ -275,11 +537,14 @@ export default function HomePage() {
               </div>
 
               {/* Celular flotante — video en vivo: un turno en 15s */}
-              <div className="hidden md:block absolute -bottom-10 -right-2 lg:right-0 w-[210px] lg:w-[250px]">
+              <div
+                className="hidden md:block absolute -bottom-10 -right-2 lg:right-0 w-[210px] lg:w-[250px]"
+                style={{ animation: 'vos-float-sm 5.5s ease-in-out infinite' }}
+              >
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-[#00C4BC] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-lg whitespace-nowrap">
                   Un turno en 15 seg ⚡
                 </span>
-                <div className="rounded-[2.2rem] border-[8px] border-[#0F1720] bg-[#0F1720] shadow-2xl overflow-hidden">
+                <div className="rounded-[2.2rem] border-[8px] border-[#0F1720] bg-[#0F1720] shadow-2xl shadow-[#00C4BC]/30 overflow-hidden">
                   <video
                     src="/demo-turno.mp4"
                     autoPlay
@@ -321,262 +586,56 @@ export default function HomePage() {
       {/* ── BLOQUE DE CONFIANZA ────────────────────────────────── */}
       <section className="bg-[#E6F8F1] border-y border-[#00C4BC]/20 py-16">
         <div className="max-w-5xl mx-auto px-6">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-[#0F1720] text-center mb-3">
-            Tranquilo. Es más fácil de lo que pensás.
-          </h2>
-          <p className="text-center text-[#6B7280] mb-12 max-w-xl mx-auto">
-            No tenés que volverte experto en computadoras para ordenar tu consultorio.
-          </p>
+          <Reveal>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-[#0F1720] text-center mb-3">
+              Tranquilo. Es más fácil de lo que pensás.
+            </h2>
+            <p className="text-center text-[#6B7280] mb-12 max-w-xl mx-auto">
+              No tenés que volverte experto en computadoras para ordenar tu consultorio.
+            </p>
+          </Reveal>
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6">
             {[
-              { icon: '🖥️', t: 'No instalás nada', d: 'Funciona en el navegador y en el celular' },
-              { icon: '💬', t: 'No necesitás saber de computación', d: 'Si usás WhatsApp, podés con esto' },
-              { icon: '⏱️', t: 'Lo empezás a usar hoy', d: 'Listo en 5 minutos, sin capacitación' },
-              { icon: '🤝', t: 'Soporte por WhatsApp', d: 'Te responde una persona, el mismo día' },
-              { icon: '📱', t: 'Entrás desde donde quieras', d: 'Celular, tablet o computadora' },
+              { Icon: Monitor, t: 'No instalás nada', d: 'Funciona en el navegador y en el celular' },
+              { Icon: MessageCircle, t: 'No necesitás saber de computación', d: 'Si usás WhatsApp, podés con esto' },
+              { Icon: Clock, t: 'Lo empezás a usar hoy', d: 'Listo en 5 minutos, sin capacitación' },
+              { Icon: Headphones, t: 'Soporte por WhatsApp', d: 'Te responde una persona, el mismo día' },
+              { Icon: Smartphone, t: 'Entrás desde donde quieras', d: 'Celular, tablet o computadora' },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-2xl p-6 text-center border border-[#00C4BC]/10">
-                <div className="text-3xl mb-3">{item.icon}</div>
-                <p className="font-bold text-[#0F1720] text-sm mb-1.5 leading-snug">{item.t}</p>
-                <p className="text-xs text-[#6B7280] leading-relaxed">{item.d}</p>
-              </div>
+              <Reveal key={i} delay={i * 70}>
+                <div className="bg-white rounded-2xl p-6 text-center border border-[#00C4BC]/10 h-full hover:border-[#00C4BC]/30 hover:shadow-md hover:shadow-[#00C4BC]/10 hover:-translate-y-1 transition-all">
+                  <div className="w-12 h-12 rounded-xl bg-[#E6F8F1] flex items-center justify-center mx-auto mb-3">
+                    <item.Icon className="w-6 h-6 text-[#00C4BC]" strokeWidth={2} />
+                  </div>
+                  <p className="font-bold text-[#0F1720] text-sm mb-1.5 leading-snug">{item.t}</p>
+                  <p className="text-xs text-[#6B7280] leading-relaxed">{item.d}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── RESULTADOS (no features) ───────────────────────────── */}
-      <section id="resultados">
-
-        {/* Resultado 1: Agenda → dejá de perder turnos */}
-        <div className="py-20 md:py-28 bg-white">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div>
+      {/* ── RESULTADOS (bento) ─────────────────────────────────── */}
+      <section id="resultados" className="py-20 md:py-28 bg-white relative overflow-hidden">
+        <div className="absolute top-1/4 right-0 w-[400px] h-[400px] bg-[#00C4BC]/5 rounded-full blur-[120px] pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-6 relative">
+          <Reveal>
+            <div className="text-center mb-14 max-w-2xl mx-auto">
               <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Agenda
+                Todo en un lugar
               </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Dejá de perder turnos
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight tracking-tight">
+                Lo que antes te llevaba horas, ahora en segundos
               </h2>
-              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
-                Tus pacientes reciben el recordatorio solos. Vos llegás al consultorio con el día ya armado y nadie se olvida del turno.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Recordatorios automáticos por WhatsApp',
-                  'Se agendan solos desde el celular',
-                  'Nunca más dos pacientes a la misma hora',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
-                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+              <p className="text-[#6B7280] mt-4 text-lg">Igual de fácil en la computadora y en el celular. Sin manuales.</p>
             </div>
-            {/* Celular (video) protagonista al frente + desktop (imagen) detrás como contexto */}
-            <div className="flex flex-col items-center">
-              <div className="relative flex justify-center w-full pt-6">
-                {/* Desktop más chico, asomando detrás a la izquierda */}
-                <div className="hidden sm:block absolute top-2 -left-2 lg:-left-6 w-[62%] z-0">
-                  <div className="bg-white border border-[#E6F8F1] rounded-lg overflow-hidden shadow-xl shadow-[#00C4BC]/5">
-                    <div className="flex items-center gap-1 px-2.5 py-1.5 bg-[#F3F4F6] border-b border-[#E6F8F1]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FF5F57]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FEBC2E]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#28C840]" />
-                      <span className="ml-1.5 text-[9px] text-[#9CA3AF] font-medium">vitalos.com.ar</span>
-                    </div>
-                    <Image
-                      src="/agenda-desktop.png"
-                      alt="Agendar un turno en la computadora"
-                      width={2000}
-                      height={1121}
-                      className="w-full h-auto"
-                    />
-                  </div>
-                </div>
+          </Reveal>
 
-                {/* Celular grande con el video — el foco */}
-                <PhoneVideo
-                  src="/demo-turno.mp4"
-                  badge="Un turno en 15 segundos ⚡"
-                  className="relative z-10 w-[280px] sm:w-[300px] sm:ml-32"
-                />
-              </div>
-              <p className="text-sm text-[#6B7280] mt-12 text-center">Igual de fácil en la computadora y en el celular. Sin manuales.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Resultado 2: Pacientes → encontrá cualquier ficha */}
-        <div className="py-20 md:py-28 bg-[#F3F4F6]">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div className="flex justify-center order-2 md:order-1 pt-6">
-              <PhoneVideo src="/demo-ficha.mp4" badge="Toda la ficha, a un toque" className="w-[260px] sm:w-[285px]" />
-            </div>
-            <div className="order-1 md:order-2">
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Pacientes
-              </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Encontrá cualquier ficha en segundos
-              </h2>
-              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
-                Buscás por nombre o teléfono y ahí está todo: visitas, tratamientos y pagos. Sin revolver carpetas.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Toda la info del paciente en un solo lugar',
-                  'Historial de visitas y pagos siempre a mano',
-                  'Lo abrís desde el celular en cualquier momento',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
-                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Resultado 3: Finanzas → sabé cuánto ganaste */}
-        <div className="py-20 md:py-28 bg-[#E6F8F1] relative overflow-hidden">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center relative">
-            <div>
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-4">
-                Plata
-              </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Sabé cuánto ganaste este mes
-              </h2>
-              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
-                Sin sacar la calculadora ni armar planillas. Lo que entró, lo que falta cobrar y los gastos, siempre al día.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Lo que ganaste, de un vistazo',
-                  'Quién te debe y cuánto, sin perseguir a nadie',
-                  'El reporte del mes se arma solo',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
-                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="flex justify-center pt-6">
-              <PhoneVideo src="/demo-finanzas.mp4" badge="Tus números, al día" className="w-[260px] sm:w-[285px]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Resultado 4: Cuenta corriente → lo que le deben y los pagos del paciente */}
-        <div className="py-20 md:py-28 bg-[#F3F4F6]">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div className="flex justify-center order-2 md:order-1 pt-6">
-              <PhoneImage src="/cuenta-corriente.png" alt="Cuenta corriente de un paciente" badge="Cuenta corriente del paciente" className="w-[260px] sm:w-[285px]" />
-            </div>
-            <div className="order-1 md:order-2">
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Cuenta corriente
-              </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Sabé quién te debe y cuánto
-              </h2>
-              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
-                Cada paciente tiene su cuenta corriente: lo que pagó, lo que debe y todos los cobros registrados. Nunca más perdés de vista una deuda.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'El saldo pendiente de cada paciente, siempre claro',
-                  'Registrás cada pago en segundos',
-                  'Generás el estado de cuenta para mandárselo',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
-                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Resultado 5: Presupuestos → pasalos en 10s y mandalos por WhatsApp */}
-        <div className="py-20 md:py-28 bg-white">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div>
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Presupuestos
-              </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Pasá presupuestos en 10 segundos
-              </h2>
-              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
-                Armás el presupuesto y se lo mandás por WhatsApp al toque. El paciente lo recibe al instante y vos no perdés tiempo.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Lo enviás por WhatsApp en un clic',
-                  'El paciente lo recibe al instante',
-                  'Queda guardado en su ficha',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
-                    <span className="w-5 h-5 bg-[#E6F8F1] rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="flex justify-center pt-6">
-              <PhoneVideo src="/demo-presupuesto.mp4" badge="Presupuesto en 10 seg → WhatsApp" className="w-[260px] sm:w-[285px]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Resultado 6: Historia clínica → todo en un lugar */}
-        <div className="py-20 md:py-28 bg-[#F3F4F6]">
-          <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
-            <div className="flex justify-center order-2 md:order-1 pt-6">
-              <PhoneVideo src="/demo-consentimiento.mp4" badge="Consentimiento firmado en 5 seg" className="w-[260px] sm:w-[285px]" />
-            </div>
-            <div className="order-1 md:order-2">
-              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-                Consentimientos
-              </span>
-              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight mb-5">
-                Quedás cubierto en cada tratamiento
-              </h2>
-              <p className="text-[#4B5563] text-lg leading-relaxed mb-7">
-                El paciente firma el consentimiento en la pantalla en 5 segundos y queda guardado en su ficha. Sin formularios impresos, sin papeles que se pierden, con respaldo legal de todo lo que hacés.
-              </p>
-              <ul className="space-y-3.5">
-                {[
-                  'Firma digital en 5 segundos, desde el celular',
-                  'Respaldo legal de cada tratamiento',
-                  'Queda archivado en la ficha, junto al odontograma y las imágenes',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-base text-[#0F1720]">
-                    <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-[#00C4BC] text-xs font-bold">✓</span>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-6 gap-5 lg:gap-6">
+            {features.map((f, i) => (
+              <FeatureCard key={i} feature={f} />
+            ))}
           </div>
         </div>
       </section>
@@ -584,9 +643,11 @@ export default function HomePage() {
       {/* ── DOLOR ──────────────────────────────────────────────── */}
       <section className="py-20 bg-white border-b border-[#F3F4F6]">
         <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720] mb-8">
-            ¿Te suena familiar?
-          </h2>
+          <Reveal>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720] mb-8">
+              ¿Te suena familiar?
+            </h2>
+          </Reveal>
           <div className="grid md:grid-cols-2 gap-4 text-left mb-8">
             {[
               'Perdés turnos porque los anotás en papel o en WhatsApp',
@@ -596,10 +657,14 @@ export default function HomePage() {
               'Salís del consultorio y seguís pensando en lo administrativo',
               'Los turnos cancelados te agarran desprevenido',
             ].map((item, i) => (
-              <div key={i} className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-xl p-4">
-                <span className="text-red-400 font-bold mt-0.5 flex-shrink-0">✗</span>
-                <span className="text-sm text-[#0F1720]">{item}</span>
-              </div>
+              <Reveal key={i} delay={i * 50}>
+                <div className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-xl p-4 h-full">
+                  <span className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <X className="w-3 h-3 text-red-500" strokeWidth={3} />
+                  </span>
+                  <span className="text-sm text-[#0F1720]">{item}</span>
+                </div>
+              </Reveal>
             ))}
           </div>
           <p className="text-lg font-bold text-[#0F1720]">
@@ -613,68 +678,82 @@ export default function HomePage() {
       {/* ── ¿VENÍS DEL PAPEL? (Antes / Después) ────────────────── */}
       <section className="py-20 md:py-24 bg-[#F3F4F6]">
         <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-4 py-1.5 rounded-full mb-4">
-              ¿Venís del papel?
-            </span>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
-              Lo mismo que ya hacés, pero ordenado
-            </h2>
-          </div>
+          <Reveal>
+            <div className="text-center mb-14">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-4 py-1.5 rounded-full mb-4">
+                ¿Venís del papel?
+              </span>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
+                Lo mismo que ya hacés, pero ordenado
+              </h2>
+            </div>
+          </Reveal>
 
           <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {/* ANTES */}
-            <div className="bg-[#EDEDED] border border-[#D1D5DB] rounded-2xl p-7 opacity-90">
-              <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-5">Hoy</p>
-              <ul className="space-y-4">
-                {[
-                  ['📒', 'Agenda de papel'],
-                  ['🗂️', 'Carpetas y fichas'],
-                  ['💬', 'Recordás los turnos a mano'],
-                  ['🧮', 'Excel y sumas a mano'],
-                  ['📞', '“¿A qué hora era?”'],
-                ].map(([ic, t], i) => (
-                  <li key={i} className="flex items-center gap-3 text-[#4B5563] text-sm">
-                    <span className="text-lg grayscale opacity-70">{ic}</span>
-                    <span className="line-through decoration-[#9CA3AF]/60">{t}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <Reveal>
+              <div className="bg-[#EDEDED] border border-[#D1D5DB] rounded-2xl p-7 opacity-90 h-full">
+                <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-5">Hoy</p>
+                <ul className="space-y-4">
+                  {[
+                    [NotebookPen, 'Agenda de papel'],
+                    [FolderOpen, 'Carpetas y fichas'],
+                    [MessageCircle, 'Recordás los turnos a mano'],
+                    [Calculator, 'Excel y sumas a mano'],
+                    [Phone, '“¿A qué hora era?”'],
+                  ].map(([Ic, t], i) => {
+                    const IcC = Ic as typeof CalendarCheck
+                    return (
+                      <li key={i} className="flex items-center gap-3 text-[#4B5563] text-sm">
+                        <IcC className="w-4 h-4 text-[#9CA3AF] flex-shrink-0" strokeWidth={2} />
+                        <span className="line-through decoration-[#9CA3AF]/60">{t as string}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </Reveal>
 
             {/* DESPUÉS */}
-            <div className="bg-white border-2 border-[#00C4BC] rounded-2xl p-7 shadow-lg shadow-[#00C4BC]/10">
-              <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-5">Con VitalOS</p>
-              <ul className="space-y-4">
-                {[
-                  ['📅', 'Agenda en el celular'],
-                  ['🦷', 'Historia clínica online'],
-                  ['🔔', 'Recordatorios automáticos'],
-                  ['📊', 'Reportes que se hacen solos'],
-                  ['✅', 'Todo confirmado por WhatsApp'],
-                ].map(([ic, t], i) => (
-                  <li key={i} className="flex items-center gap-3 text-[#0F1720] text-sm font-medium">
-                    <span className="text-lg">{ic}</span>
-                    <span>{t}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <Reveal delay={120}>
+              <div className="bg-white border-2 border-[#00C4BC] rounded-2xl p-7 shadow-lg shadow-[#00C4BC]/10 h-full">
+                <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-5">Con VitalOS</p>
+                <ul className="space-y-4">
+                  {[
+                    [CalendarCheck, 'Agenda en el celular'],
+                    [HeartPulse, 'Historia clínica online'],
+                    [Bell, 'Recordatorios automáticos'],
+                    [TrendingDown, 'Reportes que se hacen solos'],
+                    [Check, 'Todo confirmado por WhatsApp'],
+                  ].map(([Ic, t], i) => {
+                    const IcC = Ic as typeof CalendarCheck
+                    return (
+                      <li key={i} className="flex items-center gap-3 text-[#0F1720] text-sm font-medium">
+                        <span className="w-6 h-6 rounded-lg bg-[#E6F8F1] flex items-center justify-center flex-shrink-0">
+                          <IcC className="w-3.5 h-3.5 text-[#00C4BC]" strokeWidth={2.5} />
+                        </span>
+                        <span>{t as string}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </Reveal>
           </div>
 
           <div className="text-center mt-12">
             <p className="text-lg font-bold text-[#0F1720] mb-5">No tirás nada de lo que ya tenés. Lo pasamos junto.</p>
             <a
               href="#resultados"
-              className="inline-block border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold px-8 py-3.5 rounded-xl transition-all"
+              className="inline-flex items-center gap-2 border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold px-8 py-3.5 rounded-xl transition-all"
             >
-              Quiero ver cómo se ve →
+              Quiero ver cómo se ve <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
             </a>
           </div>
         </div>
       </section>
 
-      {/* ── MIGRACIÓN ──────────────────────────────────────────── */}
+      {/* ── MIGRACIÓN (acento oscuro) ──────────────────────────── */}
       <section className="py-20 md:py-24 bg-[#0F1720] text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#00C4BC]/15 rounded-full blur-[120px] pointer-events-none" />
         <div className="max-w-4xl mx-auto px-6 relative text-center">
@@ -695,11 +774,13 @@ export default function HomePage() {
               { n: '2', t: 'Te ayudamos a pasar tus pacientes', d: 'Incluso lo hacemos por vos.' },
               { n: '3', t: 'En pocos días estás funcionando', d: 'Sin estrés y sin perder información.' },
             ].map((s, i) => (
-              <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-7">
-                <div className="w-10 h-10 rounded-full bg-[#00C4BC] text-white font-bold flex items-center justify-center mb-4">{s.n}</div>
-                <p className="font-bold mb-2">{s.t}</p>
-                <p className="text-white/60 text-sm leading-relaxed">{s.d}</p>
-              </div>
+              <Reveal key={i} delay={i * 100}>
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-7 h-full">
+                  <div className="w-10 h-10 rounded-full bg-[#00C4BC] text-white font-bold flex items-center justify-center mb-4">{s.n}</div>
+                  <p className="font-bold mb-2">{s.t}</p>
+                  <p className="text-white/60 text-sm leading-relaxed">{s.d}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
 
@@ -708,9 +789,9 @@ export default function HomePage() {
             href={waLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold px-8 py-4 rounded-xl transition-all shadow-lg"
+            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold px-8 py-4 rounded-xl transition-all shadow-lg hover:-translate-y-0.5"
           >
-            💬 Quiero que me ayuden a migrar
+            <MessageCircle className="w-5 h-5" strokeWidth={2.5} /> Quiero que me ayuden a migrar
           </a>
         </div>
       </section>
@@ -718,15 +799,17 @@ export default function HomePage() {
       {/* ── CÓMO FUNCIONA ──────────────────────────────────────── */}
       <section id="como-funciona" className="bg-[#E6F8F1] py-24">
         <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-4 py-1.5 rounded-full mb-4">
-              Proceso simple
-            </span>
-            <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight">
-              Tres pasos para empezar hoy
-            </h2>
-            <p className="text-[#6B7280] mt-3">Sin instalaciones. Sin capacitación. Sin vueltas.</p>
-          </div>
+          <Reveal>
+            <div className="text-center mb-16">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-4 py-1.5 rounded-full mb-4">
+                Proceso simple
+              </span>
+              <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] leading-tight">
+                Tres pasos para empezar hoy
+              </h2>
+              <p className="text-[#6B7280] mt-3">Sin instalaciones. Sin capacitación. Sin vueltas.</p>
+            </div>
+          </Reveal>
 
           <div className="grid md:grid-cols-3 gap-6">
             {[
@@ -734,18 +817,20 @@ export default function HomePage() {
               { n: '02', title: 'Cargá tus datos (o te ayudamos)', desc: 'Tus horarios y pacientes. Y si no querés hacerlo solo, lo hacemos juntos por WhatsApp.' },
               { n: '03', title: 'Manejá todo desde un lugar', desc: 'Turnos, historias clínicas, cobros y reportes. Desde el consultorio o desde tu celular.' },
             ].map((step, i) => (
-              <div key={i} className="bg-white border border-[#00C4BC]/15 rounded-2xl p-8 hover:border-[#00C4BC]/40 hover:shadow-lg hover:shadow-[#00C4BC]/10 transition-all">
-                <div className="text-7xl font-extrabold text-[#00C4BC]/20 leading-none mb-4 select-none">{step.n}</div>
-                <h3 className="text-xl font-bold text-[#0F1720] mb-3">{step.title}</h3>
-                <p className="text-[#6B7280] text-sm leading-relaxed">{step.desc}</p>
-              </div>
+              <Reveal key={i} delay={i * 100}>
+                <div className="bg-white border border-[#00C4BC]/15 rounded-2xl p-8 hover:border-[#00C4BC]/40 hover:shadow-lg hover:shadow-[#00C4BC]/10 hover:-translate-y-1 transition-all h-full">
+                  <div className="text-7xl font-extrabold text-[#00C4BC]/20 leading-none mb-4 select-none">{step.n}</div>
+                  <h3 className="text-xl font-bold text-[#0F1720] mb-3">{step.title}</h3>
+                  <p className="text-[#6B7280] text-sm leading-relaxed">{step.desc}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
 
           <div className="text-center mt-12">
             <Link
               href="/register"
-              className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-10 py-4 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20"
+              className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-10 py-4 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 hover:-translate-y-0.5"
             >
               Empezar gratis ahora
             </Link>
@@ -757,15 +842,17 @@ export default function HomePage() {
       {/* ── TESTIMONIOS ────────────────────────────────────────── */}
       <section className="py-24 bg-white">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-              Testimonios
-            </span>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
-              Profesionales de la salud que dejaron el papel
-            </h2>
-            <p className="text-[#6B7280] mt-3">Y no quieren volver.</p>
-          </div>
+          <Reveal>
+            <div className="text-center mb-14">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Testimonios
+              </span>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">
+                Profesionales de la salud que dejaron el papel
+              </h2>
+              <p className="text-[#6B7280] mt-3">Y no quieren volver.</p>
+            </div>
+          </Reveal>
 
           <div className="grid md:grid-cols-3 gap-8">
             {[
@@ -788,30 +875,32 @@ export default function HomePage() {
                 initials: 'SF',
               },
             ].map((t, i) => (
-              <div key={i} className="border border-[#E6F8F1] rounded-2xl p-8 flex flex-col hover:border-[#00C4BC]/30 hover:shadow-md hover:shadow-[#00C4BC]/8 transition-all">
-                <div className="flex gap-1 mb-5">
-                  {[...Array(5)].map((_, j) => (
-                    <span key={j} className="text-amber-400 text-lg">★</span>
-                  ))}
-                </div>
-                <p className="text-[#0F1720] text-base leading-relaxed flex-1 mb-6">{t.quote}</p>
-                <div className="border-t border-[#F3F4F6] pt-5 flex items-center gap-3">
-                  {/* ⚠️ Reemplazar por foto real <Image .../> cuando la tengas */}
-                  <div className="w-11 h-11 rounded-full bg-[#E6F8F1] text-[#00C4BC] font-bold flex items-center justify-center text-sm flex-shrink-0">
-                    {t.initials}
+              <Reveal key={i} delay={i * 100}>
+                <div className="border border-[#E6F8F1] rounded-2xl p-8 flex flex-col h-full hover:border-[#00C4BC]/30 hover:shadow-md hover:shadow-[#00C4BC]/8 hover:-translate-y-1 transition-all">
+                  <div className="flex gap-1 mb-5">
+                    {[...Array(5)].map((_, j) => (
+                      <Star key={j} className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    ))}
                   </div>
-                  <div>
-                    <p className="font-bold text-sm text-[#0F1720]">{t.name}</p>
-                    <p className="text-xs text-[#6B7280] mt-0.5">{t.role}</p>
+                  <p className="text-[#0F1720] text-base leading-relaxed flex-1 mb-6">{t.quote}</p>
+                  <div className="border-t border-[#F3F4F6] pt-5 flex items-center gap-3">
+                    {/* ⚠️ Reemplazar por foto real <Image .../> cuando la tengas */}
+                    <div className="w-11 h-11 rounded-full bg-[#E6F8F1] text-[#00C4BC] font-bold flex items-center justify-center text-sm flex-shrink-0">
+                      {t.initials}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-[#0F1720]">{t.name}</p>
+                      <p className="text-xs text-[#6B7280] mt-0.5">{t.role}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── ANCLA DE VALOR ─────────────────────────────────────── */}
+      {/* ── ANCLA DE VALOR (acento oscuro) ─────────────────────── */}
       <section className="bg-[#0F1720] text-white py-20 md:py-24 relative overflow-hidden">
         <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[420px] bg-[#00C4BC]/15 rounded-full blur-[130px] pointer-events-none" />
         <div className="max-w-4xl mx-auto px-6 text-center relative">
@@ -819,7 +908,7 @@ export default function HomePage() {
             Hagamos números
           </span>
           <h2 className="text-3xl md:text-5xl font-extrabold leading-[1.15] mb-6">
-            Con recuperar <span className="text-[#00C4BC]">2 pacientes al mes</span> gracias a los recordatorios,<br className="hidden md:block" /> VitalOS ya se pagó solo.
+            Con recuperar <span className="text-[#00C4BC]">2 pacientes al mes</span> gracias a los recordatorios, VitalOS ya se pagó solo.
           </h2>
           <p className="text-white/70 text-lg md:text-xl max-w-2xl mx-auto mb-12">
             Los recordatorios automáticos por WhatsApp reducen las ausencias y los turnos que se caen. Cada paciente que no se te pierde paga varias veces lo que cuesta el sistema.
@@ -827,23 +916,28 @@ export default function HomePage() {
 
           <div className="grid sm:grid-cols-3 gap-4 max-w-3xl mx-auto mb-12">
             {[
-              { ic: '🔔', t: 'Mandás recordatorios', d: 'Automáticos, sin que hagas nada' },
-              { ic: '📉', t: 'Bajan las ausencias', d: 'Menos turnos que se caen' },
-              { ic: '💰', t: 'Se paga solo', d: 'Recuperás más de lo que cuesta' },
+              { Ic: Bell, t: 'Mandás recordatorios', d: 'Automáticos, sin que hagas nada' },
+              { Ic: TrendingDown, t: 'Bajan las ausencias', d: 'Menos turnos que se caen' },
+              { Ic: Wallet, t: 'Se paga solo', d: 'Recuperás más de lo que cuesta' },
             ].map((s, i) => (
-              <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                <div className="text-3xl mb-3">{s.ic}</div>
-                <p className="font-bold mb-1">{s.t}</p>
-                <p className="text-white/60 text-sm leading-relaxed">{s.d}</p>
-              </div>
+              <Reveal key={i} delay={i * 100}>
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 h-full">
+                  <div className="w-12 h-12 rounded-xl bg-[#00C4BC]/15 flex items-center justify-center mx-auto mb-3">
+                    <s.Ic className="w-6 h-6 text-[#00C4BC]" strokeWidth={2} />
+                  </div>
+                  <p className="font-bold mb-1">{s.t}</p>
+                  <p className="text-white/60 text-sm leading-relaxed">{s.d}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
 
           <Link
             href="/register"
-            className="inline-block bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-10 py-4 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/30"
+            className="group inline-flex items-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-10 py-4 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/30 hover:-translate-y-0.5"
           >
-            Empezar 14 días gratis →
+            Empezar 14 días gratis
+            <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
           </Link>
         </div>
       </section>
@@ -852,180 +946,188 @@ export default function HomePage() {
       <section id="pricing" className="bg-[#F3F4F6] py-24">
         <div className="max-w-6xl mx-auto px-6">
 
-          <div className="text-center mb-14">
-            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-5">
-              Precios
-            </span>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720] mb-4">El plan que se adapta a tu consultorio</h2>
-            <div className="inline-block bg-[#00C4BC]/10 border border-[#00C4BC]/25 rounded-2xl px-7 py-3 mb-4">
-              <p className="text-[#0F1720] font-bold text-lg">
-                Probás 14 días completos antes de poner un peso. Si no te sirve, no pagás nada.
-              </p>
-            </div>
-
-            {/* Toggle mensual / anual */}
-            <div className="flex items-center justify-center gap-3 mt-8">
-              <span className={`text-sm font-semibold transition-colors ${!annualBilling ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
-                Mensual
+          <Reveal>
+            <div className="text-center mb-14">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-white border border-[#00C4BC]/20 px-3 py-1 rounded-full mb-5">
+                Precios
               </span>
-              <div
-                role="switch"
-                aria-checked={annualBilling}
-                tabIndex={0}
-                onClick={() => setAnnualBilling(b => !b)}
-                onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setAnnualBilling(b => !b)}
-                className={`relative w-12 h-6 rounded-full cursor-pointer flex-shrink-0 transition-colors duration-200 ${annualBilling ? 'bg-[#00C4BC]' : 'bg-[#D1D5DB]'}`}
-              >
-                <span
-                  className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transition-transform duration-200 ${annualBilling ? 'translate-x-6' : 'translate-x-0'}`}
-                />
+              <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720] mb-4">El plan que se adapta a tu consultorio</h2>
+              <div className="inline-block bg-[#00C4BC]/10 border border-[#00C4BC]/25 rounded-2xl px-7 py-3 mb-4">
+                <p className="text-[#0F1720] font-bold text-lg">
+                  Probás 14 días completos antes de poner un peso. Si no te sirve, no pagás nada.
+                </p>
               </div>
-              <span className={`text-sm font-semibold transition-colors ${annualBilling ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
-                Anual
-              </span>
-              <span className="bg-[#00C4BC] text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                20% OFF
-              </span>
+
+              {/* Toggle mensual / anual */}
+              <div className="flex items-center justify-center gap-3 mt-8">
+                <span className={`text-sm font-semibold transition-colors ${!annualBilling ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
+                  Mensual
+                </span>
+                <div
+                  role="switch"
+                  aria-checked={annualBilling}
+                  tabIndex={0}
+                  onClick={() => setAnnualBilling(b => !b)}
+                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setAnnualBilling(b => !b)}
+                  className={`relative w-12 h-6 rounded-full cursor-pointer flex-shrink-0 transition-colors duration-200 ${annualBilling ? 'bg-[#00C4BC]' : 'bg-[#D1D5DB]'}`}
+                >
+                  <span
+                    className={`absolute top-[3px] left-[3px] w-[18px] h-[18px] bg-white rounded-full shadow-sm transition-transform duration-200 ${annualBilling ? 'translate-x-6' : 'translate-x-0'}`}
+                  />
+                </div>
+                <span className={`text-sm font-semibold transition-colors ${annualBilling ? 'text-[#0F1720]' : 'text-[#6B7280]'}`}>
+                  Anual
+                </span>
+                <span className="bg-[#00C4BC] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-md shadow-[#00C4BC]/30">
+                  20% OFF
+                </span>
+              </div>
             </div>
-          </div>
+          </Reveal>
 
           <div className="grid md:grid-cols-3 gap-6 items-start">
 
             {/* Starter */}
-            <div className="bg-white border border-[#E5E7EB] rounded-3xl p-8 flex flex-col">
-              <div className="mb-6">
-                <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">Starter</p>
-                <p className="text-sm text-[#6B7280]">Ordená tu consultorio desde el día 1</p>
-              </div>
-              <div className="mb-1">
-                <span className="text-5xl font-extrabold text-[#0F1720]">${price('starter')}</span>
-              </div>
-              <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
-                ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
-              </p>
-              {annualBilling && (
-                <p className="text-[#6B7280] text-xs mb-7">${annualTotal('starter')} ARS / año</p>
-              )}
-
-              <div className="space-y-3 mb-5 flex-1">
-                {[
-                  'Agenda y turnos online',
-                  'Historia clínica con odontograma',
-                  'Hasta 100 pacientes activos',
-                  '1 profesional',
-                  'Soporte en español',
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="text-[#00C4BC] font-bold flex-shrink-0 text-sm mt-px">✓</span>
-                    <span className="text-[#0F1720] text-sm">{item}</span>
-                  </div>
-                ))}
-                <div className="flex items-start gap-3 opacity-40 pt-1">
-                  <span className="font-bold flex-shrink-0 text-sm mt-px">✗</span>
-                  <span className="text-[#0F1720] text-sm line-through">Recordatorios automáticos</span>
+            <Reveal>
+              <div className="bg-white border border-[#E5E7EB] rounded-3xl p-8 flex flex-col h-full">
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">Starter</p>
+                  <p className="text-sm text-[#6B7280]">Ordená tu consultorio desde el día 1</p>
                 </div>
+                <div className="mb-1">
+                  <span className="text-5xl font-extrabold text-[#0F1720]">${price('starter')}</span>
+                </div>
+                <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
+                  ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
+                </p>
+                {annualBilling && (
+                  <p className="text-[#6B7280] text-xs mb-7">${annualTotal('starter')} ARS / año</p>
+                )}
+
+                <div className="space-y-3 mb-5 flex-1">
+                  {[
+                    'Agenda y turnos online',
+                    'Historia clínica con odontograma',
+                    'Hasta 100 pacientes activos',
+                    '1 profesional',
+                    'Soporte en español',
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <Check className="w-4 h-4 text-[#00C4BC] flex-shrink-0 mt-0.5" strokeWidth={3} />
+                      <span className="text-[#0F1720] text-sm">{item}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-start gap-3 opacity-40 pt-1">
+                    <X className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={3} />
+                    <span className="text-[#0F1720] text-sm line-through">Recordatorios automáticos</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#6B7280] italic mb-6">Ideal para dejar el Excel y empezar a ordenar</p>
+
+                <Link
+                  href="/register"
+                  className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
+                >
+                  Probar gratis 14 días
+                </Link>
               </div>
-
-              <p className="text-xs text-[#6B7280] italic mb-6">Ideal para dejar el Excel y empezar a ordenar</p>
-
-              <Link
-                href="/register"
-                className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
-              >
-                Probar gratis 14 días
-              </Link>
-            </div>
+            </Reveal>
 
             {/* Growth — destacado */}
-            <div className="bg-white border-2 border-[#00C4BC] rounded-3xl p-8 shadow-xl shadow-[#00C4BC]/10 relative flex flex-col">
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                <span className="bg-[#00C4BC] text-white text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wider">
-                  Más elegido
-                </span>
-              </div>
-              <div className="mb-6">
-                <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-1">Growth</p>
-                <p className="text-sm text-[#6B7280]">Dejá de perder pacientes y llená tu agenda</p>
-              </div>
-              <div className="mb-1">
-                <span className="text-5xl font-extrabold text-[#0F1720]">${price('growth')}</span>
-              </div>
-              <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
-                ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
-              </p>
-              {annualBilling && (
-                <p className="text-[#6B7280] text-xs mb-7">${annualTotal('growth')} ARS / año</p>
-              )}
+            <Reveal delay={100}>
+              <div className="bg-white border-2 border-[#00C4BC] rounded-3xl p-8 shadow-xl shadow-[#00C4BC]/10 relative flex flex-col h-full md:-translate-y-2">
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                  <span className="bg-[#00C4BC] text-white text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wider shadow-md shadow-[#00C4BC]/30">
+                    Más elegido
+                  </span>
+                </div>
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-[#00C4BC] uppercase tracking-widest mb-1">Growth</p>
+                  <p className="text-sm text-[#6B7280]">Dejá de perder pacientes y llená tu agenda</p>
+                </div>
+                <div className="mb-1">
+                  <span className="text-5xl font-extrabold text-[#0F1720]">${price('growth')}</span>
+                </div>
+                <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
+                  ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
+                </p>
+                {annualBilling && (
+                  <p className="text-[#6B7280] text-xs mb-7">${annualTotal('growth')} ARS / año</p>
+                )}
 
-              <div className="space-y-3 mb-5 flex-1">
-                {[
-                  'Todo lo del plan Starter',
-                  'Pacientes ilimitados',
-                  'Hasta 3 profesionales',
-                  'Recordatorios automáticos por WhatsApp (500/mes)',
-                  'Confirmación automática de turnos',
-                  'Soporte prioritario',
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="text-[#00C4BC] font-bold flex-shrink-0 text-sm mt-px">✓</span>
-                    <span className="text-[#0F1720] text-sm">{item}</span>
-                  </div>
-                ))}
-              </div>
+                <div className="space-y-3 mb-5 flex-1">
+                  {[
+                    'Todo lo del plan Starter',
+                    'Pacientes ilimitados',
+                    'Hasta 3 profesionales',
+                    'Recordatorios automáticos por WhatsApp (500/mes)',
+                    'Confirmación automática de turnos',
+                    'Soporte prioritario',
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <Check className="w-4 h-4 text-[#00C4BC] flex-shrink-0 mt-0.5" strokeWidth={3} />
+                      <span className="text-[#0F1720] text-sm">{item}</span>
+                    </div>
+                  ))}
+                </div>
 
-              <div className="bg-[#E6F8F1] rounded-xl px-4 py-3 mb-6">
-                <p className="text-xs text-[#00C4BC] font-semibold">Reducí ausencias y recuperá pacientes automáticamente. Este es el plan que se paga solo.</p>
-              </div>
+                <div className="bg-[#E6F8F1] rounded-xl px-4 py-3 mb-6">
+                  <p className="text-xs text-[#00C4BC] font-semibold">Reducí ausencias y recuperá pacientes automáticamente. Este es el plan que se paga solo.</p>
+                </div>
 
-              <Link
-                href="/register"
-                className="block w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-3.5 rounded-xl transition-all text-center text-sm shadow-lg shadow-[#00C4BC]/20"
-              >
-                Empezar a automatizar
-              </Link>
-            </div>
+                <Link
+                  href="/register"
+                  className="block w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold py-3.5 rounded-xl transition-all text-center text-sm shadow-lg shadow-[#00C4BC]/20"
+                >
+                  Empezar a automatizar
+                </Link>
+              </div>
+            </Reveal>
 
             {/* Scale */}
-            <div className="bg-white border border-[#E5E7EB] rounded-3xl p-8 flex flex-col">
-              <div className="mb-6">
-                <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">Scale</p>
-                <p className="text-sm text-[#6B7280]">Gestioná tu clínica como una empresa</p>
-              </div>
-              <div className="mb-1">
-                <span className="text-5xl font-extrabold text-[#0F1720]">${price('scale')}</span>
-              </div>
-              <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
-                ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
-              </p>
-              {annualBilling && (
-                <p className="text-[#6B7280] text-xs mb-7">${annualTotal('scale')} ARS / año</p>
-              )}
+            <Reveal delay={200}>
+              <div className="bg-white border border-[#E5E7EB] rounded-3xl p-8 flex flex-col h-full">
+                <div className="mb-6">
+                  <p className="text-xs font-bold text-[#6B7280] uppercase tracking-widest mb-1">Scale</p>
+                  <p className="text-sm text-[#6B7280]">Gestioná tu clínica como una empresa</p>
+                </div>
+                <div className="mb-1">
+                  <span className="text-5xl font-extrabold text-[#0F1720]">${price('scale')}</span>
+                </div>
+                <p className={`text-[#6B7280] text-xs ${annualBilling ? 'mb-1' : 'mb-7'}`}>
+                  ARS / mes{annualBilling && ' · facturado anualmente'} · <strong className="text-[#00C4BC]">14 días gratis</strong>
+                </p>
+                {annualBilling && (
+                  <p className="text-[#6B7280] text-xs mb-7">${annualTotal('scale')} ARS / año</p>
+                )}
 
-              <div className="space-y-3 mb-5 flex-1">
-                {[
-                  'Todo lo del plan Growth',
-                  'Hasta 10 profesionales',
-                  '2.000 recordatorios WhatsApp/mes',
-                  'Reportes avanzados (ocupación, cancelaciones, rendimiento)',
-                  'Onboarding personalizado',
-                  'Soporte dedicado',
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="text-[#00C4BC] font-bold flex-shrink-0 text-sm mt-px">✓</span>
-                    <span className="text-[#0F1720] text-sm">{item}</span>
-                  </div>
-                ))}
+                <div className="space-y-3 mb-5 flex-1">
+                  {[
+                    'Todo lo del plan Growth',
+                    'Hasta 10 profesionales',
+                    '1.000 recordatorios WhatsApp/mes',
+                    'Reportes avanzados (ocupación, cancelaciones, rendimiento)',
+                    'Onboarding personalizado',
+                    'Soporte dedicado',
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <Check className="w-4 h-4 text-[#00C4BC] flex-shrink-0 mt-0.5" strokeWidth={3} />
+                      <span className="text-[#0F1720] text-sm">{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-[#6B7280] italic mb-6">Tomá decisiones con datos, no con intuición</p>
+
+                <Link
+                  href="/register"
+                  className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
+                >
+                  Probar gratis 14 días
+                </Link>
               </div>
-
-              <p className="text-xs text-[#6B7280] italic mb-6">Tomá decisiones con datos, no con intuición</p>
-
-              <Link
-                href="/register"
-                className="block w-full border-2 border-[#00C4BC]/40 text-[#00C4BC] hover:bg-[#E6F8F1] font-bold py-3.5 rounded-xl transition-all text-center text-sm"
-              >
-                Probar gratis 14 días
-              </Link>
-            </div>
+            </Reveal>
 
           </div>
 
@@ -1035,12 +1137,14 @@ export default function HomePage() {
       {/* ── FAQ ────────────────────────────────────────────────── */}
       <section className="py-24 bg-white">
         <div className="max-w-2xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
-              Dudas frecuentes
-            </span>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">Lo que más nos preguntan</h2>
-          </div>
+          <Reveal>
+            <div className="text-center mb-12">
+              <span className="inline-block text-[#00C4BC] text-xs font-bold uppercase tracking-widest bg-[#E6F8F1] px-3 py-1 rounded-full mb-4">
+                Dudas frecuentes
+              </span>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-[#0F1720]">Lo que más nos preguntan</h2>
+            </div>
+          </Reveal>
 
           <div className="space-y-3">
             {faqs.map((faq, i) => (
@@ -1074,7 +1178,7 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-[#128C7E] font-bold hover:underline"
             >
-              💬 Preguntá por WhatsApp
+              <MessageCircle className="w-4 h-4" strokeWidth={2.5} /> Preguntá por WhatsApp
             </a>
           </div>
         </div>
@@ -1082,8 +1186,9 @@ export default function HomePage() {
 
       {/* ── CTA FINAL ──────────────────────────────────────────── */}
       <section className="bg-[#E6F8F1] py-24 relative overflow-hidden">
+        <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#00C4BC]/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="max-w-2xl mx-auto px-6 text-center relative">
-          <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] mb-5 leading-tight">
+          <h2 className="text-3xl md:text-5xl font-extrabold text-[#0F1720] mb-5 leading-tight tracking-tight">
             Probalo sin compromiso.<br />Si no te gusta, no pasa nada.
           </h2>
           <p className="text-[#6B7280] text-lg mb-9">
@@ -1092,7 +1197,7 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/register"
-              className="inline-flex items-center justify-center bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 text-base whitespace-nowrap leading-none"
+              className="inline-flex items-center justify-center bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-[#00C4BC]/20 text-base whitespace-nowrap leading-none hover:-translate-y-0.5"
             >
               Quiero probarlo gratis
             </Link>
@@ -1102,7 +1207,7 @@ export default function HomePage() {
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 bg-white border-2 border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10 font-bold px-7 py-3.5 rounded-xl transition-all text-base whitespace-nowrap leading-none"
             >
-              <span className="leading-none">💬</span> Prefiero que me lo muestren
+              <MessageCircle className="w-5 h-5" strokeWidth={2.5} /> Prefiero que me lo muestren
             </a>
           </div>
           <p className="text-sm text-[#6B7280] mt-5">
@@ -1111,7 +1216,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── FOOTER ─────────────────────────────────────────────── */}
+      {/* ── FOOTER (acento oscuro) ─────────────────────────────── */}
       <footer className="bg-[#0F1720] border-t border-white/10 py-14">
         <div className="max-w-6xl mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-10 mb-10">
@@ -1164,7 +1269,7 @@ export default function HomePage() {
         aria-label="Hablar por WhatsApp"
         className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5a] text-white font-bold pl-4 pr-5 py-3.5 rounded-full shadow-xl shadow-[#25D366]/30 transition-all hover:scale-105"
       >
-        <span className="text-xl">💬</span>
+        <MessageCircle className="w-5 h-5" strokeWidth={2.5} />
         <span className="hidden sm:inline text-sm">¿Hablamos?</span>
       </a>
 

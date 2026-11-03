@@ -7,8 +7,9 @@ import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useProfessionals, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { consultationTypesFor } from '@/lib/capabilities'
+import { Play, CheckCircle, CheckCircle2, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight, Share2, Download, Copy, CalendarPlus, MapPin } from 'lucide-react'
+import { consultationTypesFor, DISCIPLINE_LABELS, normalizeDiscipline } from '@/lib/capabilities'
+import { generateAppointmentImage, type AppointmentCardData } from '@/components/generateReceipt'
 
 const HOURS = ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -182,6 +183,8 @@ export default function AgendaPage() {
   const loading = calendarQuery.isPending
   const refreshing = calendarQuery.isFetching && !calendarQuery.isPending
   const userId: string = me?.id ?? ''
+  const clinicName: string = (me?.clinics as any)?.name ?? (me as any)?.clinic_name ?? ''
+  const clinicAddress: string = (me?.clinics as any)?.address ?? ''
 
   // Horario laboral derivado: del profesional filtrado, o el mío si es "Todos".
   const myWorkingHours: WorkingHours | null =
@@ -1055,6 +1058,8 @@ export default function AgendaPage() {
           apptSlot={newApptSlot}
           blockDate={newBlockDate ?? selectedDay}
           professionals={professionals}
+          clinicName={clinicName}
+          clinicAddress={clinicAddress}
           defaultProfessionalId={
             selectedProfId ||
             professionals.find((p: any) => p.id === userId)?.id ||
@@ -1155,7 +1160,7 @@ export default function AgendaPage() {
 }
 
 function AgendaPanel({
-  token, defaultTab, side, apptSlot, blockDate, professionals, defaultProfessionalId, editingAppt,
+  token, defaultTab, side, apptSlot, blockDate, professionals, clinicName, clinicAddress, defaultProfessionalId, editingAppt,
   onClose, onApptCreated, onBlockCreated, onDurationChange, onSlotChange, onBlockPreviewChange, onTabChange,
 }: {
   token: string
@@ -1164,6 +1169,8 @@ function AgendaPanel({
   apptSlot: { date: string; time: string } | null
   blockDate: string
   professionals: any[]
+  clinicName: string
+  clinicAddress: string
   defaultProfessionalId: string
   editingAppt?: any
   onClose: () => void
@@ -1221,6 +1228,8 @@ function AgendaPanel({
               date={apptSlot?.date ?? blockDate}
               time={apptSlot?.time ?? '09:00'}
               professionals={professionals}
+              clinicName={clinicName}
+              clinicAddress={clinicAddress}
               defaultProfessionalId={defaultProfessionalId}
               editingAppt={editingAppt}
               onClose={onClose}
@@ -1242,11 +1251,41 @@ function AgendaPanel({
   )
 }
 
-function PanelApptForm({ token, date, time, professionals, defaultProfessionalId, editingAppt, onClose, onCreated, onDurationChange, onSlotChange }: {
+// Link "Agregar al calendario" (Google Calendar) — tappable en el celu, abre
+// el calendario con el evento pre-cargado. Universal (Android/iOS/web).
+function buildCalendarUrl(c: {
+  startsAt: string | Date
+  durationMinutes: number
+  clinicName?: string | null
+  professionalName?: string | null
+  specialty?: string | null
+  clinicAddress?: string | null
+}): string {
+  const start = new Date(c.startsAt)
+  const end = new Date(start.getTime() + c.durationMinutes * 60000)
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const title = `Turno${c.specialty ? ' ' + c.specialty.toLowerCase() : ''}${c.clinicName ? ' - ' + c.clinicName : ''}`
+  const details = [
+    c.professionalName ? `Profesional: ${c.professionalName}` : '',
+    'Agendado con VitalOS',
+  ].filter(Boolean).join('\n')
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details,
+  })
+  if (c.clinicAddress) params.set('location', c.clinicAddress)
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+function PanelApptForm({ token, date, time, professionals, clinicName, clinicAddress, defaultProfessionalId, editingAppt, onClose, onCreated, onDurationChange, onSlotChange }: {
   token: string
   date: string
   time: string
   professionals: any[]
+  clinicName: string
+  clinicAddress: string
   defaultProfessionalId: string
   editingAppt?: any
   onClose: () => void
@@ -1283,6 +1322,11 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
   })
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState('')
+  const [created, setCreated]         = useState<(AppointmentCardData & { professionalId: string; durationMinutes: number }) | null>(null)
+  const [imageGenerating, setImageGenerating] = useState(false)
+  const [imagePreview, setImagePreview] = useState<{ url: string; blob: Blob } | null>(null)
+  const [imageCopied, setImageCopied] = useState(false)
+  const [linksCopied, setLinksCopied] = useState(false)
   const [showDatePicker, setShowDatePicker]   = useState(false)
   const [showStartPicker, setShowStartPicker] = useState(false)
   const [showEndPicker, setShowEndPicker]     = useState(false)
@@ -1392,6 +1436,7 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
             chief_complaint:  form.chief_complaint  || undefined,
           })
         })
+        onCreated(professionalId)
       } else {
         await apiFetch('/appointments', {
           method: 'POST', token,
@@ -1404,12 +1449,102 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
             chief_complaint:  form.chief_complaint  || undefined,
           })
         })
+        // Pantalla de éxito con tarjeta para compartir por WhatsApp.
+        const prof = professionals.find((p: any) => p.id === professionalId)
+        const specialty = prof?.discipline
+          ? DISCIPLINE_LABELS[normalizeDiscipline(prof.discipline)]
+          : null
+        setCreated({
+          professionalId,
+          durationMinutes: Number(form.duration_minutes),
+          patientName: selectedPatient?.full_name
+            ?? `${selectedPatient?.first_name ?? ''} ${selectedPatient?.last_name ?? ''}`.trim(),
+          startsAt,
+          appointmentType: form.appointment_type || null,
+          specialty,
+          professionalName: prof ? `${prof.first_name} ${prof.last_name}` : null,
+          clinicName: clinicName || null,
+          clinicAddress: clinicAddress || null,
+          // arrivalNote: pendiente de una config por consultorio (ej. "llegar 10 min antes").
+          arrivalNote: null,
+        })
+        setLoading(false)
       }
-      onCreated(professionalId)
     } catch (err: any) {
       setError(err.message)
       setLoading(false)
     }
+  }
+
+  // ── Imagen / Compartir ─────────────────────────
+  async function handleShareImage() {
+    if (!created) return
+    setImageGenerating(true)
+    try {
+      const { dataUrl, blob } = await generateAppointmentImage(created)
+      const safe = created.patientName.replace(/\s+/g, '_').toLowerCase()
+      const file = new File([blob], `turno-${safe}.png`, { type: 'image/png' })
+      // Mobile: hoja de compartir nativa (WhatsApp, etc.). SOLO el archivo:
+      // combinar archivo + texto hace que WhatsApp pegue la imagen dos veces e
+      // ignore el texto. Los links van por separado (handleShareLinks).
+      if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] })
+        return
+      }
+      // Desktop: modal de preview
+      setImagePreview({ url: dataUrl, blob })
+    } catch {
+      // usuario canceló el share nativo — no-op
+    } finally {
+      setImageGenerating(false)
+    }
+  }
+
+  // Links (calendario + ubicación) como mensaje de texto aparte — WhatsApp no
+  // acepta imagen + texto en un mismo share sin duplicar la imagen.
+  function buildLinksText(): string {
+    if (!created) return ''
+    const lines = [`Agregá tu turno al calendario: ${buildCalendarUrl(created)}`]
+    if (created.clinicAddress) {
+      lines.push(`Cómo llegar: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(created.clinicAddress)}`)
+    }
+    return lines.join('\n\n')
+  }
+
+  async function handleShareLinks() {
+    const text = buildLinksText()
+    if (!text) return
+    if (typeof navigator.share === 'function') {
+      try { await navigator.share({ text }); return } catch { /* cancelado */ return }
+    }
+    // Desktop sin Web Share → copiar al portapapeles
+    try {
+      await navigator.clipboard.writeText(text)
+      setLinksCopied(true)
+      setTimeout(() => setLinksCopied(false), 2500)
+    } catch { /* no-op */ }
+  }
+
+  async function handleCopyImage() {
+    if (!imagePreview) return
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': imagePreview.blob })])
+      setImageCopied(true)
+      setTimeout(() => setImageCopied(false), 2500)
+    } catch {
+      handleDownloadImage()
+    }
+  }
+
+  function handleDownloadImage() {
+    if (!imagePreview || !created) return
+    const safe = created.patientName.replace(/\s+/g, '_').toLowerCase()
+    const url = URL.createObjectURL(imagePreview.blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `turno-${safe}.png`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function handleCreatePatient() {
@@ -1435,6 +1570,127 @@ function PanelApptForm({ token, date, time, professionals, defaultProfessionalId
     } finally {
       setCreatingPatient(false)
     }
+  }
+
+  // ── Pantalla de éxito (post-creación) ──────────
+  if (created) {
+    const dt = new Date(created.startsAt)
+    const fechaStr = dt.toLocaleDateString('es-AR', {
+      weekday: 'long', day: 'numeric', month: 'long',
+      timeZone: 'America/Argentina/Buenos_Aires',
+    })
+    const horaStr = dt.toLocaleTimeString('es-AR', {
+      hour: '2-digit', minute: '2-digit', hour12: false,
+      timeZone: 'America/Argentina/Buenos_Aires',
+    })
+    return (
+      <div className="p-5">
+        <div className="flex flex-col items-center text-center pt-4 pb-5">
+          <div className="w-14 h-14 rounded-full bg-emerald-500/15 flex items-center justify-center mb-3">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+          </div>
+          <h2 className="text-lg font-bold text-app">Comprobante de turno</h2>
+          <p className="text-sm text-app2 mt-1">
+            {created.patientName} · <span className="capitalize">{fechaStr}</span> · {horaStr} hs
+          </p>
+        </div>
+
+        <p className="text-sm text-app2 text-center mb-4">
+          Compartí el turno con el paciente por WhatsApp.
+        </p>
+        <button
+          type="button"
+          onClick={handleShareImage}
+          disabled={imageGenerating}
+          className="w-full flex items-center justify-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors cursor-pointer"
+        >
+          <Share2 className="w-4 h-4" />
+          {imageGenerating ? 'Generando...' : 'Imagen / WhatsApp'}
+        </button>
+        <button
+          type="button"
+          onClick={handleShareLinks}
+          className="w-full mt-3 flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors cursor-pointer"
+        >
+          <CalendarPlus className="w-4 h-4" />
+          {linksCopied ? '¡Links copiados!' : 'Enviar calendario y ubicación'}
+        </button>
+        <p className="text-xs text-app3 text-center mt-2">
+          Primero la imagen, después este mensaje con los links.
+        </p>
+        <button
+          type="button"
+          onClick={() => onCreated(created.professionalId)}
+          className="w-full mt-4 bg-transparent hover:bg-surface2 text-app2 font-semibold py-3 rounded-xl transition-colors cursor-pointer"
+        >
+          Listo
+        </button>
+
+        {imagePreview && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            onClick={() => setImagePreview(null)}
+          >
+            <div
+              className="bg-surface border border-app rounded-2xl max-w-sm w-full overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 pt-4">
+                <div>
+                  <h3 className="font-semibold text-app">Imagen del turno</h3>
+                  <p className="text-xs text-app3 mt-0.5">Copiá o descargá para enviar por WhatsApp</p>
+                </div>
+                <button onClick={() => setImagePreview(null)} className="text-app3 hover:text-app p-1 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview.url} alt="Turno" className="w-full rounded-lg border border-app" />
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={handleCopyImage}
+                    className="flex-1 flex items-center justify-center gap-2 bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-semibold py-3 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4" />
+                    {imageCopied ? '¡Copiado!' : 'Copiar'}
+                  </button>
+                  <button
+                    onClick={handleDownloadImage}
+                    className="flex-1 flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar
+                  </button>
+                </div>
+                <div className="flex flex-col gap-2 mt-3">
+                  <a
+                    href={buildCalendarUrl(created)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <CalendarPlus className="w-4 h-4" />
+                    Agregar al calendario
+                  </a>
+                  {created.clinicAddress && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(created.clinicAddress)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 bg-surface2 hover:bg-surface3 border border-app text-app text-sm font-semibold py-2.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      Cómo llegar
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (

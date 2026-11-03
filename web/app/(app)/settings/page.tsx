@@ -305,7 +305,7 @@ function PlanCard() {
         const items = [
           waWarning && {
             icon: MessageCircle,
-            text: '2.000 recordatorios WhatsApp/mes — 4× más que en Growth',
+            text: '1.000 recordatorios WhatsApp/mes — 2× más que en Growth',
             highlight: true,
           },
           profLimit && {
@@ -315,7 +315,7 @@ function PlanCard() {
           },
           !waWarning && {
             icon: MessageCircle,
-            text: '2.000 recordatorios WhatsApp/mes — enviá más sin pensar en el límite',
+            text: '1.000 recordatorios WhatsApp/mes — enviá más sin pensar en el límite',
             highlight: false,
           },
           !profLimit && {

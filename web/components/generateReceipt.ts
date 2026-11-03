@@ -14,6 +14,19 @@ export type AccountStatementData = {
   }>
 }
 
+export type AppointmentCardData = {
+  patientName: string
+  startsAt: Date | string
+  appointmentType?: string | null
+  /** Especialidad / disciplina legible, p.ej. "Odontología". Opcional. */
+  specialty?: string | null
+  professionalName?: string | null
+  clinicName?: string | null
+  clinicAddress?: string | null
+  /** Indicación breve configurable, p.ej. "Te esperamos 10 minutos antes". Opcional. */
+  arrivalNote?: string | null
+}
+
 export type ReceiptData = {
   patientName: string
   date: Date | string
@@ -312,6 +325,228 @@ function buildCanvas(data: ReceiptData): HTMLCanvasElement {
 
   ctx.fillStyle = C.teal
   ctx.fillText('OS', startX + genW + vitalW, y + 22)
+
+  ctx.fillStyle = C.light
+  ctx.font = `9px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.fillText('vitalos.com.ar', W / 2, y + 38)
+
+  return canvas
+}
+
+// ── Appointment card ────────────────────────────────────────────────────────
+
+function fmtApptDate(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const s = date.toLocaleDateString('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function fmtApptTime(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  return date.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+}
+
+/** Tarjeta de turno (PNG) para compartir por WhatsApp — simil comprobante/presupuesto. */
+export async function generateAppointmentImage(
+  data: AppointmentCardData,
+): Promise<{ dataUrl: string; blob: Blob }> {
+  const canvas = buildAppointmentCanvas(data)
+  const dataUrl = canvas.toDataURL('image/png')
+  const blob = await new Promise<Blob>((resolve) =>
+    canvas.toBlob((b) => resolve(b!), 'image/png'),
+  )
+  return { dataUrl, blob }
+}
+
+function buildAppointmentCanvas(data: AppointmentCardData): HTMLCanvasElement {
+  const INNER_W = W - PAD * 2
+  const FONT = 'Arial, Helvetica, sans-serif'
+
+  // Especialidad · tipo de consulta (ambos opcionales).
+  const tipo = [data.specialty?.trim(), data.appointmentType?.trim()]
+    .filter(Boolean)
+    .join(' · ')
+
+  const tmp = document.createElement('canvas').getContext('2d')!
+  tmp.font = `11px ${FONT}`
+  const addrLines = data.clinicAddress?.trim()
+    ? wrapText(tmp, data.clinicAddress.trim(), INNER_W - 90)
+    : []
+  const arrival = data.arrivalNote?.trim() || ''
+
+  // Nota de reprogramación (siempre). Texto genérico, no clínico.
+  const reprogramText = 'Si no podés asistir, comunicate con el profesional para reprogramar el turno.'
+  tmp.font = `10px ${FONT}`
+  const reprogramLines = wrapText(tmp, reprogramText, INNER_W)
+
+  // Compute canvas height
+  let H = 4 + PAD           // top bar + top padding
+  H += 26                   // header row (clinic)
+  H += 10                   // gap before separator
+  H += 17                   // separator + gap
+  H += 96 + 16              // date/time hero box + gap
+  H += 64                   // patient box + gap
+  H += 28                   // detail title + gap
+  if (data.professionalName) H += 22
+  if (tipo) H += 22
+  H += addrLines.length > 0 ? 16 + addrLines.length * 16 + 8 : 0
+  H += 16                   // gap
+  if (arrival) H += 40 + 16 // arrival note box + gap
+  H += reprogramLines.length * 15 + 12 // reprogram fine print + gap
+  H += 16 + 1               // gap + separator
+  H += 52 + PAD             // footer + bottom padding
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(DPR, DPR)
+
+  ctx.fillStyle = C.white
+  ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = C.teal
+  ctx.fillRect(0, 0, W, 4)
+
+  let y = 4 + PAD
+
+  // --- HEADER ---
+  if (data.clinicName) {
+    ctx.fillStyle = C.dark
+    ctx.font = `bold 15px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.fillText(data.clinicName, PAD, y + 16)
+  }
+  ctx.fillStyle = C.light
+  ctx.font = `8px ${FONT}`
+  ctx.textAlign = 'right'
+  ctx.fillText('COMPROBANTE DE TURNO', W - PAD, y + 15)
+  y += 26 + 10
+
+  // Separator
+  ctx.strokeStyle = C.border
+  ctx.lineWidth = 0.75
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke()
+  y += 17
+
+  // --- DATE / TIME HERO BOX ---
+  ctx.fillStyle = C.tealBg
+  roundRect(ctx, PAD, y, INNER_W, 96, 8)
+  ctx.fill()
+  ctx.fillStyle = C.teal
+  ctx.font = `bold 8px ${FONT}`
+  ctx.textAlign = 'left'
+  ctx.fillText('TU PRÓXIMO TURNO', PAD + 14, y + 22)
+  ctx.fillStyle = C.dark
+  ctx.font = `bold 15px ${FONT}`
+  ctx.fillText(fmtApptDate(data.startsAt), PAD + 14, y + 48)
+  ctx.fillStyle = C.teal
+  ctx.font = `bold 26px ${FONT}`
+  ctx.fillText(`${fmtApptTime(data.startsAt)} hs`, PAD + 14, y + 82)
+  y += 96 + 16
+
+  // --- PATIENT BOX ---
+  ctx.fillStyle = C.tealBg
+  roundRect(ctx, PAD, y, INNER_W, 48, 8)
+  ctx.fill()
+  ctx.fillStyle = C.teal
+  ctx.font = `bold 8px ${FONT}`
+  ctx.textAlign = 'left'
+  ctx.fillText('PACIENTE', PAD + 12, y + 14)
+  ctx.fillStyle = C.dark
+  ctx.font = `bold 16px ${FONT}`
+  ctx.fillText(data.patientName, PAD + 12, y + 34)
+  y += 64
+
+  // --- DETAIL SECTION ---
+  ctx.fillStyle = C.teal
+  ctx.font = `bold 8px ${FONT}`
+  ctx.textAlign = 'left'
+  ctx.fillText('DETALLE', PAD, y + 12)
+  y += 28
+
+  function row(label: string, value: string) {
+    ctx.fillStyle = C.light
+    ctx.font = `12px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.fillText(label, PAD, y + 14)
+    ctx.fillStyle = C.dark
+    ctx.font = `bold 12px ${FONT}`
+    ctx.textAlign = 'right'
+    ctx.fillText(value, W - PAD, y + 14)
+    y += 22
+  }
+
+  if (data.professionalName) row('Profesional', data.professionalName)
+  if (tipo) row('Tipo de consulta', tipo)
+
+  if (addrLines.length > 0) {
+    ctx.fillStyle = C.light
+    ctx.font = `bold 8px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.fillText('DIRECCIÓN', PAD, y + 12)
+    y += 16
+    ctx.fillStyle = C.mid
+    ctx.font = `11px ${FONT}`
+    for (const line of addrLines) {
+      ctx.fillText(line, PAD, y + 12)
+      y += 16
+    }
+    y += 8
+  }
+
+  y += 16
+
+  // --- ARRIVAL NOTE (solo si el consultorio la configuró) ---
+  if (arrival) {
+    ctx.fillStyle = C.tealBg
+    roundRect(ctx, PAD, y, INNER_W, 40, 8)
+    ctx.fill()
+    ctx.fillStyle = C.teal
+    ctx.font = `12px ${FONT}`
+    ctx.textAlign = 'center'
+    ctx.fillText(arrival, W / 2, y + 24)
+    y += 40 + 16
+  }
+
+  // --- REPROGRAM NOTE (siempre) ---
+  ctx.fillStyle = C.light
+  ctx.font = `10px ${FONT}`
+  ctx.textAlign = 'center'
+  for (const line of reprogramLines) {
+    ctx.fillText(line, W / 2, y + 11)
+    y += 15
+  }
+  y += 12
+
+  // Separator
+  ctx.strokeStyle = C.border
+  ctx.lineWidth = 0.75
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke()
+  y += 1
+
+  // --- FOOTER (marca discreta, "OS" en verde) ---
+  ctx.font = `bold 11px ${FONT}`
+  const pre = 'Tu consultorio, más simple con Vital'
+  const preW = ctx.measureText(pre).width
+  const osW = ctx.measureText('OS').width
+  const fx = Math.floor((W - preW - osW) / 2)
+  ctx.textAlign = 'left'
+  ctx.fillStyle = C.mid
+  ctx.fillText(pre, fx, y + 22)
+  ctx.fillStyle = C.teal
+  ctx.fillText('OS', fx + preW, y + 22)
 
   ctx.fillStyle = C.light
   ctx.font = `9px ${FONT}`

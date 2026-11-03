@@ -11,7 +11,7 @@ Enum DB `plan_type`; `displayName` es el nombre comercial:
 | `free` | Free | ❌ | 0 | 50 | 1 |
 | `basic` | Starter | ❌ | 0 | 100 | 1 |
 | `pro` | Growth | ✅ | 500 | ∞ | 3 |
-| `clinic` | Scale | ✅ | 2000 | ∞ | 10 |
+| `clinic` | Scale | ✅ | 1000 | ∞ | 10 |
 | `enterprise` | Enterprise | ✅ | ∞ | ∞ | ∞ |
 
 - **Trial**: 14 días (migración 019; clínicas previas grandfathered en 020).
