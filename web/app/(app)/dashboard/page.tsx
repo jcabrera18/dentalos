@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMe, useDashboard, useUpdateAppointmentStatus, usePermissions, useInvoiceIssuer, queryKeys } from '@/lib/queries'
+import { useMe, useDashboard, useUpdateAppointmentStatus, usePermissions, useInvoiceIssuer, useProfessionals, queryKeys } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
 import { InvoiceModal } from '@/components/InvoiceModal'
 import { NotificationBell } from '@/components/NotificationBell'
+import { WaitingRoom, ProfessionalSummary, TomorrowToConfirm, ProfChip } from '@/components/ReceptionDashboard'
+import { professionalColor } from '@/lib/professionalColor'
 
 export default function DashboardPage() {
   const [token, setToken] = useState('')
@@ -24,6 +26,8 @@ export default function DashboardPage() {
   const [createdPayment, setCreatedPayment] = useState<any>(null)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const [inactiveOpen, setInactiveOpen] = useState(false)
+  // Recepción: filtro de la agenda de hoy por profesional ('' = todos).
+  const [profFilter, setProfFilter] = useState('')
   const router = useRouter()
   const supabase = createClient()
   const qc = useQueryClient()
@@ -33,6 +37,9 @@ export default function DashboardPage() {
   // Administrativo: dashboard de toda la clínica, sin notas clínicas.
   const access = usePermissions()
   const canCharge = access.can('payments.manage')
+  // Administrativo: no tiene agenda propia → dashboard de recepción de toda la clínica.
+  const isReception = access.ready && !access.clinicalAccess
+  const { data: professionals = [] } = useProfessionals()
   const { data: dashboard } = useDashboard()
   const updateStatus = useUpdateAppointmentStatus()
 
@@ -321,7 +328,11 @@ export default function DashboardPage() {
   }
 
   const currentlyInProgress = agenda.filter(a => a.status === 'in_progress')
-  const restOfAgenda = agenda.filter(a => a.status !== 'in_progress')
+  const filteredAgenda = profFilter ? agenda.filter(a => a.professional_id === profFilter) : agenda
+  // Recepción: los que están en atención se ven en "Sala de espera", no se repiten.
+  const restOfAgenda = filteredAgenda.filter(a => a.status !== 'in_progress')
+  const showProf = isReception || professionals.length > 1
+  const clinicName: string = (user?.clinics as any)?.name ?? (user as any)?.clinic_name ?? ''
 
   return (
     <div className="min-h-screen bg-app text-app" onClick={() => openDropdown && setOpenDropdown(null)}>
@@ -331,7 +342,7 @@ export default function DashboardPage() {
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold">Buenos días, {user?.first_name}</h2>
-            <p className="text-app2 mt-0.5 capitalize">{today}</p>
+            <p className="text-app2 mt-0.5"><span className="capitalize">{today}</span>{isReception && <span className="text-app3"> · Recepción, toda la clínica</span>}</p>
           </div>
           {/* Campana solo en desktop; en mobile vive en la top bar del layout */}
           <div className="hidden md:block pt-1">
@@ -360,8 +371,13 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* ── Recepción: sala de espera / en atención ── */}
+        {isReception && (
+          <WaitingRoom agenda={agenda} now={now.getTime()} onAttended={(appt) => { setPendingAppt(appt); setShowNotesModal(true) }} />
+        )}
+
         {/* ── HERO: paciente en atención ─────────────── */}
-        {currentlyInProgress.map(appt => (
+        {!isReception && currentlyInProgress.map(appt => (
           <div key={appt.id} className="mb-5 bg-surface border-2 border-violet-400/30 rounded-2xl p-5 relative overflow-hidden">
             <div className="absolute inset-0 bg-violet-400/5 pointer-events-none" />
             <div className="relative">
@@ -460,15 +476,59 @@ export default function DashboardPage() {
           )
         })()}
 
+        {isReception && (
+          <ProfessionalSummary
+            agenda={agenda}
+            professionals={professionals}
+            now={now.getTime()}
+            selected={profFilter}
+            onSelect={setProfFilter}
+          />
+        )}
+
         {/* ── AGENDA ────────────────────────────────── */}
         <div className="bg-surface border border-app rounded-xl overflow-visible mb-5">
-          <div className="px-5 py-4 border-b border-app flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-app flex items-center justify-between gap-3">
             <h3 className="font-semibold">Agenda de hoy</h3>
-            <span className="text-sm text-app3">{agenda.length} turnos</span>
+            <span className="text-sm text-app3">
+              {profFilter ? `${filteredAgenda.length} de ${agenda.length}` : agenda.length} turnos
+            </span>
           </div>
+
+          {/* Filtro por profesional */}
+          {showProf && professionals.length > 1 && agenda.length > 0 && (
+            <div className="px-5 py-2.5 border-b border-app flex gap-1.5 overflow-x-auto">
+              <button
+                onClick={() => setProfFilter('')}
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors flex-shrink-0 cursor-pointer ${!profFilter ? 'bg-[#00C4BC] border-[#00C4BC] text-white' : 'border-app text-app2 hover:bg-surface2'}`}
+              >
+                Todos
+              </button>
+              {professionals.map((p: any) => {
+                const count = agenda.filter(a => a.professional_id === p.id).length
+                if (count === 0) return null
+                const active = profFilter === p.id
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setProfFilter(active ? '' : p.id)}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors flex-shrink-0 cursor-pointer ${active ? 'border-[#00C4BC] bg-[#00C4BC]/10 text-app' : 'border-app text-app2 hover:bg-surface2'}`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: professionalColor(p) }} />
+                    {p.first_name} {p.last_name}
+                    <span className="text-app3">{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {agenda.length === 0 ? (
             <div className="px-5 py-12 text-center text-app3 text-sm">No hay turnos para hoy</div>
+          ) : restOfAgenda.length === 0 ? (
+            <div className="px-5 py-8 text-center text-app3 text-sm">
+              {profFilter ? 'Sin más turnos para este profesional' : 'Todos los turnos de hoy están en atención'}
+            </div>
           ) : (
             <div className="divide-y divide-app">
               {restOfAgenda.map((appt: any) => {
@@ -492,7 +552,8 @@ export default function DashboardPage() {
                       <div className={`font-semibold truncate ${isDone ? '' : 'text-app'}`}>
                         {appt.patient_name}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-app3">
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-app3 min-w-0">
+                        {showProf && !profFilter && <ProfChip appt={appt} className="text-app2 font-medium flex-shrink-0 max-w-[45%]" />}
                         {appt.appointment_type && <span className="truncate">{appt.appointment_type}</span>}
                         {appt.duration_minutes && (
                           <span className="flex items-center gap-0.5 flex-shrink-0">
@@ -629,6 +690,8 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {isReception && access.can('agenda.manage') && <TomorrowToConfirm clinicName={clinicName} />}
+
         {/* Pacientes inactivos */}
         {inactive.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/40 rounded-xl overflow-hidden">
@@ -724,7 +787,10 @@ export default function DashboardPage() {
                 <div className="px-6 pt-6 pb-4">
                   <div className="w-9 h-1 bg-surface3 rounded-full mx-auto mb-5 sm:hidden" />
                   <div className="font-bold text-lg">{pendingAppt.patient_name}</div>
-                  <div className="text-app2 text-sm">{pendingAppt.appointment_type}</div>
+                  <div className="text-app2 text-sm flex items-center gap-2 min-w-0">
+                    {pendingAppt.appointment_type && <span className="truncate">{pendingAppt.appointment_type}</span>}
+                    {showProf && <ProfChip appt={pendingAppt} className="text-app3" />}
+                  </div>
                 </div>
 
                 <div className="px-6 pb-4 space-y-4">

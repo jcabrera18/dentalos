@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
@@ -12,6 +12,7 @@ import { consultationTypesFor, DISCIPLINE_LABELS, normalizeDiscipline } from '@/
 import { generateAppointmentImage, type AppointmentCardData } from '@/components/generateReceipt'
 import { AppointmentContactLine } from '@/components/AppointmentContactLine'
 import { CONTACT_RELATIONSHIPS, GUARDIAN_RELATIONSHIPS } from '@/lib/patientContact'
+import { professionalColor, professionalInitials, professionalShortName } from '@/lib/professionalColor'
 
 const HOURS = ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -136,6 +137,76 @@ function getSlotHeight(startsAt: string, endsAt: string): number {
   return Math.max(20, (diff / 60) * SLOT_H)
 }
 
+/**
+ * Turnos simultáneos lado a lado: reparte los turnos que se pisan en carriles
+ * (lane) dentro de cada grupo de solapamiento. Devuelve id → { lane, lanes }.
+ */
+function layoutLanes(appts: any[]): Map<string, { lane: number; lanes: number }> {
+  const result = new Map<string, { lane: number; lanes: number }>()
+  const items = appts
+    .map(a => {
+      const start = new Date(a.starts_at).getTime()
+      const end = a.ends_at
+        ? new Date(a.ends_at).getTime()
+        : start + (a.duration_minutes ?? 30) * 60000
+      // Altura mínima visual (20px ≈ 15 min) para que los turnos cortos no se pisen.
+      return { id: a.id as string, start, end: Math.max(end, start + 15 * 60000) }
+    })
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+
+  let group: { id: string; lane: number }[] = []
+  let laneEnds: number[] = []
+  let groupEnd = -Infinity
+  const flush = () => {
+    for (const g of group) result.set(g.id, { lane: g.lane, lanes: laneEnds.length })
+    group = []; laneEnds = []
+  }
+  for (const it of items) {
+    if (it.start >= groupEnd) { flush(); groupEnd = -Infinity }
+    let lane = laneEnds.findIndex(end => end <= it.start)
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.end) } else laneEnds[lane] = it.end
+    group.push({ id: it.id, lane })
+    groupEnd = Math.max(groupEnd, it.end)
+  }
+  flush()
+  return result
+}
+
+function laneStyle(l: { lane: number; lanes: number } | undefined): { left: string; width: string } {
+  const lanes = l?.lanes ?? 1
+  const lane = l?.lane ?? 0
+  return {
+    left:  `calc(${(lane / lanes) * 100}% + 2px)`,
+    width: `calc(${100 / lanes}% - 4px)`,
+  }
+}
+
+function addDaysStr(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Preferencia de vista de la agenda (por navegador; no es dato sensible).
+const VIEW_STORAGE_KEY = 'agenda:view'
+function readStoredView(): 'week' | 'day' | null {
+  try {
+    const v = localStorage.getItem(VIEW_STORAGE_KEY)
+    return v === 'day' || v === 'week' ? v : null
+  } catch { return null }
+}
+function noopSubscribe() { return () => {} }
+
+/** weekOffset (relativo a la semana actual) de la semana que contiene dateStr. */
+function weekOffsetFor(dateStr: string): number {
+  const mondayOf = (s: string) => {
+    const d = new Date(s + 'T12:00:00')
+    d.setDate(d.getDate() - weekdayIndex(s))
+    return d.getTime()
+  }
+  return Math.round((mondayOf(dateStr) - mondayOf(todayArg())) / (7 * 86400000))
+}
+
 // Estado = color (no tipo ni profesional)
 const STATUS_CONFIG: Record<string, { border: string; bg: string; dot: string; label: string; textClass: string }> = {
   pending:     { border: 'border-l-amber-400',   bg: 'bg-amber-400/10',   dot: 'bg-amber-400',            label: 'Sin confirmar', textClass: 'text-amber-800 dark:text-amber-200' },
@@ -160,6 +231,12 @@ export default function AgendaPage() {
   const [newApptSlot, setNewApptSlot]   = useState<{ date: string; time: string } | null>(null)
 
   const [selectedProfId, setSelectedProfId] = useState('')
+  // Profesional de la columna clickeada en vista Día (precarga el turno nuevo).
+  const [newApptProfId, setNewApptProfId] = useState('')
+  // 'day' = una columna por profesional. Orden: lo elegido ahora → lo último
+  // elegido en este navegador → Semana (default para todos los roles).
+  const [viewPref, setViewPref] = useState<'week' | 'day' | null>(null)
+  const storedViewPref = useSyncExternalStore(noopSubscribe, readStoredView, () => null)
   const [editingAppt, setEditingAppt]   = useState<any>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [newBlockDate, setNewBlockDate] = useState<string | null>(null)
@@ -178,6 +255,7 @@ export default function AgendaPage() {
   // El calendario se cachea por semana → navegar semanas es instantáneo.
   const { data: me } = useMe()
   const { data: professionals = [] } = useProfessionals()
+  const viewMode: 'week' | 'day' = viewPref ?? storedViewPref ?? 'week'
   const calendarQuery = useCalendar(from, to)
 
   const appointments: any[] = calendarQuery.data?.appointments ?? []
@@ -321,6 +399,62 @@ export default function AgendaPage() {
     })
   }
 
+  // ── Vista de toda la clínica (Administrativo / varios profesionales) ──
+  const multiProf = professionals.length > 1
+  const isDayView = viewMode === 'day' && multiProf
+
+  function profNameById(id: string | null | undefined): string {
+    const p = professionals.find((x: any) => x.id === id)
+    return p ? `${p.first_name} ${p.last_name}` : ''
+  }
+
+  // Columnas de la vista Día: los profesionales (o el filtrado) + cualquier
+  // profesional con turnos ese día que no esté en la lista (p. ej. dado de baja).
+  const dayCols: any[] = (() => {
+    const base = selectedProfId ? professionals.filter((p: any) => p.id === selectedProfId) : professionals
+    const extra = new Map<string, any>()
+    for (const a of dayAppts) {
+      if (base.some((p: any) => p.id === a.professional_id) || extra.has(a.professional_id)) continue
+      const [first, ...rest] = String(a.professional_name ?? 'Profesional').split(' ')
+      extra.set(a.professional_id, { id: a.professional_id, first_name: first, last_name: rest.join(' '), color: a.professional_color })
+    }
+    return [...base, ...extra.values()]
+  })()
+  const dayGridTemplate = `48px repeat(${Math.max(1, dayCols.length)}, minmax(150px, 1fr))`
+
+  // Profesional con el que abre el panel de turno/bloqueo nuevo.
+  const panelDefaultProfId: string =
+    newApptProfId ||
+    selectedProfId ||
+    professionals.find((p: any) => p.id === userId)?.id ||
+    professionals[0]?.id ||
+    ''
+  const panelProfId: string = editingAppt?.professional_id || panelDefaultProfId
+
+  // Link de reserva online: es por profesional. El Administrativo no tiene
+  // agenda propia → usa el profesional filtrado.
+  const bookingProfId: string = selectedProfId || (professionals.some((p: any) => p.id === userId) ? userId : '')
+
+  function goToDay(dateStr: string) {
+    setSelectedDay(dateStr)
+    setWeekOffset(weekOffsetFor(dateStr))
+  }
+
+  function changeView(v: 'week' | 'day') {
+    setViewPref(v)
+    try { localStorage.setItem(VIEW_STORAGE_KEY, v) } catch { /* sin storage: no se recuerda */ }
+  }
+
+  function openNewAppt(date: string, time: string, profId = '') {
+    setNewApptSlot({ date, time })
+    setNewApptProfId(profId)
+    setPreviewDuration(45)
+    setEditingAppt(null)
+    setPanelTab('appt')
+    setPanelSide('right')
+    setShowPanel(true)
+  }
+
   const WeekNav = () => (
     <div className="flex items-center gap-2">
       <button onClick={() => setWeekOffset(w => w - 1)}
@@ -362,6 +496,12 @@ export default function AgendaPage() {
                     timeZone: 'America/Argentina/Buenos_Aires'
                   })} · {fmt24(selectedAppt.starts_at)}
                 </div>
+                {(selectedAppt.professional_name || profNameById(selectedAppt.professional_id)) && (
+                  <div className="flex items-center gap-1.5 mt-1.5 text-sm text-app2">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: professionalColor(selectedAppt) }} />
+                    <span className="truncate">{selectedAppt.professional_name || profNameById(selectedAppt.professional_id)}</span>
+                  </div>
+                )}
               </div>
               {/* Status badge */}
               <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${
@@ -447,6 +587,219 @@ export default function AgendaPage() {
       </div>
     )
   }
+
+  // Columna de la grilla (un día en vista Semana, un profesional en vista Día).
+  function renderGridColumn({ colKey, dateStr, isToday, dayApts, dayBlks, colWorkingHours, colProfId, showProfTag }: {
+    colKey: string
+    dateStr: string
+    isToday: boolean
+    dayApts: any[]
+    dayBlks: any[]
+    colWorkingHours: WorkingHours | null
+    colProfId?: string
+    showProfTag: boolean
+  }) {
+    const lanes = layoutLanes(dayApts)
+    return (
+                <div key={colKey}
+                  className={`relative border-l border-neutral-200 dark:border-neutral-800/50 ${isToday ? 'bg-[#00C4BC]/4' : ''}`}
+                  style={{ minHeight: `${HOURS.length * SLOT_H}px` }}
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      const y = e.clientY - rect.top
+                      const snappedSlots = Math.floor((y / SLOT_H) * 4) // 4 slots de 15 min por hora
+                      const gridMins = GRID_START_H * 60 + snappedSlots * 15
+                      const hour = Math.floor(gridMins / 60)
+                      const min = gridMins % 60
+                      const side = e.clientX > window.innerWidth * 0.55 ? 'left' : 'right'
+                      setPanelSide(side)
+                      setPanelTab('appt')
+                      setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}` })
+                      setPreviewDuration(45)
+                      setNewApptProfId(colProfId ?? '')
+                      setEditingAppt(null)
+                      setShowPanel(true)
+                    }
+                  }}>
+                  {HOURS.map((_, i) => (
+                    <div key={i}>
+                      {/* Línea de hora */}
+                      <div className="absolute w-full border-t border-neutral-200 dark:border-neutral-800/50"
+                        style={{ top: i * SLOT_H }} />
+                      {/* Líneas de 15 min */}
+                      <div className="absolute w-full border-t border-neutral-100 dark:border-neutral-800/25"
+                        style={{ top: i * SLOT_H + SLOT_H * 0.25 }} />
+                      {/* Línea de 30 min — más visible */}
+                      <div className="absolute w-full border-t border-neutral-200/70 dark:border-neutral-800/40"
+                        style={{ top: i * SLOT_H + SLOT_H * 0.5 }} />
+                      {/* Línea de 45 min */}
+                      <div className="absolute w-full border-t border-neutral-100 dark:border-neutral-800/25"
+                        style={{ top: i * SLOT_H + SLOT_H * 0.75 }} />
+                    </div>
+                  ))}
+
+                  {/* Horarios no laborales — bloquean clicks */}
+                  {nonWorkingBlocks(dateStr, colWorkingHours).map((block, i) => (
+                    <div
+                      key={`nw-${i}`}
+                      className="absolute left-0 right-0 z-[2] cursor-not-allowed"
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        top: block.top,
+                        height: block.height,
+                        background: 'repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(120,120,120,0.18) 5px, rgba(120,120,120,0.18) 6px)',
+                        backgroundColor: 'rgba(120,120,120,0.08)',
+                      }}
+                    />
+                  ))}
+
+                  {/* Schedule blocks */}
+                  {dayBlks.map(block => (
+                    <div key={block.id}
+                      onClick={() => setSelectedBlock(block)}
+                      className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400/60 bg-slate-400/10 px-1 py-0.5 cursor-pointer hover:bg-slate-400/18 transition-colors overflow-hidden"
+                      style={{
+                        top:    getSlotTop(block.starts_at),
+                        height: getSlotHeight(block.starts_at, block.ends_at),
+                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.08) 3px, rgba(100,116,139,0.08) 6px)',
+                      }}>
+                      <div className="text-[10px] font-bold text-slate-500 truncate">Bloqueado{showProfTag ? ` · ${professionalShortName(profNameById(block.professional_id))}` : ''}</div>
+                    </div>
+                  ))}
+
+                  {/* Preview block — bloqueo */}
+                  {showPanel && panelTab === 'block' && (!colProfId || colProfId === panelProfId) && blockPreview.startDate && blockPreview.startDate <= dateStr && (newBlockDate ?? selectedDay) >= dateStr && blockPreview.startDate <= (newBlockDate ?? selectedDay) && (() => {
+                    if (blockPreview.allDay) {
+                      return (
+                        <div className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 pointer-events-none z-10 overflow-hidden"
+                          style={{ top: 0, height: HOURS.length * SLOT_H, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.12) 3px, rgba(100,116,139,0.12) 6px)', backgroundColor: 'rgba(100,116,139,0.08)' }}>
+                          <div className="text-[11px] font-semibold text-slate-500 truncate leading-tight px-1.5 py-0.5">Bloqueado</div>
+                        </div>
+                      )
+                    }
+                    const ps = `${dateStr}T${blockPreview.startTime}:00-03:00`
+                    const pe = `${dateStr}T${blockPreview.endTime}:00-03:00`
+                    if (new Date(pe) <= new Date(ps)) return null
+                    const bH = getSlotHeight(ps, pe)
+                    return (
+                      <div className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 pointer-events-none z-10 overflow-hidden px-1.5 py-0.5"
+                        style={{ top: getSlotTop(ps), height: bH, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.12) 3px, rgba(100,116,139,0.12) 6px)', backgroundColor: 'rgba(100,116,139,0.08)' }}>
+                        <div className="text-[11px] font-semibold text-slate-500 truncate leading-tight">Bloqueado</div>
+                        {bH >= 28 && <div className="text-[10px] text-slate-400 truncate leading-tight">{blockPreview.startTime} – {blockPreview.endTime}</div>}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Preview block while creating / editing an appointment */}
+                  {showPanel && panelTab === 'appt' && (!colProfId || colProfId === panelProfId) && newApptSlot && newApptSlot.date === dateStr && (() => {
+                    const previewStart = `${newApptSlot.date}T${newApptSlot.time}:00-03:00`
+                    const previewEndMs = new Date(previewStart).getTime() + previewDuration * 60000
+                    const previewEnd = new Date(previewEndMs).toISOString()
+                    const blockH = getSlotHeight(previewStart, previewEnd)
+                    return (
+                      <div
+                        className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-[#00C4BC] bg-[#00C4BC]/15 border border-dashed border-[#00C4BC]/50 px-1.5 py-0.5 pointer-events-none z-10 overflow-hidden"
+                        style={{ top: getSlotTop(previewStart), height: blockH }}
+                      >
+                        {!editingAppt && <div className="text-[11px] font-semibold text-[#00C4BC] truncate leading-tight">Nuevo turno</div>}
+                        {!editingAppt && blockH >= 28 && (
+                          <div className="text-[10px] text-[#00C4BC]/80 truncate leading-tight">{fmt24(previewStart)} – {fmt24(previewEnd)}</div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Appointments */}
+                  {dayApts.map(appt => {
+                    const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
+                    const blockH = getSlotHeight(appt.starts_at, appt.ends_at)
+                    const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
+                    return (
+                      <div key={appt.id}
+                        className={`group absolute rounded border-l-[3px] cursor-pointer hover:z-10 hover:brightness-97 transition-all overflow-visible ${cfg.border} ${cfg.bg}`}
+                        style={{ top: getSlotTop(appt.starts_at), height: blockH, ...laneStyle(lanes.get(appt.id)), borderLeftColor: professionalColor(appt) }}
+                        onClick={() => setSelectedAppt(appt)}
+                      >
+                        {/* Contenido del bloque */}
+                        <div className="px-1.5 py-0.5 overflow-hidden h-full">
+                          <div className="flex items-center gap-1 min-w-0">
+                            {showProfTag && (
+                              <span className="flex-shrink-0 text-[8px] font-bold text-white rounded px-1 leading-[12px]"
+                                style={{ backgroundColor: professionalColor(appt) }}
+                                title={appt.professional_name ?? ''}>
+                                {professionalInitials(appt.professional_name)}
+                              </span>
+                            )}
+                            <div className={`min-w-0 text-[11px] font-bold leading-tight truncate ${cfg.textClass}`}>
+                              {appt.patient_name}
+                            </div>
+                          </div>
+                          {blockH >= 34 && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot} ${appt.status === 'in_progress' ? 'animate-pulse' : ''}`} />
+                              <span className={`text-[9px] truncate opacity-80 ${cfg.textClass}`}>
+                                {appt.appointment_type ?? cfg.label}
+                              </span>
+                              {appt.chief_complaint && (
+                                <AlertTriangle size={9} className="text-amber-400 flex-shrink-0" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Hover actions — aparecen debajo del bloque */}
+                        {!isDone && blockH >= 32 && (
+                          <div className="hidden group-hover:flex absolute left-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app/30 rounded-b-lg shadow-md mt-px w-max">
+                            {appt.status === 'pending' && (
+                              <button
+                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'confirmed') }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white transition-all"
+                              >
+                                <UserCheck size={10} /> Confirmar
+                              </button>
+                            )}
+                            {(appt.status === 'pending' || appt.status === 'confirmed') && (
+                              <button
+                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'in_progress') }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white transition-all"
+                              >
+                                <Play size={10} /> Iniciar
+                              </button>
+                            )}
+                            {appt.status === 'in_progress' && (
+                              <button
+                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'completed') }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-[#00C4BC] text-white hover:bg-[#00aaa3] transition-all"
+                              >
+                                <CheckCircle size={10} /> Atendido
+                              </button>
+                            )}
+                            <button
+                              onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'absent') }}
+                              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-surface2 text-app3 hover:bg-red-400/10 hover:text-red-400 transition-all"
+                            >
+                              <XCircle size={10} /> No vino
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+    )
+  }
+
+  const hoursGutter = (
+    <div>
+      {HOURS.map(h => (
+        <div key={h} className="relative border-t border-neutral-200 dark:border-neutral-800/50" style={{ height: SLOT_H }}>
+          <span className="absolute top-1 right-1.5 text-[10px] tabular-nums text-app3 leading-none">{h}</span>
+          <span className="absolute right-1.5 text-[9px] tabular-nums text-app3/40 leading-none" style={{ top: SLOT_H / 2 + 2 }}>:30</span>
+        </div>
+      ))}
+    </div>
+  )
 
   if (loading && appointments.length === 0) {
     return (
@@ -654,7 +1007,7 @@ export default function AgendaPage() {
                   className="rounded-xl border-l-2 border-l-slate-400/60 bg-slate-400/8 p-3 cursor-pointer active:scale-95 transition-transform">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-bold text-slate-600 dark:text-slate-300 truncate">🔒 Bloqueado</div>
+                      <div className="font-bold text-slate-600 dark:text-slate-300 truncate">🔒 Bloqueado{!selectedProfId && multiProf && profNameById(block.professional_id) ? ` · ${professionalShortName(profNameById(block.professional_id))}` : ''}</div>
                       {block.reason && <div className="text-sm text-slate-500 truncate">{block.reason}</div>}
                     </div>
                     <div className="text-right flex-shrink-0 font-mono text-sm font-bold text-slate-500">
@@ -675,7 +1028,8 @@ export default function AgendaPage() {
                 const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
                 const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
                 return (
-                  <div key={appt.id} className={`rounded-xl border-l-2 ${cfg.border} ${cfg.bg} overflow-hidden`}>
+                  <div key={appt.id} className={`rounded-xl border-l-[3px] ${cfg.border} ${cfg.bg} overflow-hidden`}
+                    style={{ borderLeftColor: professionalColor(appt) }}>
                     {/* Main row */}
                     <div className="flex items-start gap-3 p-2.5" onClick={() => setSelectedAppt(appt)}>
                       {/* Hora */}
@@ -685,6 +1039,12 @@ export default function AgendaPage() {
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-app text-sm truncate">{appt.patient_name}</div>
+                        {!selectedProfId && multiProf && appt.professional_name && (
+                          <div className="flex items-center gap-1 mt-0.5 text-xs text-app2 min-w-0">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: professionalColor(appt) }} />
+                            <span className="truncate">{appt.professional_name}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 mt-0.5">
                           {appt.appointment_type && <span className="text-xs text-app2 truncate">{appt.appointment_type}</span>}
                           {appt.duration_minutes && (
@@ -742,10 +1102,32 @@ export default function AgendaPage() {
       <div className="hidden md:flex flex-col flex-1 overflow-hidden">
         {/* Barra superior con navegación */}
         <div className="px-6 py-2 border-b border-neutral-200 dark:border-neutral-800/50 flex items-center justify-between flex-shrink-0">
-          <span className="text-sm text-app2">
-            {weekDates[0].toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
-            {weekDates[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </span>
+          <div className="flex items-center gap-3">
+            {multiProf && (
+              <div className="flex bg-surface2 border border-app rounded-lg p-0.5 text-sm font-medium">
+                {(['day', 'week'] as const).map(v => (
+                  <button key={v}
+                    onClick={() => {
+                      if (v === 'day' && !weekDates.some(d => formatDate(d) === selectedDay)) {
+                        setSelectedDay(weekOffset === 0 ? today : formatDate(weekDates[0]))
+                      }
+                      changeView(v)
+                    }}
+                    className={`px-3 py-1 rounded-md transition-colors ${viewMode === v ? 'bg-surface text-app shadow-sm' : 'text-app3 hover:text-app'}`}>
+                    {v === 'day' ? 'Día' : 'Semana'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <span className="text-sm text-app2 capitalize">
+              {isDayView
+                ? new Date(selectedDay + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                : <>
+                    {weekDates[0].toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
+                    {weekDates[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </>}
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             {professionals.length > 1 && (
               <select
@@ -768,19 +1150,19 @@ export default function AgendaPage() {
               {refreshing ? 'Actualizando...' : 'Actualizar'}
             </button>
             <button
-              onClick={() => { setNewBlockDate(selectedDay); setPanelTab('block'); setPanelSide('right'); setShowPanel(true) }}
+              onClick={() => { setNewBlockDate(selectedDay); setNewApptProfId(''); setPanelTab('block'); setPanelSide('right'); setShowPanel(true) }}
               className="flex items-center gap-1.5 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/30 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
               🔒 Bloquear horario
             </button>
             <div className="relative group">
               <button
                 onClick={() => {
-                  const link = `${window.location.origin}/booking/${userId}`
+                  const link = `${window.location.origin}/booking/${bookingProfId}`
                   navigator.clipboard.writeText(link)
                   setLinkCopied(true)
                   setTimeout(() => setLinkCopied(false), 2000)
                 }}
-                disabled={!userId}
+                disabled={!bookingProfId}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   linkCopied
                     ? 'bg-[#E6F8F1] border border-[#00C4BC]/50 text-[#00C4BC]'
@@ -792,245 +1174,115 @@ export default function AgendaPage() {
                 <div className="bg-neutral-900 text-white text-xs rounded-xl px-3 py-2.5 shadow-lg leading-relaxed">
                   <div className="absolute right-4 bottom-full w-0 h-0 border-x-4 border-x-transparent border-b-4 border-b-neutral-900" />
                   <div className="font-semibold mb-0.5">Link de reserva online</div>
-                  Copiá este link y compartilo con tus pacientes. Ellos pueden elegir un horario y reservar un turno sin que tengas que llamarlos.
+                  {bookingProfId
+                    ? <>Copiá este link{selectedProfId && selectedProfId !== userId ? ` de ${profNameById(selectedProfId)}` : ''} y compartilo con los pacientes. Pueden elegir un horario y reservar un turno sin que tengas que llamarlos.</>
+                    : 'El link de reserva es por profesional: elegí un profesional en el filtro para copiar el suyo.'}
                 </div>
               </div>
             </div>
-            <WeekNav />
+            {isDayView ? (
+              <div className="flex items-center gap-2">
+                <button onClick={() => goToDay(addDaysStr(selectedDay, -1))}
+                  className="bg-surface2 hover:bg-surface3 px-3 py-1.5 rounded-lg text-sm transition-colors">←</button>
+                <button onClick={() => goToDay(today)}
+                  className="bg-surface2 hover:bg-surface3 px-3 py-1.5 rounded-lg text-sm transition-colors">Hoy</button>
+                <button onClick={() => goToDay(addDaysStr(selectedDay, 1))}
+                  className="bg-surface2 hover:bg-surface3 px-3 py-1.5 rounded-lg text-sm transition-colors">→</button>
+              </div>
+            ) : <WeekNav />}
           </div>
         </div>
 
         {/* Contenedor scroll — header sticky + grid body */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden">
-          {/* Header días sticky */}
-          <div className="grid sticky top-0 z-20 bg-app border-b border-neutral-200 dark:border-neutral-800/50"
-            style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
-            <div />
-            {weekDates.map((d, i) => {
-              const isToday = formatDate(d) === today
-              return (
-                <div key={i} className="py-2 text-center border-l border-neutral-200 dark:border-neutral-800/50">
-                  <div className="text-[10px] text-app3 uppercase tracking-wider">{DAYS[i]}</div>
-                  <div className={`text-base font-bold mx-auto w-7 h-7 flex items-center justify-center rounded-full ${
-                    isToday ? 'bg-[#00C4BC] text-white' : 'text-app'
-                  }`}>
-                    {d.getDate()}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Grid body */}
-          <div className="grid" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
-            {/* Columna horas */}
-            <div>
-              {HOURS.map(h => (
-                <div key={h} className="relative border-t border-neutral-200 dark:border-neutral-800/50" style={{ height: SLOT_H }}>
-                  <span className="absolute top-1 right-1.5 text-[10px] tabular-nums text-app3 leading-none">{h}</span>
-                  <span className="absolute right-1.5 text-[9px] tabular-nums text-app3/40 leading-none" style={{ top: SLOT_H / 2 + 2 }}>:30</span>
-                </div>
-              ))}
+        <div ref={scrollRef} className={`flex-1 overflow-y-auto ${isDayView ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
+          {isDayView ? (
+            // ── Vista Día: una columna por profesional ──
+            <div style={{ minWidth: 48 + dayCols.length * 150 }}>
+              <div className="grid sticky top-0 z-20 bg-app border-b border-neutral-200 dark:border-neutral-800/50"
+                style={{ gridTemplateColumns: dayGridTemplate }}>
+                <div />
+                {dayCols.map((p: any) => {
+                  const count = dayAppts.filter(a => a.professional_id === p.id).length
+                  return (
+                    <button key={p.id}
+                      onClick={() => setSelectedProfId(prev => prev === p.id ? '' : p.id)}
+                      title={selectedProfId === p.id ? 'Ver todos los profesionales' : `Ver solo a ${p.first_name} ${p.last_name}`}
+                      className="py-2 px-2 border-l border-neutral-200 dark:border-neutral-800/50 flex items-center justify-center gap-2 min-w-0 hover:bg-surface2/60 transition-colors">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: professionalColor(p) }} />
+                      <span className="text-sm font-semibold text-app truncate">{p.first_name} {p.last_name}</span>
+                      <span className="text-[11px] text-app3 flex-shrink-0 tabular-nums">{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="grid" style={{ gridTemplateColumns: dayGridTemplate }}>
+                {hoursGutter}
+                {dayCols.map((p: any) => renderGridColumn({
+                  colKey: p.id,
+                  dateStr: selectedDay,
+                  isToday: selectedDay === today,
+                  dayApts: dayAppts.filter(a => a.professional_id === p.id),
+                  dayBlks: dayBlocks.filter(b => b.professional_id === p.id),
+                  colWorkingHours: p.schedule_config?.working_hours ?? null,
+                  colProfId: p.id,
+                  showProfTag: false,
+                }))}
+              </div>
             </div>
-
-            {/* Columnas días */}
-            {weekDates.map((d, dayIdx) => {
-              const dateStr = formatDate(d)
-              const isToday = dateStr === today
-              const dayApts = apptsByDay(dateStr)
-              const dayBlks = blocksByDay(dateStr)
-              return (
-                <div key={dayIdx}
-                  className={`relative border-l border-neutral-200 dark:border-neutral-800/50 ${isToday ? 'bg-[#00C4BC]/4' : ''}`}
-                  style={{ minHeight: `${HOURS.length * SLOT_H}px` }}
-                  onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      const y = e.clientY - rect.top
-                      const snappedSlots = Math.floor((y / SLOT_H) * 4) // 4 slots de 15 min por hora
-                      const gridMins = GRID_START_H * 60 + snappedSlots * 15
-                      const hour = Math.floor(gridMins / 60)
-                      const min = gridMins % 60
-                      const side = e.clientX > window.innerWidth * 0.55 ? 'left' : 'right'
-                      setPanelSide(side)
-                      setPanelTab('appt')
-                      setNewApptSlot({ date: dateStr, time: `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}` })
-                      setPreviewDuration(45)
-                      setEditingAppt(null)
-                      setShowPanel(true)
-                    }
-                  }}>
-                  {HOURS.map((_, i) => (
-                    <div key={i}>
-                      {/* Línea de hora */}
-                      <div className="absolute w-full border-t border-neutral-200 dark:border-neutral-800/50"
-                        style={{ top: i * SLOT_H }} />
-                      {/* Líneas de 15 min */}
-                      <div className="absolute w-full border-t border-neutral-100 dark:border-neutral-800/25"
-                        style={{ top: i * SLOT_H + SLOT_H * 0.25 }} />
-                      {/* Línea de 30 min — más visible */}
-                      <div className="absolute w-full border-t border-neutral-200/70 dark:border-neutral-800/40"
-                        style={{ top: i * SLOT_H + SLOT_H * 0.5 }} />
-                      {/* Línea de 45 min */}
-                      <div className="absolute w-full border-t border-neutral-100 dark:border-neutral-800/25"
-                        style={{ top: i * SLOT_H + SLOT_H * 0.75 }} />
+          ) : (
+            <>
+              {/* Header días sticky */}
+              <div className="grid sticky top-0 z-20 bg-app border-b border-neutral-200 dark:border-neutral-800/50"
+                style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+                <div />
+                {weekDates.map((d, i) => {
+                  const isToday = formatDate(d) === today
+                  return (
+                    <div key={i}
+                      onClick={multiProf ? () => { setSelectedDay(formatDate(d)); changeView('day') } : undefined}
+                      title={multiProf ? 'Ver el día por profesional' : undefined}
+                      className={`py-2 text-center border-l border-neutral-200 dark:border-neutral-800/50 ${multiProf ? 'cursor-pointer hover:bg-surface2/60 transition-colors' : ''}`}>
+                      <div className="text-[10px] text-app3 uppercase tracking-wider">{DAYS[i]}</div>
+                      <div className={`text-base font-bold mx-auto w-7 h-7 flex items-center justify-center rounded-full ${
+                        isToday ? 'bg-[#00C4BC] text-white' : 'text-app'
+                      }`}>
+                        {d.getDate()}
+                      </div>
                     </div>
-                  ))}
+                  )
+                })}
+              </div>
 
-                  {/* Horarios no laborales — bloquean clicks */}
-                  {nonWorkingBlocks(dateStr, workingHours).map((block, i) => (
-                    <div
-                      key={`nw-${i}`}
-                      className="absolute left-0 right-0 z-[2] cursor-not-allowed"
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        top: block.top,
-                        height: block.height,
-                        background: 'repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(120,120,120,0.18) 5px, rgba(120,120,120,0.18) 6px)',
-                        backgroundColor: 'rgba(120,120,120,0.08)',
-                      }}
-                    />
-                  ))}
-
-                  {/* Schedule blocks */}
-                  {dayBlks.map(block => (
-                    <div key={block.id}
-                      onClick={() => setSelectedBlock(block)}
-                      className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400/60 bg-slate-400/10 px-1 py-0.5 cursor-pointer hover:bg-slate-400/18 transition-colors overflow-hidden"
-                      style={{
-                        top:    getSlotTop(block.starts_at),
-                        height: getSlotHeight(block.starts_at, block.ends_at),
-                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.08) 3px, rgba(100,116,139,0.08) 6px)',
-                      }}>
-                      <div className="text-[10px] font-bold text-slate-500 truncate">Bloqueado</div>
-                    </div>
-                  ))}
-
-                  {/* Preview block — bloqueo */}
-                  {showPanel && panelTab === 'block' && blockPreview.startDate && blockPreview.startDate <= dateStr && (newBlockDate ?? selectedDay) >= dateStr && blockPreview.startDate <= (newBlockDate ?? selectedDay) && (() => {
-                    if (blockPreview.allDay) {
-                      return (
-                        <div className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 pointer-events-none z-10 overflow-hidden"
-                          style={{ top: 0, height: HOURS.length * SLOT_H, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.12) 3px, rgba(100,116,139,0.12) 6px)', backgroundColor: 'rgba(100,116,139,0.08)' }}>
-                          <div className="text-[11px] font-semibold text-slate-500 truncate leading-tight px-1.5 py-0.5">Bloqueado</div>
-                        </div>
-                      )
-                    }
-                    const ps = `${dateStr}T${blockPreview.startTime}:00-03:00`
-                    const pe = `${dateStr}T${blockPreview.endTime}:00-03:00`
-                    if (new Date(pe) <= new Date(ps)) return null
-                    const bH = getSlotHeight(ps, pe)
-                    return (
-                      <div className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-slate-400 pointer-events-none z-10 overflow-hidden px-1.5 py-0.5"
-                        style={{ top: getSlotTop(ps), height: bH, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(100,116,139,0.12) 3px, rgba(100,116,139,0.12) 6px)', backgroundColor: 'rgba(100,116,139,0.08)' }}>
-                        <div className="text-[11px] font-semibold text-slate-500 truncate leading-tight">Bloqueado</div>
-                        {bH >= 28 && <div className="text-[10px] text-slate-400 truncate leading-tight">{blockPreview.startTime} – {blockPreview.endTime}</div>}
-                      </div>
-                    )
-                  })()}
-
-                  {/* Preview block while creating / editing an appointment */}
-                  {showPanel && panelTab === 'appt' && newApptSlot && newApptSlot.date === dateStr && (() => {
-                    const previewStart = `${newApptSlot.date}T${newApptSlot.time}:00-03:00`
-                    const previewEndMs = new Date(previewStart).getTime() + previewDuration * 60000
-                    const previewEnd = new Date(previewEndMs).toISOString()
-                    const blockH = getSlotHeight(previewStart, previewEnd)
-                    return (
-                      <div
-                        className="absolute left-0.5 right-0.5 rounded border-l-2 border-l-[#00C4BC] bg-[#00C4BC]/15 border border-dashed border-[#00C4BC]/50 px-1.5 py-0.5 pointer-events-none z-10 overflow-hidden"
-                        style={{ top: getSlotTop(previewStart), height: blockH }}
-                      >
-                        {!editingAppt && <div className="text-[11px] font-semibold text-[#00C4BC] truncate leading-tight">Nuevo turno</div>}
-                        {!editingAppt && blockH >= 28 && (
-                          <div className="text-[10px] text-[#00C4BC]/80 truncate leading-tight">{fmt24(previewStart)} – {fmt24(previewEnd)}</div>
-                        )}
-                      </div>
-                    )
-                  })()}
-
-                  {/* Appointments */}
-                  {dayApts.map(appt => {
-                    const cfg = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.pending
-                    const blockH = getSlotHeight(appt.starts_at, appt.ends_at)
-                    const isDone = ['completed', 'absent', 'cancelled'].includes(appt.status)
-                    return (
-                      <div key={appt.id}
-                        className={`group absolute left-0.5 right-0.5 rounded border-l-2 cursor-pointer hover:z-10 hover:brightness-97 transition-all overflow-visible ${cfg.border} ${cfg.bg}`}
-                        style={{ top: getSlotTop(appt.starts_at), height: blockH }}
-                        onClick={() => setSelectedAppt(appt)}
-                      >
-                        {/* Contenido del bloque */}
-                        <div className="px-1.5 py-0.5 overflow-hidden h-full">
-                          <div className={`text-[11px] font-bold leading-tight truncate ${cfg.textClass}`}>
-                            {appt.patient_name}
-                          </div>
-                          {blockH >= 34 && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot} ${appt.status === 'in_progress' ? 'animate-pulse' : ''}`} />
-                              <span className={`text-[9px] truncate opacity-80 ${cfg.textClass}`}>
-                                {appt.appointment_type ?? cfg.label}
-                              </span>
-                              {appt.chief_complaint && (
-                                <AlertTriangle size={9} className="text-amber-400 flex-shrink-0" />
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Hover actions — aparecen debajo del bloque */}
-                        {!isDone && blockH >= 32 && (
-                          <div className="hidden group-hover:flex absolute left-0 top-full z-30 gap-1 p-1.5 bg-surface border border-app/30 rounded-b-lg shadow-md mt-px w-max">
-                            {appt.status === 'pending' && (
-                              <button
-                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'confirmed') }}
-                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-[#E6F8F1] text-[#00C4BC] hover:bg-[#00C4BC] hover:text-white transition-all"
-                              >
-                                <UserCheck size={10} /> Confirmar
-                              </button>
-                            )}
-                            {(appt.status === 'pending' || appt.status === 'confirmed') && (
-                              <button
-                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'in_progress') }}
-                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-violet-400/10 text-violet-400 hover:bg-violet-400 hover:text-white transition-all"
-                              >
-                                <Play size={10} /> Iniciar
-                              </button>
-                            )}
-                            {appt.status === 'in_progress' && (
-                              <button
-                                onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'completed') }}
-                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-[#00C4BC] text-white hover:bg-[#00aaa3] transition-all"
-                              >
-                                <CheckCircle size={10} /> Atendido
-                              </button>
-                            )}
-                            <button
-                              onClick={e => { e.stopPropagation(); updateStatus(appt.id, 'absent') }}
-                              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded bg-surface2 text-app3 hover:bg-red-400/10 hover:text-red-400 transition-all"
-                            >
-                              <XCircle size={10} /> No vino
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
+              {/* Grid body */}
+              <div className="grid" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+                {hoursGutter}
+                {weekDates.map((d, dayIdx) => {
+                  const dateStr = formatDate(d)
+                  return renderGridColumn({
+                    colKey: String(dayIdx),
+                    dateStr,
+                    isToday: dateStr === today,
+                    dayApts: apptsByDay(dateStr),
+                    dayBlks: blocksByDay(dateStr),
+                    colWorkingHours: workingHours,
+                    showProfTag: !selectedProfId && multiProf,
+                  })
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* FABs */}
       <button
-        onClick={() => { setNewApptSlot({ date: selectedDay, time: '09:00' }); setPreviewDuration(45); setEditingAppt(null); setPanelTab('appt'); setPanelSide('right'); setShowPanel(true) }}
+        onClick={() => openNewAppt(selectedDay, '09:00')}
         className="fixed bottom-24 right-6 md:bottom-6 md:right-6 w-14 h-14 bg-[#00C4BC] hover:bg-[#00aaa3] rounded-full flex items-center justify-center text-2xl shadow-lg transition-colors z-30"
       >
         +
       </button>
       <button
-        onClick={() => { setNewBlockDate(selectedDay); setPanelTab('block'); setPanelSide('right'); setShowPanel(true) }}
+        onClick={() => { setNewBlockDate(selectedDay); setNewApptProfId(''); setPanelTab('block'); setPanelSide('right'); setShowPanel(true) }}
         className="md:hidden fixed bottom-24 right-24 w-12 h-12 bg-slate-500 hover:bg-slate-600 rounded-full flex items-center justify-center text-lg shadow-lg transition-colors z-30"
         title="Bloquear horario"
       >
@@ -1038,18 +1290,18 @@ export default function AgendaPage() {
       </button>
       <button
         onClick={() => {
-          const link = `${window.location.origin}/booking/${userId}`
+          const link = `${window.location.origin}/booking/${bookingProfId}`
           navigator.clipboard.writeText(link)
           setLinkCopied(true)
           setTimeout(() => setLinkCopied(false), 2000)
         }}
-        disabled={!userId}
+        disabled={!bookingProfId}
         className={`md:hidden fixed bottom-24 right-40 w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-lg transition-all z-30 font-medium ${
           linkCopied
             ? 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
             : 'bg-[#00C4BC] hover:bg-[#00aaa3] text-white'
         } disabled:opacity-60`}
-        title="Copiar link de agenda"
+        title={bookingProfId ? 'Copiar link de agenda' : 'Elegí un profesional para copiar su link de agenda'}
       >
         {linkCopied ? '✓' : '📋'}
       </button>
@@ -1064,12 +1316,7 @@ export default function AgendaPage() {
           professionals={professionals}
           clinicName={clinicName}
           clinicAddress={clinicAddress}
-          defaultProfessionalId={
-            selectedProfId ||
-            professionals.find((p: any) => p.id === userId)?.id ||
-            professionals[0]?.id ||
-            ''
-          }
+          defaultProfessionalId={panelDefaultProfId}
           editingAppt={editingAppt}
           onClose={() => { setShowPanel(false); setEditingAppt(null) }}
           onApptCreated={async (professionalId) => {
@@ -1101,6 +1348,12 @@ export default function AgendaPage() {
               <div className="w-10 h-10 rounded-full bg-slate-400/20 flex items-center justify-center text-xl">🔒</div>
               <div>
                 <div className="font-bold text-app">Horario bloqueado</div>
+                {profNameById(selectedBlock.professional_id) && (
+                  <div className="flex items-center gap-1.5 text-sm text-app2">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: professionalColor(professionals.find((x: any) => x.id === selectedBlock.professional_id)) }} />
+                    {profNameById(selectedBlock.professional_id)}
+                  </div>
+                )}
                 <div className="text-sm text-app3">
                   {new Date(selectedBlock.starts_at).toLocaleString('es-AR', {
                     weekday: 'short', day: 'numeric', month: 'short',
@@ -1228,6 +1481,9 @@ function AgendaPanel({
       <div className="flex-1 overflow-y-auto">
         {tab === 'appt' || editingAppt
           ? <PanelApptForm
+              // Remonta al pasar de "nuevo" a "editar" (o entre turnos): el estado
+              // inicial (professionalId, etc.) sale del turno que se edita.
+              key={editingAppt?.id ?? 'new'}
               token={token}
               date={apptSlot?.date ?? blockDate}
               time={apptSlot?.time ?? '09:00'}
@@ -1337,6 +1593,15 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
     setProfessionalId(defaultProfessionalId)
   }, [defaultProfessionalId, professionalId])
 
+  // Vista Día: si con el panel abierto se clickea un hueco en la columna de
+  // otro profesional, el turno nuevo pasa a ser de ese profesional.
+  const prevDefaultProfRef = useRef(defaultProfessionalId)
+  useEffect(() => {
+    if (prevDefaultProfRef.current === defaultProfessionalId) return
+    prevDefaultProfRef.current = defaultProfessionalId
+    if (!editingAppt && defaultProfessionalId) setProfessionalId(defaultProfessionalId)
+  }, [defaultProfessionalId, editingAppt])
+
   const selectedPatient = selectedPatientData
 
   useEffect(() => {
@@ -1410,6 +1675,7 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
         await apiFetch(`/appointments/${editingAppt.id}`, {
           method: 'PATCH', token,
           body: JSON.stringify({
+            professional_id:  professionalId,
             starts_at:        startsAt,
             ends_at:          endsAt,
             duration_minutes: Number(form.duration_minutes),

@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/queries'
 import { invalidateProfileCache } from '@/lib/profileCache'
 import { DISCIPLINES, DISCIPLINE_LABELS, normalizeDiscipline, type Discipline } from '@/lib/capabilities'
+import { ROLE_LABELS, normalizeRole } from '@/lib/permissions'
 
 // Activación progresiva: con el flag apagado no se muestra el cambio de especialidad
 // (todos quedan en odontología). La barrera real está en el backend.
@@ -1055,10 +1056,45 @@ function LicenseSection({
   )
 }
 
+// Identifica la cuenta abierta (útil cuando varios profesionales comparten equipo).
+function CurrentUserCard({ me, showClinicalInfo }: { me: any; showClinicalInfo: boolean }) {
+  if (!me) return null
+  const fullName = [me.first_name, me.last_name].filter(Boolean).join(' ') || me.email || 'Usuario'
+  const initials = [me.first_name, me.last_name]
+    .filter(Boolean)
+    .map((n: string) => n.trim()[0]?.toUpperCase() ?? '')
+    .join('') || fullName[0]?.toUpperCase()
+  const role = normalizeRole(me.role)
+  const clinicName = me.clinics?.name
+  const discipline = showClinicalInfo && me.discipline ? DISCIPLINE_LABELS[normalizeDiscipline(me.discipline)] : null
+  const license = showClinicalInfo ? me.license_number : null
+
+  return (
+    <div className="bg-surface border border-app rounded-2xl p-5 mb-6 flex items-center gap-4">
+      <div className="w-12 h-12 rounded-full bg-[#00C4BC]/15 text-[#00A39C] dark:text-[#00C4BC] flex items-center justify-center font-semibold text-lg shrink-0">
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-app3 mb-0.5">Sesión iniciada como</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-base font-semibold text-app truncate">{fullName}</span>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#E6F8F1] text-[#00A39C] dark:bg-[#00C4BC]/15 dark:text-[#00C4BC]">
+            {ROLE_LABELS[role]}
+          </span>
+        </div>
+        <p className="text-xs text-app3 mt-1 truncate">
+          {[me.email, clinicName, discipline, license ? `Mat. ${license}` : null].filter(Boolean).join(' · ')}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [token, setToken]               = useState('')
   const [professionals, setProfessionals] = useState<any[]>([])
   const [myId, setMyId]                 = useState('')
+  const [me, setMe]                     = useState<any>(null)
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS)
   const [defaultDuration, setDefaultDuration] = useState(45)
   const [loading, setLoading]           = useState(true)
@@ -1093,6 +1129,7 @@ export default function SettingsPage() {
       ])
       const myUserId = meData.data.id
       setMyId(myUserId)
+      setMe(meData.data)
 
       const profs: any[] = profData.data ?? []
       setProfessionals(profs)
@@ -1241,6 +1278,11 @@ export default function SettingsPage() {
       <p className="text-app3 text-sm mb-8">
         {isClinicalUser ? 'Gestioná los horarios y la facturación de tu clínica.' : 'Preferencias de tu cuenta.'}
       </p>
+
+      <CurrentUserCard
+        me={me && selfProfessional ? { ...me, ...selfProfessional, clinics: me.clinics } : me}
+        showClinicalInfo={isClinicalUser}
+      />
 
       {!isClinicalUser ? (
         <div className="max-w-xl">

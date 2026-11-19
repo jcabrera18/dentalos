@@ -248,9 +248,10 @@ export function useProfessionals(opts: { includeAdministrative?: boolean } = {})
 // ── Calendario semanal (turnos + bloqueos) ───────────────
 export type CalendarData = { appointments: any[]; blocks: any[] }
 
-export function useCalendar(from: string, to: string) {
+export function useCalendar(from: string, to: string, opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.calendar(from, to),
+    enabled: opts.enabled ?? true,
     queryFn: async (): Promise<CalendarData> => {
       const res = await authedApiFetch(`/appointments/calendar?from=${from}&to=${to}`)
       return {
@@ -367,9 +368,11 @@ export function useUpdateAppointmentStatus() {
       if (ctx?.prev) qc.setQueryData(queryKeys.dashboard, ctx.prev)
     },
 
-    // Siempre revalidamos contra el server al terminar.
+    // Siempre revalidamos contra el server al terminar (dashboard y calendario:
+    // el dashboard del Administrativo confirma turnos de mañana desde el calendario).
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.dashboard })
+      void qc.invalidateQueries({ queryKey: ['appointments', 'calendar'] })
     },
   })
 }
