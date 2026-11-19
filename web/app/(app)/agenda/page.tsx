@@ -5,11 +5,13 @@ import { createClient } from '@/lib/supabase'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMe, useProfessionals, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
+import { useMe, useProfessionals, usePermissions, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, CheckCircle2, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight, Share2, Download, Copy, MapPin } from 'lucide-react'
 import { consultationTypesFor, DISCIPLINE_LABELS, normalizeDiscipline } from '@/lib/capabilities'
 import { generateAppointmentImage, type AppointmentCardData } from '@/components/generateReceipt'
+import { AppointmentContactLine } from '@/components/AppointmentContactLine'
+import { CONTACT_RELATIONSHIPS, GUARDIAN_RELATIONSHIPS } from '@/lib/patientContact'
 
 const HOURS = ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -374,6 +376,8 @@ export default function AgendaPage() {
                 {cfg.label}
               </span>
             </div>
+
+            <AppointmentContactLine patientId={selectedAppt.patient_id} />
 
             {selectedAppt.chief_complaint && (
               <div className="mt-3 bg-surface2 rounded-xl px-3 py-2.5 border-l-2 border-amber-400 flex items-start gap-2">
@@ -1239,6 +1243,8 @@ function AgendaPanel({
             />
           : <PanelBlockForm
               token={token}
+              professionals={professionals}
+              defaultProfessionalId={defaultProfessionalId}
               defaultDate={blockDate}
               defaultTime={apptSlot?.time ?? '09:00'}
               onClose={onClose}
@@ -1285,6 +1291,10 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
   const [newPatientName, setNewPatientName] = useState('')
   const [newPatientLastName, setNewPatientLastName] = useState('')
   const [newPatientPhone, setNewPatientPhone] = useState('')
+  // Paciente menor: el teléfono es del tutor y se guarda también como contacto.
+  const [newPatientIsMinor, setNewPatientIsMinor] = useState(false)
+  const [newGuardianName, setNewGuardianName] = useState('')
+  const [newGuardianRel, setNewGuardianRel] = useState('')
   const [creatingPatient, setCreatingPatient] = useState(false)
   const [form, setForm] = useState({
     date: initDate, time: initTime,
@@ -1501,6 +1511,13 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
           first_name: newPatientName,
           last_name:  newPatientLastName || '.',
           phone:      newPatientPhone.trim(),
+          ...(newPatientIsMinor && newGuardianName.trim() ? {
+            contact_name:               newGuardianName.trim(),
+            contact_relationship:       newGuardianRel || null,
+            contact_phone:              newPatientPhone.trim(),
+            contact_is_legal_guardian:  GUARDIAN_RELATIONSHIPS.includes(newGuardianRel),
+            contact_receives_reminders: true,
+          } : {}),
         })
       })
       setSelectedPatientData(data.data)
@@ -1509,6 +1526,9 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
       setNewPatientName('')
       setNewPatientLastName('')
       setNewPatientPhone('')
+      setNewPatientIsMinor(false)
+      setNewGuardianName('')
+      setNewGuardianRel('')
     } catch (err: any) {
       console.error(err)
     } finally {
@@ -1641,8 +1661,25 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
                   placeholder="Apellido"
                   className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
+              <label className="flex items-center gap-2 text-xs text-app2 mb-2 cursor-pointer">
+                <input type="checkbox" checked={newPatientIsMinor} onChange={e => setNewPatientIsMinor(e.target.checked)}
+                  className="accent-[#00C4BC]" />
+                Es menor de edad
+              </label>
+              {newPatientIsMinor && (
+                <div className="grid grid-cols-[1fr_120px] gap-2 mb-2">
+                  <input type="text" value={newGuardianName} onChange={e => setNewGuardianName(e.target.value)}
+                    placeholder="Nombre del tutor"
+                    className="bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                  <select value={newGuardianRel} onChange={e => setNewGuardianRel(e.target.value)}
+                    className="bg-surface3 border border-app rounded-lg px-2 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
+                    <option value="">Vínculo</option>
+                    {CONTACT_RELATIONSHIPS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </div>
+              )}
               <input type="tel" value={newPatientPhone} onChange={e => setNewPatientPhone(e.target.value)}
-                placeholder="Teléfono"
+                placeholder={newPatientIsMinor ? 'Teléfono del tutor (WhatsApp)' : 'Teléfono'}
                 className="w-full bg-surface3 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC] mb-2" />
               <div className="flex gap-2">
                 <button type="button" onClick={() => { setNewPatientMode(false); setNewPatientPhone('') }}
@@ -1879,8 +1916,10 @@ function PanelApptForm({ token, date, time, professionals, clinicName, clinicAdd
   )
 }
 
-function PanelBlockForm({ token, defaultDate, defaultTime, onClose, onCreated, onBlockPreviewChange }: {
+function PanelBlockForm({ token, professionals, defaultProfessionalId, defaultDate, defaultTime, onClose, onCreated, onBlockPreviewChange }: {
   token: string
+  professionals: any[]
+  defaultProfessionalId: string
   defaultDate: string
   defaultTime: string
   onClose: () => void
@@ -1902,6 +1941,11 @@ function PanelBlockForm({ token, defaultDate, defaultTime, onClose, onCreated, o
   const [endTime, setEndTime]     = useState(() => endFromStart(defaultTime))
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
+  // Owner/admin/Administrativo pueden bloquear la agenda de cualquier profesional;
+  // un profesional bloquea solo la suya (la API lo valida igual).
+  const access = usePermissions()
+  const canPickProfessional = access.isOwnerOrAdmin || !access.clinicalAccess
+  const [blockProfessionalId, setBlockProfessionalId] = useState(defaultProfessionalId)
 
   const [showStartDatePicker, setShowStartDatePicker] = useState(false)
   const [showEndDatePicker, setShowEndDatePicker]     = useState(false)
@@ -1951,7 +1995,16 @@ function PanelBlockForm({ token, defaultDate, defaultTime, onClose, onCreated, o
     if (new Date(endsAt) <= new Date(startsAt)) { setError('La fecha/hora de fin debe ser posterior a la de inicio.'); return }
     setLoading(true)
     try {
-      await apiFetch('/schedule-blocks', { method: 'POST', token, body: JSON.stringify({ starts_at: startsAt, ends_at: endsAt, reason: reason || undefined }) })
+      await apiFetch('/schedule-blocks', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          starts_at: startsAt,
+          ends_at: endsAt,
+          reason: reason || undefined,
+          professional_id: canPickProfessional && blockProfessionalId ? blockProfessionalId : undefined,
+        }),
+      })
       onCreated()
     } catch (err: any) {
       setError(err.message ?? 'Error al crear el bloqueo.')
@@ -2046,6 +2099,22 @@ function PanelBlockForm({ token, defaultDate, defaultTime, onClose, onCreated, o
   return (
     <div className="p-5">
       <form onSubmit={handleSubmit} className="space-y-5">
+        {canPickProfessional && professionals.length > 0 && (
+          <div>
+            <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Profesional</label>
+            <select
+              value={blockProfessionalId}
+              onChange={e => setBlockProfessionalId(e.target.value)}
+              required
+              className="w-full bg-surface2 border border-app rounded-xl px-4 py-3 text-app text-sm focus:outline-none focus:border-slate-400"
+            >
+              {!blockProfessionalId && <option value="">Elegí un profesional</option>}
+              {professionals.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-2">Motivo del bloqueo</label>
           <input type="text" value={reason} onChange={e => setReason(e.target.value)}

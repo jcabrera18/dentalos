@@ -6,6 +6,7 @@ Detalle de implementación en el backend (`../dentalos-api/src/modules/` y `src/
 - `notifications/service.ts` (worker) renderiza y envía; `notifications/routes.ts` expone envío manual, recordatorios masivos y webhooks.
 - Cola BullMQ `appointment-notifications`. Tipos: `confirmation`, `reminder_24h`, `reminder_2h`, `cancelled`. Se programan al crear/reprogramar turno (`scheduleAppointmentNotifications`, fire-and-forget); `jobId` determinístico por turno+tipo para cancelar/reemplazar.
 - Usa **Content Templates** de Twilio (`TWILIO_CONTENT_SID_*`). Config de WhatsApp por clínica en `clinics.settings.whatsapp`, cacheada en Redis 5min (`wa:<clinic>`).
+- Avisos al contacto/tutor: variante opcional `TWILIO_CONTENT_SID_<TIPO>_CONTACT` (o `content_templates.<tipo>_contact` por clínica) con las mismas variables + `{{6}}` = nombre del paciente. Hay que crearlas y aprobarlas en Twilio/Meta; sin ellas el contacto recibe la plantilla estándar ("tu turno").
 - **Webhooks**: `POST /notifications/inbound` (el paciente confirma/cancela su turno respondiendo) y `POST /notifications/status`. Firma `x-twilio-signature` validada (`validateTwilioWebhook`), exigida solo en producción.
 - Cuota por plan: contador atómico en Redis (`notifications/quota.ts`), freno según `waMsgMonthlyQuota` del plan. Ver `business-rules.md`.
 - Env: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_API_KEY_SID/SECRET`, `TWILIO_WHATSAPP_FROM`, `TWILIO_CONTENT_SID_*`, `TWILIO_WEBHOOK_BASE_URL`, `TWILIO_STATUS_CALLBACK_URL`, `WHATSAPP_SHARED_BRAND`.

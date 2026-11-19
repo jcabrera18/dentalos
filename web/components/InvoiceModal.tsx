@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { X, FileText, AlertCircle, Download, CheckCircle2, Plus, Trash2 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
+import { usePatientContact } from '@/lib/queries'
+import { relationshipLabel } from '@/lib/patientContact'
 
 const IVA_CONDITIONS = [
   { value: 'CF', label: 'Consumidor Final' },
@@ -72,9 +74,16 @@ interface Props {
   onSuccess: (invoice: any) => void
 }
 
+type DocType = 'DNI' | 'CUIT' | 'Pasaporte'
+function asDocType(v: string | null | undefined): DocType {
+  return v === 'CUIT' || v === 'Pasaporte' ? v : 'DNI'
+}
+
 export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose, onSuccess }: Props) {
   const [receptorName, setReceptorName]       = useState(payment.patient_name ?? '')
   const [receptorCuit, setReceptorCuit]       = useState('')
+  // Tipo del documento del receptor: AFIP distingue CUIT (80), DNI (96) y Pasaporte (94).
+  const [receptorDocType, setReceptorDocType] = useState<DocType>('DNI')
   const [receptorAddress, setReceptorAddress] = useState('')
   const [receptorIva, setReceptorIva]         = useState('CF')
   const [condicionVenta, setCondicionVenta]   = useState('')
@@ -85,6 +94,27 @@ export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose,
   const [error, setError]             = useState('')
   const [invoice, setInvoice]         = useState<any>(null)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+
+  // Facturar al paciente o a su contacto/responsable (lo decide el profesional).
+  const { data: patientInfo } = usePatientContact(payment.patient_id)
+  const hasBillingContact = Boolean(patientInfo?.contact_name?.trim())
+  const [billTo, setBillTo] = useState<'patient' | 'contact'>('patient')
+
+  function selectBillTo(target: 'patient' | 'contact') {
+    if (!patientInfo || target === billTo) return
+    setBillTo(target)
+    if (target === 'contact') {
+      setReceptorName(patientInfo.contact_name ?? '')
+      setReceptorCuit(patientInfo.contact_document_number ?? '')
+      setReceptorDocType(asDocType(patientInfo.contact_document_type))
+      setReceptorAddress('')
+    } else {
+      setReceptorName(payment.patient_name || `${patientInfo.first_name} ${patientInfo.last_name}`)
+      setReceptorCuit(patientInfo.document_number ?? '')
+      setReceptorDocType(asDocType(patientInfo.document_type))
+      setReceptorAddress(patientInfo.address ?? '')
+    }
+  }
 
   const invoiceType = resolveInvoiceType(profesionalIvaCondition, receptorIva)
   const total       = computeTotal(items)
@@ -119,7 +149,9 @@ export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose,
         body: JSON.stringify({
           payment_id:             payment.id,
           receptor_name:          receptorName.trim(),
-          receptor_cuit:          receptorCuit.replace(/\D/g, '') || undefined,
+          // El pasaporte puede tener letras: va tal cual; CUIT/DNI solo dígitos.
+          receptor_cuit:          (receptorDocType === 'Pasaporte' ? receptorCuit.trim() : receptorCuit.replace(/\D/g, '')) || undefined,
+          receptor_doc_type:      receptorCuit.trim() ? receptorDocType : undefined,
           receptor_address:       receptorAddress.trim() || undefined,
           receptor_iva_condition: receptorIva,
           condicion_venta:        condicionVenta || undefined,
@@ -248,6 +280,29 @@ export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose,
               <span className="font-bold text-app">{formatARS(total)}</span>
             </div>
 
+            {/* Facturar a: paciente / responsable */}
+            {hasBillingContact && (
+              <div>
+                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Facturar a</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { v: 'patient', title: 'Paciente', sub: payment.patient_name || `${patientInfo!.first_name} ${patientInfo!.last_name}` },
+                    { v: 'contact', title: patientInfo!.is_minor ? 'Tutor / responsable' : 'Contacto', sub: `${patientInfo!.contact_name}${patientInfo!.contact_relationship ? ` (${relationshipLabel(patientInfo!.contact_relationship)})` : ''}` },
+                  ] as const).map(opt => (
+                    <button key={opt.v} type="button" onClick={() => selectBillTo(opt.v)}
+                      className={`text-left px-3 py-2 rounded-xl border transition-all ${
+                        billTo === opt.v
+                          ? 'border-[#00C4BC] bg-[#00C4BC]/10'
+                          : 'border-app bg-surface2 hover:border-app2'
+                      }`}>
+                      <div className={`text-sm font-semibold ${billTo === opt.v ? 'text-[#00C4BC]' : 'text-app'}`}>{opt.title}</div>
+                      <div className="text-xs text-app3 truncate">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Receptor name */}
             <div>
               <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Nombre / Razón Social</label>
@@ -268,7 +323,7 @@ export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose,
                   <button
                     key={c.value}
                     type="button"
-                    onClick={() => setReceptorIva(c.value)}
+                    onClick={() => { setReceptorIva(c.value); if (c.value === 'RI') setReceptorDocType('CUIT') }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       receptorIva === c.value
                         ? 'bg-[#00C4BC] text-white border-[#00C4BC]'
@@ -287,13 +342,24 @@ export function InvoiceModal({ payment, profesionalIvaCondition, token, onClose,
                 <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">
                   CUIT / DNI {invoiceType === 'A' ? '(requerido)' : '(opcional)'}
                 </label>
-                <input
-                  type="text"
-                  value={receptorCuit}
-                  onChange={e => setReceptorCuit(e.target.value)}
-                  placeholder={receptorIva === 'RI' ? '20-12345678-9' : '12345678'}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
-                />
+                <div className="grid grid-cols-[110px_1fr] gap-2">
+                  <select
+                    value={receptorDocType}
+                    onChange={e => setReceptorDocType(e.target.value as DocType)}
+                    className="bg-surface2 border border-app rounded-xl px-2 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                  >
+                    <option value="DNI">DNI</option>
+                    <option value="CUIT">CUIT</option>
+                    <option value="Pasaporte">Pasaporte</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={receptorCuit}
+                    onChange={e => setReceptorCuit(e.target.value)}
+                    placeholder={receptorDocType === 'CUIT' || receptorIva === 'RI' ? '20-12345678-9' : '12345678'}
+                    className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]"
+                  />
+                </div>
               </div>
             )}
 

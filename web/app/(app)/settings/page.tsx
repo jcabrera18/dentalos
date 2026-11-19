@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { usePermissions } from '@/lib/queries'
+import { InviteRolePicker } from '@/components/InviteRolePicker'
+import { TeamPermissionsSection } from '@/components/TeamPermissionsSection'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal, useAppTheme } from '@/app/providers'
@@ -633,7 +636,7 @@ function AfipConfigSection({ token }: { token: string }) {
   )
 }
 
-function AccountActionsSection() {
+function AccountActionsSection({ canInvite }: { canInvite: boolean }) {
   const supabase = createClient()
   const router = useRouter()
   const { theme, setTheme } = useAppTheme()
@@ -644,10 +647,14 @@ function AccountActionsSection() {
   const [linkCopied, setLinkCopied] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [showRolePicker, setShowRolePicker] = useState(false)
+  const [inviteRole, setInviteRole] = useState<'professional' | 'receptionist'>('professional')
 
   useEffect(() => { setMounted(true) }, [])
 
-  async function handleCopyInviteLink() {
+  async function handleCopyInviteLink(role: 'professional' | 'receptionist') {
+    setShowRolePicker(false)
+    setInviteRole(role)
     setCopyState('loading')
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -655,7 +662,7 @@ function AccountActionsSection() {
       const res = await apiFetch('/professionals/invite', {
         method: 'POST',
         token: session.access_token,
-        body: JSON.stringify({ role: 'professional' }),
+        body: JSON.stringify({ role }),
       })
       const link: string = res.data.link
       setInviteLink(link)
@@ -694,20 +701,22 @@ function AccountActionsSection() {
         <div className="px-5 py-4 border-b border-app">
           <h2 className="font-semibold text-app">Cuenta y sesión</h2>
           <p className="text-xs text-app3 mt-0.5">
-            Invitá profesionales, cambiá el tema y cerrá tu sesión.
+            {canInvite ? 'Invitá a tu equipo, cambiá el tema y cerrá tu sesión.' : 'Cambiá el tema y cerrá tu sesión.'}
           </p>
         </div>
 
         <div className="divide-y divide-app">
-          {/* Invitar profesional */}
-          <button
-            onClick={handleCopyInviteLink}
-            disabled={copyState === 'loading'}
-            className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-app hover:bg-surface2/60 disabled:opacity-50 transition-colors text-left"
-          >
-            <UserPlus size={18} strokeWidth={1.8} className="text-app3 shrink-0" />
-            <span className="flex-1">{copyState === 'loading' ? 'Generando link...' : 'Invitar profesional'}</span>
-          </button>
+          {/* Invitar al equipo (profesional o administrativo) */}
+          {canInvite && (
+            <button
+              onClick={() => setShowRolePicker(true)}
+              disabled={copyState === 'loading'}
+              className="w-full flex items-center gap-3 px-5 py-4 text-sm font-medium text-app hover:bg-surface2/60 disabled:opacity-50 transition-colors text-left"
+            >
+              <UserPlus size={18} strokeWidth={1.8} className="text-app3 shrink-0" />
+              <span className="flex-1">{copyState === 'loading' ? 'Generando link...' : 'Invitar al equipo'}</span>
+            </button>
+          )}
 
           {/* Tema claro / oscuro */}
           <button
@@ -734,6 +743,10 @@ function AccountActionsSection() {
         </div>
       </div>
 
+      {showRolePicker && (
+        <InviteRolePicker onPick={handleCopyInviteLink} onClose={() => setShowRolePicker(false)} />
+      )}
+
       {showInviteSuccess && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6 text-center">
@@ -743,6 +756,12 @@ function AccountActionsSection() {
             <h3 className="font-bold text-lg text-app mb-2">
               {linkCopied ? '¡Link copiado!' : 'Link generado'}
             </h3>
+            {inviteRole === 'receptionist' ? (
+              <p className="text-app3 text-sm mb-4">
+                Compartí este link con la persona administrativa. Va a poder gestionar agenda, cobros y facturación,
+                sin acceso a información clínica. Ajustá sus permisos en la sección Equipo.
+              </p>
+            ) : (<>
             <p className="text-app3 text-sm mb-4">
               Compartí este link con el profesional que querés invitar. Una vez que se una a tu clínica, podrá:
             </p>
@@ -751,6 +770,7 @@ function AccountActionsSection() {
               <li className="flex items-center gap-2"><span className="text-[#00C4BC]">👥</span> Compartir y acceder a los pacientes</li>
               <li className="flex items-center gap-2"><span className="text-[#00C4BC]">💰</span> Ver las finanzas de la clínica</li>
             </ul>
+            </>)}
             {inviteLink && (
               <div className="mb-4">
                 <div className="flex items-center gap-2 bg-surface2 rounded-xl px-3 py-2 text-left">
@@ -1046,6 +1066,9 @@ export default function SettingsPage() {
   const [saved, setSaved]               = useState(false)
   const [error, setError]               = useState('')
   const supabase = createClient()
+  const access = usePermissions()
+  // Un Administrativo no atiende: no tiene horarios, especialidad, matrícula ni AFIP propios.
+  const isClinicalUser = access.clinicalAccess
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -1215,13 +1238,30 @@ export default function SettingsPage() {
   return (
     <div className="px-6 py-8">
       <h1 className="text-2xl font-bold text-app mb-1">Configuración</h1>
-      <p className="text-app3 text-sm mb-8">Gestioná los horarios y la facturación de tu clínica.</p>
+      <p className="text-app3 text-sm mb-8">
+        {isClinicalUser ? 'Gestioná los horarios y la facturación de tu clínica.' : 'Preferencias de tu cuenta.'}
+      </p>
 
+      {!isClinicalUser ? (
+        <div className="max-w-xl">
+          <AccountActionsSection canInvite={false} />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
         {/* Left column: plan & AFIP billing */}
         <div className="space-y-6">
           <PlanCard />
+          {access.isOwnerOrAdmin && token && myId && (
+            <TeamPermissionsSection
+              token={token}
+              members={professionals}
+              myId={myId}
+              onMemberUpdated={(id, permissions) =>
+                setProfessionals(prev => prev.map(p => p.id === id ? { ...p, permissions } : p))
+              }
+            />
+          )}
           {MULTI_SPECIALTY_ENABLED && token && myId && (
             <SpecialtySection
               token={token}
@@ -1366,10 +1406,11 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <AccountActionsSection />
+          <AccountActionsSection canInvite={access.isOwnerOrAdmin} />
         </div>
 
       </div>
+      )}
     </div>
   )
 }

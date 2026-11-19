@@ -10,6 +10,7 @@ Login/refresh proxean contra Supabase Auth; el cliente recibe el JWT de Supabase
 ## patients — `/patients` · `patients/routes.ts`
 `GET /` (lista + búsqueda `?q=&limit=&offset=`) · `POST /` · `GET /:id` · `PATCH /:id` · `DELETE /:id` (soft-delete)
 `GET /:id/balance` · `GET /:id/account-summary` · `GET /:id/appointments`
+`GET /:id/contact` — identidad + contacto/responsable (`contact_*`), `age`, `is_minor`, `reminders_to_contact`; sin PHI clínico (regla `any`). POST/PATCH aceptan los campos `contact_*` (078) y `contact_reminders_authorized` (boolean → constancia `_at/_by`, 079).
 Historia clínica: `GET|PUT /:id/clinical-history`; firmas: `GET|POST /:id/clinical-history/signatures`, `GET /:id/clinical-history/signatures/:sigId`
 Archivos: `GET|POST /:id/files`, `GET /:id/files/download`, `DELETE /:id/files` (bucket `patient-files`)
 `GET /alerts/inactive` (pacientes inactivos) · `GET /sync` (delta para IndexedDB)
@@ -34,7 +35,7 @@ Odontograma: `GET /odontogram/:patient_id` · `PUT /odontogram/:patient_id` · `
 Diagnósticos por diente: `GET /tooth-diagnostics/:patient_id` · `POST /tooth-diagnostics` · `DELETE /tooth-diagnostics/:id`
 
 ## invoices — `/invoices` · `invoices/routes.ts` (AFIP)
-`GET /?payment_ids=` · `POST /` (emite CAE vía WSFEv1) · `GET /:id` · `GET /:id/pdf` (PDF con QR)
+`GET /?payment_ids=` · `POST /` (emite CAE vía WSFEv1; acepta `receptor_doc_type` DNI/CUIT/Pasaporte) · `GET /:id` · `GET /:id/pdf` (PDF con QR)
 
 ## finance — `/finance` · `finance/routes.ts`
 `GET /kpis` · `GET /analytics` · `GET /movements?from=&to=&type=&limit=&offset=`
@@ -48,6 +49,10 @@ Lee vía RPC `finance_*` (SECURITY DEFINER).
 Invitaciones: `POST /invite` · `GET /invite/:token`
 Config WhatsApp de la clínica: `GET|PATCH /clinic-settings/whatsapp`
 Config AFIP propia: `GET|PUT /me/afip-config` (el GET solo devuelve flags `has_cert/has_key`)
+Permisos (rol Administrativo): `GET /me/permissions` (rol + permisos efectivos) · `PATCH /:id/permissions` (owner/admin; solo roles configurables; auditado en `audit_log`)
+`GET /` incluye `permissions`, `iva_condition` y `afip_ready` (flag; nunca CUIT/cert). `/auth/me` y `/auth/startup` agregan `role`, `clinical_access`, `effective_permissions`.
+
+> **Política de acceso por ruta:** toda ruta autenticada tiene una regla en `../dentalos-api/src/lib/accessPolicy.ts` (`ROUTE_RULES`): `any`, `clinical`, `staff` o un permiso. Para el rol `receptionist` lo no listado se **deniega**. El test `accessPolicy.test.ts` falla si una ruta nueva no tiene regla.
 
 ## subscription — `/subscription` · `subscription/routes.ts`
 `GET /status` (plan, trial, uso, límites, alerts). Planes en `subscription/plans.ts`.
@@ -59,12 +64,13 @@ Webhooks Twilio: `POST /inbound` (paciente confirma/cancela) · `POST /status`
 
 ## consents — `/consents` · `consents/routes.ts`
 `GET /` · `POST /` · `GET /:id` · `GET /templates`
+`POST /` acepta `signer_type` (`patient`|`guardian`|`patient_and_guardian`), `signer_name`, `signer_document`, `signer_relationship`, `signer_authority`, `guardian_signature_data`, `treatment_invasive`, `patient_heard`, `signer_identity_verified`, `signer_bond_evidence`; las constancias legales las agrega el servidor al `content_html`. Reglas CCyC art. 26 → `400` con `code` (`PATIENT_HEARD_REQUIRED`, `SIGNER_IDENTITY_NOT_VERIFIED`, `SIGNER_BOND_EVIDENCE_REQUIRED`, `PATIENT_DOB_REQUIRED`, `GUARDIAN_SIGNATURE_REQUIRED`, `TREATMENT_INVASIVE_REQUIRED`, `ADOLESCENT_SIGNATURE_REQUIRED`, `ASSISTED_SIGNATURE_REQUIRED`, `GUARDIAN_IDENTITY_REQUIRED`, `GUARDIAN_RELATIONSHIP_REQUIRED`, `GUARDIAN_SIGNATURE_MISSING`, `SIGNER_AUTHORITY_REQUIRED`) (078/079).
 
 ## schedule-blocks — `/schedule-blocks` · `schedule-blocks/routes.ts`
 `GET /` · `POST /` · `DELETE /:id` (bloqueos de agenda)
 
 ## booking — `/public/booking` · `booking/routes.ts` **(público, sin auth)**
-`GET /:professionalId` · `GET /:professionalId/slots` · `POST /:professionalId` (reserva vía `book_appointment`)
+`GET /:professionalId` · `GET /:professionalId/slots` · `POST /:professionalId` (reserva vía `book_appointment`; `is_minor` + `guardian_name/relationship` + `date_of_birth` (obligatoria, < 18) + `guardian_declaration: true` para turnos de menores → se guarda el adulto como contacto, no como representante legal)
 
 ## integrations — `/integrations` · `integrations/routes.ts`
 `POST /appointments` **(header `x-api-key`)** — Zapier. `clinic_id` fijo de `ZAPIER_CLINIC_ID`. Fuera de alcance comercial (ver auditoría).

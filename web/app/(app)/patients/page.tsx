@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { PatientContactFields } from '@/components/PatientContactFields'
+import { EMPTY_CONTACT, ageFromDob, buildContactPayload, isMinorAge, type ContactForm } from '@/lib/patientContact'
 import { useLocalPatients } from '@/lib/useLocalPatients'
 import { filterLocalPatients, type LocalPatient } from '@/lib/patientsLocalDb'
 import { useRouter } from 'next/navigation'
@@ -358,8 +360,10 @@ function NewPatientModal({ token, onClose, onCreated }: {
     email: '', address: '', insurance_name: '', insurance_plan: '', insurance_number: '', allergies: '',
     current_medications: ''
   })
+  const [contact, setContact] = useState<ContactForm>({ ...EMPTY_CONTACT })
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const isMinor = isMinorAge(ageFromDob(form.date_of_birth))
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -374,10 +378,13 @@ function NewPatientModal({ token, onClose, onCreated }: {
       for (const [k, v] of Object.entries(form)) {
         if (v !== '') payload[k] = v
       }
+      const contactPayload = buildContactPayload(contact)
       const res = await apiFetch('/patients', {
         method: 'POST',
         token,
-        body: JSON.stringify(payload)
+        body: JSON.stringify(contactPayload.contact_name || contactPayload.contact_phone
+          ? { ...payload, ...contactPayload }
+          : payload)
       })
       const created = res?.data ?? res
       if (!created?.id) {
@@ -420,7 +427,7 @@ function NewPatientModal({ token, onClose, onCreated }: {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">Teléfono (WhatsApp)</label>
+                <label className="block text-xs font-medium text-app3 mb-1 uppercase tracking-wider">{isMinor ? "Teléfono del paciente" : "Teléfono (WhatsApp)"}</label>
                 <input value={form.phone} onChange={e => set('phone', e.target.value)}
                   type="tel" placeholder="+54 11 ..."
                   className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
@@ -512,6 +519,12 @@ function NewPatientModal({ token, onClose, onCreated }: {
                   className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
               </div>
             </div>
+
+            <PatientContactFields
+              value={contact}
+              onChange={patch => setContact(c => ({ ...c, ...patch }))}
+              age={ageFromDob(form.date_of_birth)}
+            />
 
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-600 dark:text-red-400 text-sm">

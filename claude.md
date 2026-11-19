@@ -49,6 +49,7 @@ Browser ──JWT Supabase──> Fastify API ──RLS──> Supabase/Postgres
 4. **Archivos médicos**: bucket privado `patient-files`, sin RLS pública → solo `service_role` (la API) sirve URLs firmadas. No exponer el bucket al cliente.
 5. **Webhooks** (MP/Nave/Twilio/Zapier) verifican firma/API-key y son idempotentes. No debilitar esas comprobaciones.
 6. Al cerrar sesión, el cache de IndexedDB se limpia para no filtrar datos entre usuarios (`lib/queryClient.tsx`).
+7. **Rol Administrativo (`receptionist`) sin acceso clínico**: toda ruta autenticada nueva necesita una regla en `../dentalos-api/src/lib/accessPolicy.ts` (`ROUTE_RULES`; el test falla si falta). Lo clínico va como `'clinical'`; para este rol, lo no listado se deniega. Permisos por usuario en `lib/permissions.ts` (bloque `<SYNC:permissions>` idéntico en web y API). Ver `docs/business/business-rules.md` § Roles.
 
 ## Comandos
 

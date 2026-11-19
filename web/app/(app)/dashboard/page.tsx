@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMe, useDashboard, useUpdateAppointmentStatus, queryKeys } from '@/lib/queries'
+import { useMe, useDashboard, useUpdateAppointmentStatus, usePermissions, useInvoiceIssuer, queryKeys } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
 import { InvoiceModal } from '@/components/InvoiceModal'
@@ -30,6 +30,9 @@ export default function DashboardPage() {
 
   // Data via React Query: pinta desde cache (IndexedDB) y revalida en background.
   const { data: user } = useMe()
+  // Administrativo: dashboard de toda la clínica, sin notas clínicas.
+  const access = usePermissions()
+  const canCharge = access.can('payments.manage')
   const { data: dashboard } = useDashboard()
   const updateStatus = useUpdateAppointmentStatus()
 
@@ -43,8 +46,13 @@ export default function DashboardPage() {
     ? `${updateStatus.variables?.id}:${updateStatus.variables?.status}`
     : null
 
-  const myAfipIvaCondition = user?.iva_condition || 'MO'
-  const myAfipConfigured = !!(user?.cuit && user?.afip_cert && user?.afip_key && user?.afip_punto_venta)
+  // Emisor de la factura del cobro recién creado: el profesional logueado o,
+  // para un Administrativo, el profesional del turno. (Antes se leía user.afip_cert,
+  // que ya no existe en /auth/me tras el cifrado → el botón nunca aparecía.)
+  const getIssuer = useInvoiceIssuer()
+  const invoiceIssuer = getIssuer(createdPayment?.professional_id ?? pendingAppt?.professional_id)
+  const myAfipIvaCondition = invoiceIssuer.ivaCondition
+  const myAfipConfigured = invoiceIssuer.configured
 
   // Verificar sesión (redirect si no hay) y guardar token para el modal de factura.
   useEffect(() => {
@@ -248,23 +256,35 @@ export default function DashboardPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { setConfirmLoading(false); return }
 
-    await apiFetch(`/appointments/${pendingAppt.id}/complete`, {
-      method: 'POST',
-      token: session.access_token,
-      body: JSON.stringify({ clinical_notes: clinicalNotes || undefined })
-    })
+    if (access.clinicalAccess) {
+      await apiFetch(`/appointments/${pendingAppt.id}/complete`, {
+        method: 'POST',
+        token: session.access_token,
+        body: JSON.stringify({ clinical_notes: clinicalNotes || undefined })
+      })
+    } else {
+      // Sin acceso clínico: solo cambia el estado (no hay notas de consulta).
+      await apiFetch(`/appointments/${pendingAppt.id}`, {
+        method: 'PATCH',
+        token: session.access_token,
+        body: JSON.stringify({ status: 'completed' })
+      })
+    }
 
     const amount = parseFloat(paymentAmount)
     const total = parseFloat(paymentTotal)
-    if (!isNaN(amount) && amount > 0) {
+    if (!canCharge) {
+      // sin permiso de cobros: no se registra pago
+    } else if (!isNaN(amount) && amount > 0) {
       const payRes = await apiFetch('/payments', {
         method: 'POST',
         token: session.access_token,
         body: JSON.stringify({
-          patient_id:     pendingAppt.patient_id,
-          appointment_id: pendingAppt.id,
+          patient_id:      pendingAppt.patient_id,
+          appointment_id:  pendingAppt.id,
+          professional_id: pendingAppt.professional_id,
           amount,
-          method:         paymentMethod,
+          method:          paymentMethod,
           ...(!isNaN(total) && total > 0 ? { total_amount: total } : {}),
         })
       })
@@ -275,9 +295,10 @@ export default function DashboardPage() {
         method: 'POST',
         token: session.access_token,
         body: JSON.stringify({
-          patient_id:     pendingAppt.patient_id,
-          appointment_id: pendingAppt.id,
-          amount:         0,
+          patient_id:      pendingAppt.patient_id,
+          appointment_id:  pendingAppt.id,
+          professional_id: pendingAppt.professional_id,
+          amount:          0,
           method:         paymentMethod,
           total_amount:   total,
         })
@@ -707,6 +728,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="px-6 pb-4 space-y-4">
+                  {access.clinicalAccess && (
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-2">
                       Notas de la consulta (opcional)
@@ -720,7 +742,9 @@ export default function DashboardPage() {
                       autoFocus
                     />
                   </div>
+                  )}
 
+                  {canCharge && (
                   <div className="bg-surface2 border border-app rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <CreditCard size={14} className="text-[#00C4BC]" />
@@ -770,7 +794,6 @@ export default function DashboardPage() {
                       <option value="insurance">Obra social</option>
                       <option value="other">Otro</option>
                     </select>
-                    <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-app3" />
                     </div>
                     {(() => {
                       const total = parseFloat(paymentTotal)
@@ -790,6 +813,7 @@ export default function DashboardPage() {
                       return null
                     })()}
                   </div>
+                  )}
                 </div>
 
                 <div className="px-6 pb-6 flex gap-2">
@@ -820,6 +844,7 @@ export default function DashboardPage() {
             id:           createdPayment.id,
             amount:       parseFloat(paymentAmount) || 0,
             patient_name: pendingAppt.patient_name,
+            patient_id:   pendingAppt.patient_id ?? undefined,
             concept:      pendingAppt.appointment_type || undefined,
           }}
           profesionalIvaCondition={myAfipIvaCondition}

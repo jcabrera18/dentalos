@@ -73,7 +73,23 @@ type BookingForm = {
   email: string
   appointment_type: string
   chief_complaint: string
+  // Turno para un menor: first/last_name son del menor; phone/email del adulto.
+  is_minor: boolean
+  date_of_birth: string
+  guardian_name: string
+  guardian_relationship: string
+  // Declaración del adulto: es representante del menor o está autorizado a reservar.
+  guardian_declaration: boolean
 }
+
+const GUARDIAN_OPTIONS = [
+  { value: 'madre', label: 'Madre' },
+  { value: 'padre', label: 'Padre' },
+  { value: 'tutor_legal', label: 'Tutor/a legal' },
+  { value: 'abuelo', label: 'Abuelo/a' },
+  { value: 'hermano', label: 'Hermano/a' },
+  { value: 'otro', label: 'Otro' },
+]
 
 function toDateStr(d: Date) {
   const y = d.getFullYear()
@@ -123,6 +139,7 @@ export default function BookingPage() {
   const [form, setForm] = useState<BookingForm>({
     first_name: '', last_name: '', phone: '',
     email: '', appointment_type: '', chief_complaint: '',
+    is_minor: false, date_of_birth: '', guardian_name: '', guardian_relationship: '', guardian_declaration: false,
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -205,8 +222,13 @@ export default function BookingPage() {
   }
 
   const handleSubmit = async () => {
-    if (!form.first_name || !form.last_name || !form.phone || !form.appointment_type) {
+    if (!form.first_name || !form.last_name || !form.phone || !form.appointment_type
+      || (form.is_minor && (!form.guardian_name.trim() || !form.date_of_birth))) {
       setError('Por favor completá todos los campos requeridos.')
+      return
+    }
+    if (form.is_minor && !form.guardian_declaration) {
+      setError('Confirmá que sos su madre, padre o tutor, o que estás autorizado/a a pedir el turno.')
       return
     }
     setError(null)
@@ -223,6 +245,13 @@ export default function BookingPage() {
           appointment_type: form.appointment_type,
           starts_at:        selectedSlot,
           chief_complaint:  form.chief_complaint || undefined,
+          ...(form.is_minor ? {
+            is_minor:              true,
+            date_of_birth:         form.date_of_birth || undefined,
+            guardian_name:         form.guardian_name.trim(),
+            guardian_relationship: form.guardian_relationship || undefined,
+            guardian_declaration:  form.guardian_declaration,
+          } : {}),
         }),
       })
       const json = await res.json()
@@ -551,7 +580,26 @@ export default function BookingPage() {
               </span>
             </div>
 
-            <h2 className="font-bold mb-4" style={{ color: DARK }}>Tus datos</h2>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {[
+                { v: false, label: 'El turno es para mí' },
+                { v: true, label: 'Es para un menor a mi cargo' },
+              ].map(opt => {
+                const active = form.is_minor === opt.v
+                return (
+                  <button key={String(opt.v)} type="button"
+                    onClick={() => setForm(f => ({ ...f, is_minor: opt.v }))}
+                    className="py-2.5 px-2 rounded-xl text-xs font-semibold border transition-all"
+                    style={active
+                      ? { borderColor: BRAND, background: `${BRAND}14`, color: BRAND }
+                      : { borderColor: '#E5E7EB', background: '#F9FAFB', color: '#6B7280' }}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <h2 className="font-bold mb-4" style={{ color: DARK }}>{form.is_minor ? 'Datos del paciente' : 'Tus datos'}</h2>
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -583,8 +631,57 @@ export default function BookingPage() {
                 </label>
               </div>
 
+              {form.is_minor && (
+                <>
+                  <label className="block">
+                    <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>
+                      Fecha de nacimiento *
+                    </span>
+                    <input
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                      style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
+                      value={form.date_of_birth}
+                      onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))}
+                      max={new Date().toISOString().slice(0, 10)}
+                      type="date"
+                      onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                      onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
+                    />
+                  </label>
+
+                  <h3 className="font-bold pt-3" style={{ color: DARK }}>Tus datos (adulto responsable)</h3>
+                  <div className="grid grid-cols-[1fr_130px] gap-3">
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Nombre y apellido *</span>
+                      <input
+                        className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                        style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
+                        value={form.guardian_name}
+                        onChange={e => setForm(f => ({ ...f, guardian_name: e.target.value }))}
+                        placeholder="María García"
+                        autoComplete="name"
+                        onFocus={e => { e.currentTarget.style.borderColor = BRAND; e.currentTarget.style.background = '#fff' }}
+                        onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#F9FAFB' }}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Vínculo</span>
+                      <select
+                        className="w-full border rounded-xl px-2 py-2.5 text-sm outline-none"
+                        style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
+                        value={form.guardian_relationship}
+                        onChange={e => setForm(f => ({ ...f, guardian_relationship: e.target.value }))}
+                      >
+                        <option value="">—</option>
+                        {GUARDIAN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </>
+              )}
+
               <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>Teléfono *</span>
+                <span className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: DARK }}>{form.is_minor ? 'Tu teléfono *' : 'Teléfono *'}</span>
                 <input
                   className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
                   style={{ borderColor: '#E5E7EB', background: '#F9FAFB', color: DARK }}
@@ -650,6 +747,28 @@ export default function BookingPage() {
                 />
               </label>
             </div>
+
+            {form.is_minor && (
+              <label className="mt-4 flex items-start gap-2.5 text-sm cursor-pointer" style={{ color: DARK }}>
+                <input type="checkbox" checked={form.guardian_declaration}
+                  onChange={e => setForm(f => ({ ...f, guardian_declaration: e.target.checked }))}
+                  className="mt-0.5" style={{ accentColor: BRAND }} />
+                <span>
+                  Declaro ser madre, padre o tutor/a del menor, o estar autorizado/a por ellos a pedir este turno. *
+                </span>
+              </label>
+            )}
+
+            {/* Aviso de privacidad (Ley 25.326, art. 6) */}
+            <p className="mt-4 text-xs leading-relaxed" style={{ color: '#6B7280' }}>
+              Tus datos{form.is_minor ? ' y los del menor' : ''} los usa el profesional o la clínica (responsable
+              del tratamiento) solo para gestionar el turno, enviarte recordatorios por WhatsApp y llevar la historia
+              clínica, bajo secreto profesional. Podés pedir acceso, rectificación o supresión al consultorio.
+              Más info en la{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: BRAND }}>
+                Política de Privacidad
+              </a>.
+            </p>
 
             {error && (
               <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">{error}</p>

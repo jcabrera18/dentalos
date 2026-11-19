@@ -201,6 +201,16 @@ export default function PrivacyPage() {
               </Link>
               .
             </p>
+            <p>
+              <strong>Contacto o responsable del paciente.</strong> El Cliente puede registrar un contacto
+              por paciente (por ejemplo, la madre, el padre o el tutor de un menor, o un familiar de un
+              adulto): nombre, vínculo, teléfono, email y documento. Son datos de un tercero que se usan
+              solo para comunicarse sobre la atención del paciente y, cuando corresponde, para identificar a
+              quien firma un consentimiento en su nombre. Los recordatorios de turnos se envían a ese
+              contacto únicamente si el paciente es menor de 16 años o si autorizó expresamente ese envío,
+              ya que informan sobre su atención de salud (Ley 26.529, art. 4). La autorización queda
+              registrada y puede revocarse ante el Cliente.
+            </p>
           </Section>
 
           <Section id="destinatarios" n={6} title="Destinatarios y proveedores">
@@ -301,6 +311,14 @@ export default function PrivacyPage() {
               para que menores de edad creen cuentas. Los datos de pacientes menores que el Cliente
               cargue se tratan bajo la responsabilidad del Cliente, que debe contar con el
               consentimiento de quien ejerza la responsabilidad parental cuando corresponda.
+            </p>
+            <p>
+              Cuando un adulto pide un turno online para un menor, declara ser su madre, padre o tutor, o
+              estar autorizado por ellos. Esa declaración y el vínculo informado quedan registrados como no
+              verificados hasta que el profesional los constate. Los consentimientos de pacientes menores
+              siguen el artículo 26 del Código Civil y Comercial: según la edad y el tratamiento, los firma su
+              representante, el propio adolescente o ambos, y el niño tiene derecho a ser informado y oído
+              según su grado de madurez.
             </p>
           </Section>
 

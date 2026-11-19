@@ -19,5 +19,5 @@ export const LEGAL = {
     privacy: 'privacidad@vitalos.com.ar',
   },
   // Fecha visible de última actualización de los documentos legales.
-  lastUpdated: '20 de octubre de 2026',
+  lastUpdated: '19 de noviembre de 2026',
 } as const

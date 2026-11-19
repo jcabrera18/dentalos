@@ -25,11 +25,15 @@ import {
   ChevronRight,
   TrendingUp,
   Activity,
+  Lock,
 } from 'lucide-react'
 import { useSubscription, invalidateSubscriptionCache } from '@/lib/useSubscription'
 import { syncPatients } from '@/lib/patientsLocalDb'
 import { NavigationProgress } from '@/components/NavigationProgress'
 import { NotificationBell } from '@/components/NotificationBell'
+import { usePermissions } from '@/lib/queries'
+import { InviteRolePicker } from '@/components/InviteRolePicker'
+import type { Permission } from '@/lib/permissions'
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -43,10 +47,23 @@ const jakarta = Plus_Jakarta_Sans({
 // la ficha del paciente y se gatea ahí. Si en el futuro se agrega un ítem propio
 // de una disciplina, filtrarlo acá con hasCapability([me.discipline], feature)
 // en vez de hardcodearlo.
-const NAV_ITEMS = [
+// `perm`: permiso requerido (rol Administrativo). owner/admin/professional
+// tienen todos en true, así que para ellos el menú no cambia.
+const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; perm?: Permission }[] = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
-  { href: '/agenda', icon: CalendarDays, label: 'Agenda' },
-  { href: '/patients', icon: Users, label: 'Pacientes' },
+  { href: '/agenda', icon: CalendarDays, label: 'Agenda', perm: 'agenda.manage' },
+  { href: '/patients', icon: Users, label: 'Pacientes', perm: 'patients.manage' },
+]
+
+// Guard de rutas por rol/permiso (UX: la API ya devuelve 403 igual). El orden
+// importa: la primera regla cuyo patrón matchea decide.
+type RouteGuard = { pattern: RegExp; perm?: Permission; clinical?: boolean }
+const ROUTE_GUARDS: RouteGuard[] = [
+  { pattern: /^\/patients\/[^/]+\/(clinical-history|consents)(\/|$)/, clinical: true },
+  { pattern: /^\/patients\/[^/]+\/quotes(\/|$)/, perm: 'quotes.manage' },
+  { pattern: /^\/patients(\/|$)/, perm: 'patients.manage' },
+  { pattern: /^\/agenda(\/|$)/, perm: 'agenda.manage' },
+  { pattern: /^\/stats(\/|$)/, perm: 'finance.view' },
 ]
 
 const STATS_ITEMS = [
@@ -87,6 +104,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [subEndsAtOnOpen, setSubEndsAtOnOpen] = useState<string | null>(null)
   // NAVE activo. MercadoPago queda como fallback en código (selector comentado abajo).
   const [paymentMethod, setPaymentMethod] = useState<'nave' | 'mercadopago'>('nave')
+  const [showInviteRolePicker, setShowInviteRolePicker] = useState(false)
+  const [inviteRole, setInviteRole] = useState<'professional' | 'receptionist'>('professional')
+  const access = usePermissions()
+  const navItems = NAV_ITEMS.filter(i => !i.perm || access.can(i.perm))
+  const showStats = access.can('finance.view')
+  const routeGuard = ROUTE_GUARDS.find(g => g.pattern.test(pathname))
+  const routeBlocked = access.ready && !!routeGuard && (
+    (routeGuard.clinical && !access.clinicalAccess) ||
+    (!!routeGuard.perm && !access.can(routeGuard.perm))
+  )
 
   const QR_DURATION_SECS = 25 * 60
 
@@ -370,7 +397,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }
 
-  async function handleCopyInviteLink() {
+  async function handleCopyInviteLink(role: 'professional' | 'receptionist') {
+    setShowInviteRolePicker(false)
+    setInviteRole(role)
     setCopyState('loading')
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -378,7 +407,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const res = await apiFetch('/professionals/invite', {
         method: 'POST',
         token: session.access_token,
-        body: JSON.stringify({ role: 'professional' }),
+        body: JSON.stringify({ role }),
       })
       const link: string = res.data.link
       setInviteLink(link)
@@ -445,7 +474,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav items */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {NAV_ITEMS.map(item => {
+          {navItems.map(item => {
             const Icon = item.icon
             const active = isActive(item.href)
             const loading = navLoading === item.href
@@ -470,7 +499,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
 
           {/* Estadísticas — expandible */}
-          <div>
+          {showStats && <div>
             <button
               onClick={() => setStatsOpen(o => !o)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
@@ -513,7 +542,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 })}
               </div>
             )}
-          </div>
+          </div>}
         </nav>
 
         {/* Bottom actions */}
@@ -531,14 +560,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Configuración
           </button>
 
-          <button
-            onClick={handleCopyInviteLink}
-            disabled={copyState === 'loading'}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10 disabled:opacity-50 transition-all cursor-pointer"
-          >
-            <UserPlus size={18} strokeWidth={1.8} />
-            {copyState === 'loading' ? 'Generando...' : 'Invitar profesional'}
-          </button>
+          {access.isOwnerOrAdmin && (
+            <button
+              onClick={() => setShowInviteRolePicker(true)}
+              disabled={copyState === 'loading'}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-app2 hover:bg-[#E6F8F1]/60 hover:text-[#00C4BC] dark:hover:bg-[#00C4BC]/10 disabled:opacity-50 transition-all cursor-pointer"
+            >
+              <UserPlus size={18} strokeWidth={1.8} />
+              {copyState === 'loading' ? 'Generando...' : 'Invitar al equipo'}
+            </button>
+          )}
 
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -652,6 +683,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             </div>
           </div>
+        ) : routeBlocked ? (
+          <div className="flex items-center justify-center min-h-[calc(100vh-56px)] p-6">
+            <div className="bg-surface border border-app rounded-2xl max-w-sm w-full p-8 text-center">
+              <div className="w-12 h-12 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-4">
+                <Lock size={22} className="text-app3" />
+              </div>
+              <h2 className="font-bold text-lg text-app mb-2">Sin acceso a esta sección</h2>
+              <p className="text-app3 text-sm mb-6">
+                {routeGuard?.clinical
+                  ? 'La información clínica de los pacientes solo está disponible para los profesionales.'
+                  : 'Tu usuario no tiene permiso para esta sección. Pedíselo al dueño o admin de la clínica.'}
+              </p>
+              <button
+                onClick={() => navigateTo('/dashboard')}
+                className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] text-white font-semibold py-3 rounded-xl transition-all"
+              >
+                Ir al inicio
+              </button>
+            </div>
+          </div>
         ) : (
           children
         )}
@@ -660,8 +711,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ── BOTTOM NAV — mobile ─────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-surface border-t border-app z-40">
-        <div className="grid grid-cols-5">
-          {NAV_ITEMS.map(item => {
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `repeat(${navItems.length + (showStats ? 1 : 0) + 1}, minmax(0, 1fr))` }}
+        >
+          {navItems.map(item => {
             const Icon = item.icon
             const active = isActive(item.href)
             const loading = navLoading === item.href
@@ -682,18 +736,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )
           })}
-          <button
-            onClick={() => setStatsSheetOpen(true)}
-            className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
-              STATS_ITEMS.some(s => isActive(s.href)) ? 'text-[#00C4BC]' : 'text-app3'
-            }`}
-          >
-            {STATS_ITEMS.some(s => navLoading === s.href)
-              ? <Loader2 size={22} className="animate-spin text-[#00C4BC]" />
-              : <BarChart2 size={22} strokeWidth={STATS_ITEMS.some(s => isActive(s.href)) ? 2.2 : 1.8} />
-            }
-            <span>Estadísticas</span>
-          </button>
+          {showStats && (
+            <button
+              onClick={() => setStatsSheetOpen(true)}
+              className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
+                STATS_ITEMS.some(s => isActive(s.href)) ? 'text-[#00C4BC]' : 'text-app3'
+              }`}
+            >
+              {STATS_ITEMS.some(s => navLoading === s.href)
+                ? <Loader2 size={22} className="animate-spin text-[#00C4BC]" />
+                : <BarChart2 size={22} strokeWidth={STATS_ITEMS.some(s => isActive(s.href)) ? 2.2 : 1.8} />
+              }
+              <span>Estadísticas</span>
+            </button>
+          )}
           <button
             onClick={() => navigateTo('/settings')}
             className={`flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${
@@ -709,6 +765,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </nav>
 
+      {showInviteRolePicker && (
+        <InviteRolePicker
+          onPick={handleCopyInviteLink}
+          onClose={() => setShowInviteRolePicker(false)}
+        />
+      )}
+
       {showInviteSuccess && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-surface border border-app rounded-2xl w-full max-w-sm p-6 text-center">
@@ -718,14 +781,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <h3 className="font-bold text-lg text-app mb-2">
               {linkCopied ? '¡Link copiado!' : 'Link generado'}
             </h3>
-            <p className="text-app3 text-sm mb-4">
-              Compartí este link con el profesional que querés invitar. Una vez que se una a tu clínica, podrá:
-            </p>
-            <ul className="text-left text-sm text-app3 space-y-2 mb-4">
-              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">📅</span> Ver y gestionar la agenda</li>
-              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">👥</span> Compartir y acceder a los pacientes</li>
-              <li className="flex items-center gap-2"><span className="text-[#00C4BC]">💰</span> Ver las finanzas de la clínica</li>
-            </ul>
+            {inviteRole === 'receptionist' ? (
+              <>
+                <p className="text-app3 text-sm mb-4">
+                  Compartí este link con la persona administrativa. Una vez que se una a tu clínica, podrá:
+                </p>
+                <ul className="text-left text-sm text-app3 space-y-2 mb-4">
+                  <li className="flex items-center gap-2"><span className="text-[#00C4BC]">📅</span> Gestionar la agenda de todos los profesionales</li>
+                  <li className="flex items-center gap-2"><span className="text-[#00C4BC]">💰</span> Registrar cobros y emitir facturas</li>
+                  <li className="flex items-center gap-2"><span className="text-[#00C4BC]">🔒</span> Sin acceso a historias clínicas ni archivos médicos</li>
+                </ul>
+                <p className="text-app3 text-xs mb-4">Podés ajustar sus permisos en Configuración → Equipo.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-app3 text-sm mb-4">
+                  Compartí este link con el profesional que querés invitar. Una vez que se una a tu clínica, podrá:
+                </p>
+                <ul className="text-left text-sm text-app3 space-y-2 mb-4">
+                  <li className="flex items-center gap-2"><span className="text-[#00C4BC]">📅</span> Ver y gestionar la agenda</li>
+                  <li className="flex items-center gap-2"><span className="text-[#00C4BC]">👥</span> Compartir y acceder a los pacientes</li>
+                  <li className="flex items-center gap-2"><span className="text-[#00C4BC]">💰</span> Ver las finanzas de la clínica</li>
+                </ul>
+              </>
+            )}
             {inviteLink && (
               <div className="mb-4">
                 <div className="flex items-center gap-2 bg-surface2 rounded-xl px-3 py-2 text-left">
@@ -1174,3 +1253,4 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </PlansModalProvider>
   )
 }
+

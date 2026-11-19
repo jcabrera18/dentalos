@@ -9,7 +9,7 @@ Fuente de verdad: `../dentalos-api/src/supabase/migrations/*.sql` (numeradas 001
 | `clinics` | Tenant raíz. `settings` JSONB incluye config WhatsApp. |
 | `professionals` | Usuarios/profesionales de la clínica. Guarda `afip_cert`/`afip_key` (**sensible**). |
 | `professional_invites` | Invitaciones por token para sumar profesionales. |
-| `patients` | Pacientes. Historia clínica como JSONB (alerts + notas). Soft-delete `deleted_at`. |
+| `patients` | Pacientes. Historia clínica como JSONB (alerts + notas). Soft-delete `deleted_at`. Contacto/responsable único en `contact_*` (078; identidad en claro como el resto de la identidad del paciente, F3). Constancia de autorización de avisos al contacto: `contact_reminders_authorized_at/_by` (079). Vínculos `contact_relationship` ampliados con cónyuge/conviviente/curador/apoyo (080). |
 | `appointments` | Turnos. Estados vía enum `appointment_status`. |
 | `schedule_blocks` | Bloqueos de agenda (no disponible). |
 | `treatments`, `treatment_sessions` | Tratamientos y sus sesiones. |
@@ -18,7 +18,7 @@ Fuente de verdad: `../dentalos-api/src/supabase/migrations/*.sql` (numeradas 001
 | `quotes` | Presupuestos (módulo 026). Numeración vía `generate_quote_number`. |
 | `invoices` + items | Facturas AFIP con CAE (034/038). |
 | `expenses` | Egresos. |
-| `consents`, `consent_templates`, `global_consent_templates` | Consentimientos informados y plantillas (globales + por clínica). |
+| `consents`, `consent_templates`, `global_consent_templates` | Consentimientos informados y plantillas (globales + por clínica). Firmante y constancias CCyC art. 26: `signer_type` (`patient`/`guardian`/`patient_and_guardian`), `signer_*_enc`, `guardian_signature_data_enc`, `treatment_invasive` (078/079), `patient_heard`, `signer_identity_verified`, `signer_bond_evidence` (080). |
 | `clinical_history_signatures` | Firmas de historia clínica (036). |
 | `notifications` | Historial de notificaciones enviadas. |
 | `app_notifications` | Inbox in-app (campana del staff, 048–050, con realtime). |
@@ -42,13 +42,14 @@ Fuente de verdad: `../dentalos-api/src/supabase/migrations/*.sql` (numeradas 001
 - `search_patients` (022) — búsqueda con prefix matching.
 - `finance_kpis`/`finance_analytics`/`finance_movements` (032) · `payments_summary_period` (015) · `clinical_stats`/`clinical_period_kpis` (046) · `get_dashboard_summary` (044).
 - `current_clinic_id()` / `current_user_role()` — leen el claim del JWT (con fallbacks a `user_metadata`/`app_metadata`, migración 027). Base de todas las policies RLS.
+- `current_app_role()` (077) — rol leído **solo** de `app_metadata`. Usar este en policies: `current_user_role()` toma primero el claim top-level `role` (`authenticated`), que no castea a `user_role`.
 - `assert_clinic_access`, `onboard_clinic`, triggers `set_updated_at`/`audit_trigger_fn`/`update_patient_last_appointment`/`update_treatment_*`.
 
 ⚠ Las funciones **`SECURITY DEFINER` bypassan RLS**: deben validar `p_clinic_id` internamente, no confiar en el parámetro del cliente. Aplica a `search_patients`, `finance_*`, `payments_summary_period`, `book_appointment`. Ver endurecimiento en 043.
 
 ## RLS
 
-Activo en todas las tablas de tenant. Policies filtran por `current_clinic_id()`. Migraciones de seguridad relevantes: **016** (fixes iniciales), **027** (hardening + fallbacks del claim), **042** (security_invoker en vistas), **043** (secure definer). Índices de performance: **031**.
+Activo en todas las tablas de tenant. Policies filtran por `current_clinic_id()`. **077**: policies `RESTRICTIVE` `no_clinical_for_receptionist` en tablas clínicas (`patient_clinical_histories`, `clinical_history_signatures`, `clinical_encounters`, `clinical_encounter_signatures`, `odontogram`, `tooth_diagnostics`, `treatments`, `treatment_sessions`, `consents`) → el rol Administrativo no lee ni escribe filas aunque sea de la clínica. Migraciones de seguridad relevantes: **016** (fixes iniciales), **027** (hardening + fallbacks del claim), **042** (security_invoker en vistas), **043** (secure definer). Índices de performance: **031**.
 
 ## Storage
 

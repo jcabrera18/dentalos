@@ -49,6 +49,9 @@ Fuente de columnas: migración indicada. "Copias" = dónde se propaga el mismo d
 | `patients.email` | Personal | AEAD + BIDX (opc.) | F3 | audit_log, notif `to_email` | patients/routes.ts | _[asignar]_ |
 | `patients.date_of_birth`, `gender`, `blood_type` | Personal/clínico | AEAD | F3 | audit_log | patients/routes.ts, ficha | _[asignar]_ |
 | `patients.address`, `city` | Personal | AEAD | F3 | audit_log | patients/routes.ts | _[asignar]_ |
+| `patients.contact_name/phone/email/document_number/notes` (078) | Personal (tercero: tutor/contacto) | AEAD + BIDX en `contact_phone` (inbound WhatsApp) | F3 | Redis `patient:v2:*`, notif `to_phone`/`rendered_body`, IndexedDB (`['patient',id,'contact']`), invoices.receptor_* (si se factura al responsable); audit_log **excluido** (denylist 078) | patients/routes.ts (`/:id/contact`), notifications (worker + inbound), booking | _[asignar]_ |
+| `consents.signer_name/signer_document` (078), `signer_authority` (079) | Personal (tercero) | AEAD ✅ enc-only desde el alta | — | consents.content_html (constancia de representación) | consents/routes.ts | _[asignar]_ |
+| `consents.guardian_signature_data` (079) | **Crítica (prueba legal)** | AEAD ✅ enc-only desde el alta | — | — | consents/routes.ts | _[asignar]_ |
 | `patients.insurance_name/plan/number` | Personal | AEAD **[?]** | F3 | audit_log, `search_patients` retorna `insurance_name` | patients/routes.ts | _[asignar]_ |
 | `patients.allergies`, `current_medications`, `medical_notes` | **Crítica (PHI)** | AEAD | **F2 (piloto)** | audit_log | patients/routes.ts, ficha (Next page) | _[asignar]_ |
 | `patients.referral_source` | Operacional | PLANO **[?]** | — | audit_log | patients/routes.ts | _[asignar]_ |

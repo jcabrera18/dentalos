@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { createClient, getToken as getSupabaseToken } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMe, useAfipConfig, usePatientOdontogram, queryKeys } from '@/lib/queries'
+import { useMe, useAfipConfig, usePatientOdontogram, usePermissions, useInvoiceIssuer, queryKeys } from '@/lib/queries'
 import { useRouter, useParams } from 'next/navigation'
 import { Wallet, FileText, ClipboardList, Loader2, MoreVertical, ShieldAlert, Stethoscope } from 'lucide-react'
 import { PaymentModal } from '@/components/PaymentModal'
@@ -15,6 +15,11 @@ import { PatientFilesSection } from '@/components/PatientFilesSection'
 import { PatientAppointmentsSection } from '@/components/PatientAppointmentsSection'
 import { ClinicalSummaryCard } from '@/components/clinical/ClinicalSummaryCard'
 import { hasCapability, normalizeDiscipline } from '@/lib/capabilities'
+import { PatientContactFields } from '@/components/PatientContactFields'
+import {
+  ageFromDob, buildContactPayload, contactFormFrom, contactRemindersNeedAuthorization, hasContact, isMinorAge, relationshipLabel,
+  EMPTY_CONTACT, type ContactForm,
+} from '@/lib/patientContact'
 
 const EMPTY_ACCOUNT_SUMMARY = {
   total_billed: 0,
@@ -77,6 +82,7 @@ export default function PatientDetailClient({
   const [savingTooth, setSavingTooth] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<any>({})
+  const [editContact, setEditContact] = useState<ContactForm>({ ...EMPTY_CONTACT })
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
   const [editSubmitError, setEditSubmitError] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
@@ -109,8 +115,12 @@ export default function PatientDetailClient({
 
   // Data de solo-lectura via React Query: cachea en IndexedDB por paciente → revisitar es instantáneo.
   // (Los archivos/radiografías NO van por acá; los maneja PatientFilesSection aparte.)
-  const odontogramQuery = usePatientOdontogram(patientId)
   const { data: me } = useMe()
+  // Rol Administrativo: sin acceso clínico. La API ya bloquea y limpia esos datos;
+  // acá solo evitamos pedirlos y ocultamos las secciones.
+  const access = usePermissions()
+  const clinicalAccess = access.clinicalAccess
+  const odontogramQuery = usePatientOdontogram(patientId, clinicalAccess)
   const { data: afip } = useAfipConfig()
 
   const odontogram: any[] = odontogramQuery.data ?? []
@@ -122,7 +132,7 @@ export default function PatientDetailClient({
   // no sea odontólogo (p. ej. uno que cambió de disciplina). Si no hay datos y no
   // es odontólogo, la sección no forma parte de su experiencia (no se renderiza).
   const canEditOdontogram = hasCapability([normalizeDiscipline(me?.discipline)], 'odontogram')
-  const showOdontogram = canEditOdontogram || odontogram.length > 0
+  const showOdontogram = clinicalAccess && (canEditOdontogram || odontogram.length > 0)
 
   const clinicName = (me?.clinics as any)?.name ?? me?.clinic_name ?? ''
   const myProfessionalName =
@@ -130,6 +140,8 @@ export default function PatientDetailClient({
     (me?.first_name && me?.last_name ? `${me.first_name} ${me.last_name}` : me?.name ?? '')
   const myAfipIvaCondition = afip?.iva_condition || 'MO'
   const myAfipConfigured = !!(afip?.cuit && afip?.has_cert && afip?.has_key && afip?.afip_punto_venta)
+  // Quién factura cada cobro (Administrativo → el profesional del cobro).
+  const getIssuer = useInvoiceIssuer()
 
   // --- Consentimientos ---
   const [showConsentModal, setShowConsentModal] = useState(false)
@@ -562,9 +574,10 @@ export default function PatientDetailClient({
       const { data: updatedPatient } = await apiFetch(`/patients/${params.id}`, {
         method: 'PATCH',
         token,
-        body: JSON.stringify(buildPatientUpdatePayload(editForm))
+        body: JSON.stringify({ ...buildPatientUpdatePayload(editForm), ...buildContactPayload(editContact) })
       })
       setPatient((prev: any) => ({ treatments: prev.treatments, ...updatedPatient }))
+      void qc.invalidateQueries({ queryKey: queryKeys.patientContact(params.id as string) })
       setEditMode(false)
       setDeleteConfirm(false)
     } catch (err: unknown) {
@@ -629,9 +642,36 @@ export default function PatientDetailClient({
     )
   }
 
-  const age = patient.date_of_birth
-    ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / 31557600000)
-    : null
+  const age = ageFromDob(patient.date_of_birth)
+  const isMinor = isMinorAge(age)
+  const patientHasContact = hasContact(patient)
+  // Avisos marcados para el contacto pero sin la autorización que se exige desde
+  // los 16 (Ley 26.529 art. 4): la API los está mandando al paciente.
+  const remindersPendingAuthorization = patientHasContact
+    && Boolean(patient.contact_receives_reminders && patient.contact_phone)
+    && contactRemindersNeedAuthorization(age) && !patient.contact_reminders_authorized_at
+  // Mayor de edad con el contacto todavía marcado como representante legal.
+  const contactNeedsReview = !isMinor && age !== null && patientHasContact && Boolean(patient.contact_is_legal_guardian)
+
+  function openEditModal() {
+    setEditMode(true)
+    setEditForm({
+      first_name: patient.first_name,
+      last_name: patient.last_name,
+      phone: patient.phone ?? '',
+      email: patient.email ?? '',
+      address: patient.address ?? '',
+      document_number: patient.document_number ?? '',
+      date_of_birth: patient.date_of_birth ?? '',
+      gender: patient.gender ?? '',
+      insurance_name: patient.insurance_name ?? '',
+      insurance_plan: patient.insurance_plan ?? '',
+      insurance_number: patient.insurance_number ?? '',
+      allergies: patient.allergies ?? '',
+      current_medications: patient.current_medications ?? '',
+    })
+    setEditContact(contactFormFrom(patient))
+  }
 
   return (
     <div className="min-h-screen bg-app text-app">
@@ -653,7 +693,14 @@ export default function PatientDetailClient({
                 {patient.first_name[0]}{patient.last_name[0]}
               </div>
               <div className="font-bold text-lg">{patient.first_name} {patient.last_name}</div>
-              {age && <div className="text-app2 text-sm mt-1">{age} años</div>}
+              {age !== null && (
+                <div className="text-app2 text-sm mt-1 flex items-center justify-center gap-2">
+                  {age} años
+                  {isMinor && (
+                    <span className="text-[11px] font-bold text-violet-500 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded-md">Menor</span>
+                  )}
+                </div>
+              )}
               {patient.document_number && (
                 <div className="text-app3 text-sm">DNI {patient.document_number}</div>
               )}
@@ -667,31 +714,66 @@ export default function PatientDetailClient({
                 <div className="text-app3 text-sm">📍 {patient.address}</div>
               )}
               <button
-                onClick={() => {
-                  setEditMode(true); setEditForm({
-                    first_name: patient.first_name,
-                    last_name: patient.last_name,
-                    phone: patient.phone ?? '',
-                    email: patient.email ?? '',
-                    address: patient.address ?? '',
-                    document_number: patient.document_number ?? '',
-                    date_of_birth: patient.date_of_birth ?? '',
-                    gender: patient.gender ?? '',
-                    insurance_name: patient.insurance_name ?? '',
-                    insurance_plan: patient.insurance_plan ?? '',
-                    insurance_number: patient.insurance_number ?? '',
-                    allergies: patient.allergies ?? '',
-                    current_medications: patient.current_medications ?? '',
-                  })
-                }}
+                onClick={openEditModal}
                 className="mt-3 text-xs text-app3 hover:text-[#00C4BC] transition-colors cursor-pointer"
               >
                 Editar datos
               </button>
             </div>
 
+            {/* Contacto / responsable */}
+            {patientHasContact ? (
+              <div className="bg-surface border border-app rounded-xl p-4">
+                <div className="text-xs text-app3 uppercase tracking-wider font-semibold mb-2">
+                  {isMinor ? 'Tutor / responsable' : 'Contacto'}
+                </div>
+                <div className="text-sm font-medium">
+                  {patient.contact_name || '—'}
+                  {patient.contact_relationship && (
+                    <span className="text-app3 font-normal"> · {relationshipLabel(patient.contact_relationship)}</span>
+                  )}
+                </div>
+                {patient.contact_phone && (
+                  <a href={`https://wa.me/${patient.contact_phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                    className="text-sm text-[#00C4BC] hover:underline block mt-1">📱 {patient.contact_phone}</a>
+                )}
+                {patient.contact_email && <div className="text-xs text-app3 truncate mt-1">✉️ {patient.contact_email}</div>}
+                {patient.contact_document_number && (
+                  <div className="text-xs text-app3 mt-1">{patient.contact_document_type ?? 'DNI'} {patient.contact_document_number}</div>
+                )}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {patient.contact_is_legal_guardian && (
+                    <span className="text-[11px] font-semibold text-app2 bg-surface2 border border-app px-1.5 py-0.5 rounded-md">Representante legal</span>
+                  )}
+                  {patient.contact_receives_reminders && patient.contact_phone && !remindersPendingAuthorization && (
+                    <span className="text-[11px] font-semibold text-[#00C4BC] bg-[#E6F8F1] dark:bg-[#00C4BC]/10 border border-[#00C4BC]/20 px-1.5 py-0.5 rounded-md">Recibe recordatorios</span>
+                  )}
+                </div>
+                {patient.contact_notes && <div className="text-xs text-app3 mt-2 italic">{patient.contact_notes}</div>}
+                {remindersPendingAuthorization && (
+                  <div className="mt-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+                    Los avisos siguen yendo a {patient.first_name}: {age === null ? 'sin fecha de nacimiento cargada' : 'desde los 16 años'} hace falta registrar que autorizó que se envíen a este contacto.{' '}
+                    <button onClick={openEditModal} className="font-semibold underline">Registrar</button>
+                  </div>
+                )}
+                {contactNeedsReview && (
+                  <div className="mt-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+                    {patient.first_name} ya es mayor de edad. Revisá si este contacto tiene que seguir figurando como representante legal.
+                  </div>
+                )}
+              </div>
+            ) : isMinor ? (
+              <button
+                onClick={openEditModal}
+                className="w-full text-left bg-violet-500/5 border border-dashed border-violet-500/30 hover:border-violet-500/60 rounded-xl p-4 transition-colors"
+              >
+                <div className="text-xs text-violet-500 uppercase tracking-wider font-semibold mb-1">Tutor / responsable</div>
+                <div className="text-sm text-app2">Paciente menor sin tutor cargado. <span className="text-[#00C4BC] font-semibold">Agregar →</span></div>
+              </button>
+            ) : null}
+
             {/* Alertas médicas */}
-            {patient.allergies && (
+            {clinicalAccess && patient.allergies && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
                 <div className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2">
                   ⚠️ Alergias
@@ -702,7 +784,7 @@ export default function PatientDetailClient({
               </div>
             )}
 
-            {patient.current_medications && (
+            {clinicalAccess && patient.current_medications && (
               <div className="bg-surface border border-app rounded-xl p-4">
                 <div className="text-xs text-app3 uppercase tracking-wider font-semibold mb-2">Medicación</div>
                 <div className="text-sm">{patient.current_medications}</div>
@@ -721,6 +803,7 @@ export default function PatientDetailClient({
             )}
 
             {/* Historia clínica */}
+            {clinicalAccess && (
             <button
               onClick={() => requestClinicalHistory(`/patients/${params.id}/clinical-history`)}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
@@ -735,7 +818,9 @@ export default function PatientDetailClient({
                 : <span className="text-app3">›</span>
               }
             </button>
+            )}
 
+            {access.can('payments.manage') && (
             <button
               onClick={openAccountModal}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
@@ -743,7 +828,9 @@ export default function PatientDetailClient({
               <span className="flex items-center gap-2"><Wallet size={15} strokeWidth={2} /> Ver cuenta corriente</span>
               <span className="text-app3">›</span>
             </button>
+            )}
 
+            {clinicalAccess && (
             <button
               onClick={() => navigateTo(`/patients/${params.id}/consents`, 'consents')}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
@@ -756,7 +843,9 @@ export default function PatientDetailClient({
                 : <span className="text-app3">›</span>
               }
             </button>
+            )}
 
+            {access.can('quotes.manage') && (
             <button
               onClick={() => navigateTo(`/patients/${params.id}/quotes`, 'quotes')}
               className="w-full flex items-center justify-between gap-2 bg-surface border-2 border-app hover:border-[#00C4BC] hover:bg-[#E6F8F1] dark:hover:bg-[#00C4BC]/10 text-app hover:text-[#00C4BC] font-bold text-sm px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
@@ -767,13 +856,16 @@ export default function PatientDetailClient({
                 : <span className="text-app3">›</span>
               }
             </button>
+            )}
 
-            {/* Notas del paciente */}
+            {/* Notas del paciente (narrativa clínica) */}
+            {clinicalAccess && (
             <PatientNotesSection
               patientId={params.id as string}
               token={token}
               initialNotes={patient?.notes ?? ''}
             />
+            )}
 
           </div>
 
@@ -781,6 +873,7 @@ export default function PatientDetailClient({
           <div className="md:col-span-2 space-y-6 animate-fade-in-up" style={{ animationDelay: '80ms' }}>
 
             {/* Resumen clínico — pantallazo read-only de la HC (alertas + última evolución + antecedentes). */}
+            {clinicalAccess && (
             <ClinicalSummaryCard
               patientId={params.id as string}
               token={token}
@@ -789,6 +882,7 @@ export default function PatientDetailClient({
               onOpenFull={() => requestClinicalHistory(`/patients/${params.id}/clinical-history`)}
               onOpenEncounter={(encounterId) => requestClinicalHistory(`/patients/${params.id}/clinical-history?encounter=${encounterId}`)}
             />
+            )}
 
             {/* Odontograma — gated por especialidad (solo odontología edita). */}
             {showOdontogram && (
@@ -852,10 +946,12 @@ export default function PatientDetailClient({
             )}
 
             {/* Archivos y radiografías */}
-            <PatientFilesSection patientId={params.id as string} showOdontogramPhoto={canEditOdontogram} />
+            {clinicalAccess && (
+              <PatientFilesSection patientId={params.id as string} showOdontogramPhoto={canEditOdontogram} />
+            )}
 
             {/* Tratamientos activos */}
-            {patient.treatments?.filter((t: any) => t.status === 'in_progress' || t.status === 'accepted').length > 0 && (
+            {clinicalAccess && patient.treatments?.filter((t: any) => t.status === 'in_progress' || t.status === 'accepted').length > 0 && (
               <div className="bg-surface border border-app rounded-xl overflow-hidden">
                 <div className="px-6 py-4 border-b border-app">
                   <h3 className="font-semibold">📋 Tratamientos activos</h3>
@@ -1080,7 +1176,7 @@ export default function PatientDetailClient({
                                       >
                                         {downloadingPdfId === invoicesMap[p.id]?.id ? 'Generando...' : 'Descargar factura'}
                                       </button>
-                                    ) : myAfipConfigured ? (
+                                    ) : getIssuer(p.professional_id).configured ? (
                                       <button
                                         onClick={() => { setOpenMenuId(null); setInvoiceModalPayment({ ...p, patient_name: `${patient.first_name} ${patient.last_name}` }) }}
                                         className="w-full text-left px-4 py-2 text-sm text-amber-500 hover:bg-surface2 transition-colors cursor-pointer"
@@ -1204,7 +1300,7 @@ export default function PatientDetailClient({
       {invoiceModalPayment && (
         <InvoiceModal
           payment={invoiceModalPayment}
-          profesionalIvaCondition={myAfipIvaCondition}
+          profesionalIvaCondition={getIssuer(invoiceModalPayment.professional_id).ivaCondition}
           token={token}
           onClose={() => setInvoiceModalPayment(null)}
           onSuccess={(inv) => setInvoicesMap(prev => ({ ...prev, [inv.payment_id]: inv }))}
@@ -1388,6 +1484,13 @@ export default function PatientDetailClient({
                   </div>
                 </div>
 
+                <PatientContactFields
+                  value={editContact}
+                  onChange={patch => setEditContact(c => ({ ...c, ...patch }))}
+                  age={ageFromDob(editForm.date_of_birth)}
+                />
+
+                {clinicalAccess && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-app2 uppercase tracking-wider mb-1">Alergias</label>
@@ -1402,6 +1505,7 @@ export default function PatientDetailClient({
                       className="w-full bg-surface2 border border-app rounded-lg px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
                   </div>
                 </div>
+                )}
               </div>
 
               {editSubmitError && (

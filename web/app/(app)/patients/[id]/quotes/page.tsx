@@ -497,6 +497,10 @@ export default function PatientQuotesPage() {
   const [patient, setPatient] = useState<{ first_name: string; last_name: string; phone: string | null } | null>(null)
   // Compartida y cacheable → React Query (dedup entre páginas).
   const { data: professionals = [] } = useProfessionals() as { data: Professional[] | undefined }
+  // Un Administrativo no figura en la lista de profesionales: el presupuesto se
+  // imputa por defecto al primer profesional (la API exige uno explícito).
+  const defaultProfessionalId = (id: string) =>
+    professionals.some(p => p.id === id) ? id : (professionals[0]?.id ?? id)
   const [loading, setLoading] = useState(true)
   const [myProfessionalId, setMyProfessionalId] = useState('')
 
@@ -540,7 +544,7 @@ export default function PatientQuotesPage() {
 
       setPatient(patientRes.data)
       setQuotes(quotesRes.data ?? [])
-      setForm(emptyForm(profId))
+      setForm(emptyForm(defaultProfessionalId(profId)))
       setLoading(false)
     }
     load()
@@ -585,7 +589,7 @@ export default function PatientQuotesPage() {
 
   function openCreate() {
     setEditingId(null)
-    setForm(emptyForm(myProfessionalId))
+    setForm(emptyForm(defaultProfessionalId(myProfessionalId)))
     setFormError('')
     setShowForm(true)
   }
@@ -624,7 +628,7 @@ export default function PatientQuotesPage() {
 
       const payload = {
         patient_id: patientId,
-        professional_id: form.professional_id || myProfessionalId,
+        professional_id: defaultProfessionalId(form.professional_id || myProfessionalId),
         items: form.items.map(i => ({
           ...i,
           tooth_number: i.tooth_number || null,

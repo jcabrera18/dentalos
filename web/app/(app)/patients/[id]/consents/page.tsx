@@ -1,10 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
 import { useMe } from '@/lib/queries'
+import {
+  BOND_EVIDENCE_OPTIONS, CONTACT_RELATIONSHIPS, CONSENT_RULE_HINT, GUARDIAN_RELATIONSHIPS, ageFromDob,
+  buildSignerStatementsHtml, consentSignerRule, relationshipLabel,
+  type ConsentSignerRule, type ConsentSignerType,
+} from '@/lib/patientContact'
 import {
   ArrowLeft, Plus, FileText, ChevronDown, ChevronUp, X,
   Printer, Share2, Download, Copy, Check,
@@ -24,12 +30,168 @@ interface Consent {
   signed_at: string | null
   created_at: string
   consent_templates: { name: string } | null
+  signer_type?: ConsentSignerType
 }
 
 interface ConsentDetail extends Consent {
   content_html: string
   signature_data: string | null
+  signer_name?: string | null
+  signer_document?: string | null
+  signer_relationship?: string | null
+  signer_authority?: string | null
+  guardian_signature_data?: string | null
+  treatment_invasive?: boolean | null
+  patient_heard?: boolean | null
+  signer_identity_verified?: boolean | null
+  signer_bond_evidence?: string | null
+  patient_age_at_signing?: number | null
 }
+
+// Identificación del representante para el rótulo de su firma.
+function representativeLabel(detail: ConsentDetail): string {
+  const rel = relationshipLabel(detail.signer_relationship)
+  const parts = [detail.signer_name, rel && `(${rel})`, detail.signer_document && `· DNI ${detail.signer_document}`]
+  return parts.filter(Boolean).join(' ')
+}
+
+// Firmas del documento, en orden y con su rótulo (CCyC art. 26, migraciones 078/079).
+// 'patient_and_guardian': el adolescente consiente con asistencia de su representante.
+function signatureEntries(detail: ConsentDetail): { label: string; data: string | null }[] {
+  if (detail.signer_type === 'guardian') {
+    return [{ label: `Firma del representante: ${representativeLabel(detail)}`, data: detail.signature_data }]
+  }
+  if (detail.signer_type === 'patient_and_guardian') {
+    return [
+      { label: 'Firma del paciente', data: detail.signature_data },
+      { label: `Firma del representante (asistencia): ${representativeLabel(detail)}`, data: detail.guardian_signature_data ?? null },
+    ]
+  }
+  return [{ label: 'Firma del paciente', data: detail.signature_data }]
+}
+
+function signedByText(t: ConsentSignerType | undefined): string {
+  if (t === 'guardian') return 'Firmado por su representante'
+  if (t === 'patient_and_guardian') return 'Firmado por el paciente y su representante'
+  return 'Firmado por el paciente'
+}
+
+// Quién puede firmar según la regla de edad (y, de 13 a 15, si el tratamiento es invasivo).
+// Espejo de validateConsentSigner en la API, que es la que decide.
+function allowedSignerTypes(rule: ConsentSignerRule, invasive: boolean | null): ConsentSignerType[] {
+  switch (rule) {
+    case 'dob_required': return []
+    case 'guardian_required': return ['guardian']
+    case 'guardian_if_invasive':
+      if (invasive === null) return []
+      return invasive ? ['patient_and_guardian'] : ['patient', 'patient_and_guardian']
+    default: return ['patient', 'patient_and_guardian', 'guardian']
+  }
+}
+
+const SIGNER_TYPE_LABEL: Record<ConsentSignerType, string> = {
+  patient: 'El paciente',
+  guardian: 'Su representante',
+  patient_and_guardian: 'Paciente + representante',
+}
+
+// ── Signature pad ─────────────────────────────────────────────
+
+type SignaturePadHandle = { toDataURL: () => string }
+
+const SignaturePad = forwardRef<SignaturePadHandle, { label: string; onChange: (hasSignature: boolean) => void }>(
+  function SignaturePad({ label, onChange }, ref) {
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const drawing = useRef(false)
+    const [has, setHas] = useState(false)
+    const onChangeRef = useRef(onChange)
+    useEffect(() => { onChangeRef.current = onChange })
+
+    useImperativeHandle(ref, () => ({
+      toDataURL: () => canvasRef.current?.toDataURL('image/png') ?? '',
+    }))
+
+    // Tamaño real del canvas al montarse (el modal ya está en pantalla).
+    useEffect(() => {
+      const id = requestAnimationFrame(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+        canvas.width = canvas.offsetWidth || 400
+        canvas.height = 160
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.strokeStyle = '#1a1a1a'
+          ctx.lineWidth = 2.5
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+        }
+        onChangeRef.current(false)
+      })
+      return () => cancelAnimationFrame(id)
+    }, [])
+
+    function point(e: React.PointerEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) {
+      const rect = canvas.getBoundingClientRect()
+      return [(e.clientX - rect.left) * (canvas.width / rect.width), (e.clientY - rect.top) * (canvas.height / rect.height)] as const
+    }
+
+    function onDown(e: React.PointerEvent<HTMLCanvasElement>) {
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return
+      canvas.setPointerCapture(e.pointerId)
+      ctx.beginPath()
+      ctx.moveTo(...point(e, canvas))
+      drawing.current = true
+    }
+
+    function onMove(e: React.PointerEvent<HTMLCanvasElement>) {
+      if (!drawing.current) return
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return
+      ctx.lineTo(...point(e, canvas))
+      ctx.stroke()
+      if (!has) { setHas(true); onChange(true) }
+    }
+
+    function clear() {
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      setHas(false)
+      onChange(false)
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-app2 uppercase tracking-wider">{label}</p>
+          <button type="button" onClick={clear} className="text-xs text-app3 hover:text-app transition-colors">
+            Limpiar
+          </button>
+        </div>
+        <div className="relative rounded-xl border-2 border-dashed border-app overflow-hidden bg-white">
+          {!has && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+              <p className="text-gray-300 text-sm">Firme aquí</p>
+            </div>
+          )}
+          <canvas
+            ref={canvasRef}
+            className="w-full block"
+            style={{ height: 160, touchAction: 'none' }}
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={() => { drawing.current = false }}
+            onPointerLeave={() => { drawing.current = false }}
+          />
+        </div>
+      </div>
+    )
+  },
+)
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -46,6 +208,10 @@ function formatDateTime(iso: string) {
     hour: '2-digit', minute: '2-digit',
     timeZone: 'America/Argentina/Buenos_Aires',
   })
+}
+
+function escapeText(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 // Reglas de formato del contenido del consentimiento (HTML de plantilla).
@@ -70,9 +236,13 @@ function generatePrintHtml(
     ? `Firmado el ${formatDateTime(detail.signed_at)}`
     : ''
 
-  const signatureHtml = detail.signature_data
-    ? `<img src="${detail.signature_data}" alt="Firma del paciente" style="max-width:320px;max-height:140px;object-fit:contain" />`
-    : '<p style="color:#9ca3af;font-style:italic;margin:0">Sin firma registrada</p>'
+  const signaturesHtml = signatureEntries(detail).map(sig => `
+    <div style="margin-bottom:20px">
+      <p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:10px">${escapeText(sig.label)}</p>
+      ${sig.data
+        ? `<img src="${sig.data}" alt="Firma" style="max-width:320px;max-height:140px;object-fit:contain" />`
+        : '<p style="color:#9ca3af;font-style:italic;margin:0">Sin firma registrada</p>'}
+    </div>`).join('')
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -107,8 +277,7 @@ function generatePrintHtml(
   <div class="consent-body" style="margin-bottom:36px;color:#1f2937">${detail.content_html}</div>
 
   <div style="margin-top:40px">
-    <p style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:10px">Firma del paciente</p>
-    ${signatureHtml}
+    ${signaturesHtml}
     ${signedLine ? `<p style="font-size:12px;color:#6b7280;margin-top:8px">${signedLine}</p>` : ''}
   </div>
 
@@ -218,16 +387,17 @@ async function generateConsentImage(
   const BULLET_INDENT = 18
 
   const blocks = parseConsentBlocks(detail.content_html)
-  const signature = detail.signature_data ? await loadImage(detail.signature_data) : null
-
-  // Firma escalada (máx 320×140).
-  let sigW = 0, sigH = 0
-  if (signature) {
-    const maxW = 320, maxH = 140
-    const scale = Math.min(maxW / signature.width, maxH / signature.height, 1)
-    sigW = Math.round(signature.width * scale)
-    sigH = Math.round(signature.height * scale)
-  }
+  // Firmas escaladas (máx 320×140 cada una).
+  const signatures = await Promise.all(signatureEntries(detail).map(async sig => {
+    const img = sig.data ? await loadImage(sig.data) : null
+    let w = 0, h = 0
+    if (img) {
+      const scale = Math.min(320 / img.width, 140 / img.height, 1)
+      w = Math.round(img.width * scale)
+      h = Math.round(img.height * scale)
+    }
+    return { label: sig.label.toUpperCase(), img, w, h }
+  }))
 
   // Canvas de medición para calcular el wrapping y la altura total.
   const measureCtx = document.createElement('canvas').getContext('2d')!
@@ -253,14 +423,14 @@ async function generateConsentImage(
   })
 
   // ── Altura total ────────────────────────────
-  const signatureLabel = 'FIRMA DEL PACIENTE'
   const signedLine = detail.signed_at ? `Firmado el ${formatDateTime(detail.signed_at)}` : ''
 
   let H = 48 + 90 + 20 + 1 + 20          // top + header + divider + patient label gap
   H += 15 + 22 + 20                       // patient name + gap
   H += 1 + 20                             // divider antes del contenido
   for (const b of laidOut) H += b.st.gapBefore + b.lines.length * b.st.lineH + b.st.gapAfter
-  H += 24 + 16 + (sigH || 18) + (signedLine ? 24 : 0)  // firma label + firma/placeholder + fecha
+  for (const sig of signatures) H += 4 + 24 + (sig.h || 18) + 12  // rótulo + firma/placeholder + separación
+  H += signedLine ? 24 : 0                                         // fecha
   H += 24 + 1 + 16 + 18                   // footer
 
   const canvas = document.createElement('canvas')
@@ -331,15 +501,18 @@ async function generateConsentImage(
   }
 
   // ── Signature ───────────────────────────────
-  y += 4
-  ctx.font = `600 10px ${FONT}`; ctx.fillStyle = G4
-  ctx.fillText(signatureLabel, PAD, y + 10); y += 24
-  if (signature) {
-    ctx.drawImage(signature, PAD, y, sigW, sigH)
-    y += sigH
-  } else {
-    ctx.font = `italic 13px ${FONT}`; ctx.fillStyle = G4
-    ctx.fillText('Sin firma registrada', PAD, y + 12); y += 18
+  for (const sig of signatures) {
+    y += 4
+    ctx.font = `600 10px ${FONT}`; ctx.fillStyle = G4
+    ctx.fillText(sig.label, PAD, y + 10); y += 24
+    if (sig.img) {
+      ctx.drawImage(sig.img, PAD, y, sig.w, sig.h)
+      y += sig.h
+    } else {
+      ctx.font = `italic 13px ${FONT}`; ctx.fillStyle = G4
+      ctx.fillText('Sin firma registrada', PAD, y + 12); y += 18
+    }
+    y += 12
   }
   if (signedLine) {
     y += 6
@@ -372,8 +545,18 @@ export default function PatientConsentsPage() {
   const router = useRouter()
   const patientId = params.id as string
   const supabase = createClient()
+  const qc = useQueryClient()
 
-  const [patient, setPatient] = useState<{ first_name: string; last_name: string; document_number?: string | null } | null>(null)
+  const [patient, setPatient] = useState<{
+    first_name: string
+    last_name: string
+    document_number?: string | null
+    date_of_birth?: string | null
+    contact_name?: string | null
+    contact_relationship?: string | null
+    contact_document_number?: string | null
+    contact_is_legal_guardian?: boolean | null
+  } | null>(null)
   const [consents, setConsents] = useState<Consent[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -395,14 +578,42 @@ export default function PatientConsentsPage() {
   const [showSignModal, setShowSignModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  // Quién firma (CCyC art. 26): lo define la edad y, de 13 a 15, si el tratamiento es invasivo.
+  const patientAge = ageFromDob(patient?.date_of_birth)
+  const signerRule = consentSignerRule(patientAge)
+  const [treatmentInvasive, setTreatmentInvasive] = useState<boolean | null>(null)
+  const [signerType, setSignerType] = useState<ConsentSignerType>('patient')
+  const [signerName, setSignerName] = useState('')
+  const [signerDocument, setSignerDocument] = useState('')
+  const [signerRelationship, setSignerRelationship] = useState('')
+  const [signerAuthority, setSignerAuthority] = useState('')
+  // Constancias del profesional (080): el niño fue oído; DNI y vínculo del representante verificados.
+  const [patientHeard, setPatientHeard] = useState(false)
+  const [identityVerified, setIdentityVerified] = useState(false)
+  const [bondEvidence, setBondEvidence] = useState('')
+  const [dobInput, setDobInput] = useState('')
+  const [dobSaving, setDobSaving] = useState(false)
+  const allowedSigners = allowedSignerTypes(signerRule, treatmentInvasive)
+  // Si la opción elegida dejó de valer (cambió la edad o el carácter del tratamiento), se usa la primera permitida.
+  const effectiveSigner: ConsentSignerType | null = allowedSigners.includes(signerType) ? signerType : (allowedSigners[0] ?? null)
+  const involvesGuardian = effectiveSigner !== null && effectiveSigner !== 'patient'
+  const guardianLegallyNeeded = signerRule === 'guardian_required'
+    || (signerRule === 'guardian_if_invasive' && treatmentInvasive === true)
+  const authorityRequired = involvesGuardian && (
+    (guardianLegallyNeeded && !GUARDIAN_RELATIONSHIPS.includes(signerRelationship))
+    || (signerRule === 'patient' && effectiveSigner === 'guardian')
+  )
   // me es compartido y cacheable → React Query; derivamos el nombre del profesional.
   const { data: me } = useMe()
   const professionalName = me ? `${me.first_name} ${me.last_name}` : ''
 
-  // Signature canvas
-  const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
+  // Firmas: principal (paciente, o representante si firma solo él) y la del representante que asiste.
+  const mainPadRef = useRef<SignaturePadHandle>(null)
+  const guardianPadRef = useRef<SignaturePadHandle>(null)
   const [hasSignature, setHasSignature] = useState(false)
-  const isDrawing = useRef(false)
+  const [hasGuardianSignature, setHasGuardianSignature] = useState(false)
 
   // ── Load data ───────────────────────────────────────────────
 
@@ -424,25 +635,6 @@ export default function PatientConsentsPage() {
     }
     load()
   }, [patientId])
-
-  // Init canvas when sign modal opens
-  useEffect(() => {
-    if (!showSignModal) return
-    requestAnimationFrame(() => {
-      const canvas = signatureCanvasRef.current
-      if (!canvas) return
-      canvas.width = canvas.offsetWidth || 400
-      canvas.height = 160
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.strokeStyle = '#1a1a1a'
-        ctx.lineWidth = 2.5
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-      }
-      setHasSignature(false)
-    })
-  }, [showSignModal])
 
   // ── Expand / load detail ────────────────────────────────────
 
@@ -483,7 +675,20 @@ export default function PatientConsentsPage() {
     setSelectedTemplate(t)
     setShowSelectModal(false)
     setSaved(false)
+    setSaveError('')
     setHasSignature(false)
+    setHasGuardianSignature(false)
+    setTreatmentInvasive(null)
+    setSignerAuthority('')
+    setPatientHeard(false)
+    setIdentityVerified(false)
+    setBondEvidence('')
+    setDobInput('')
+    // Default: lo que exige la edad (se ajusta solo vía effectiveSigner).
+    setSignerType(signerRule === 'guardian_required' ? 'guardian' : 'patient')
+    setSignerName(patient?.contact_name ?? '')
+    setSignerDocument(patient?.contact_document_number ?? '')
+    setSignerRelationship(patient?.contact_relationship ?? '')
     setShowSignModal(true)
   }
 
@@ -493,64 +698,95 @@ export default function PatientConsentsPage() {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
   }
 
+  // Plantilla con los placeholders resueltos: es lo que se envía. Las constancias
+  // legales (representación, verificación, etc.) las agrega la API al guardar.
   function renderConsentHtml(html: string) {
     if (!patient) return html
+    const patientFull = `${patient.first_name} ${patient.last_name}`
+    // {{signer_*}} = quien presta el consentimiento: el representante solo si firma en lugar del paciente.
+    const isGuardian = effectiveSigner === 'guardian'
+    const rel = relationshipLabel(signerRelationship)
     return html
-      .replace(/\{\{patient_name\}\}/g, escapeHtml(`${patient.first_name} ${patient.last_name}`))
+      .replace(/\{\{patient_name\}\}/g, escapeHtml(patientFull))
       .replace(/\{\{patient_document\}\}/g, escapeHtml(patient.document_number ?? ''))
       .replace(/\{\{professional_name\}\}/g, escapeHtml(professionalName))
+      .replace(/\{\{signer_name\}\}/g, escapeHtml(isGuardian ? signerName : patientFull))
+      .replace(/\{\{signer_document\}\}/g, escapeHtml(isGuardian ? signerDocument : (patient.document_number ?? '')))
+      .replace(/\{\{signer_relationship\}\}/g, escapeHtml(isGuardian ? rel : ''))
   }
 
-  function onSignPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
-    const canvas = signatureCanvasRef.current
-    if (!canvas) return
-    canvas.setPointerCapture(e.pointerId)
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.beginPath()
-    ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY)
-    isDrawing.current = true
+  // Vista previa = plantilla + las constancias que agregará la API (mismo texto).
+  function renderPreviewHtml(html: string) {
+    if (!patient || !effectiveSigner) return renderConsentHtml(html)
+    return renderConsentHtml(html) + buildSignerStatementsHtml({
+      patient_name: `${patient.first_name} ${patient.last_name}`,
+      age: patientAge,
+      signer_type: effectiveSigner,
+      treatment_invasive: signerRule === 'guardian_if_invasive' ? treatmentInvasive : null,
+      signer_name: signerName,
+      signer_document: signerDocument,
+      signer_relationship: signerRelationship,
+      signer_authority: authorityRequired ? signerAuthority : null,
+      patient_heard: patientHeard,
+      signer_identity_verified: identityVerified,
+      signer_bond_evidence: bondEvidence,
+    })
   }
 
-  function onSignPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (!isDrawing.current) return
-    const canvas = signatureCanvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY)
-    ctx.stroke()
-    setHasSignature(true)
-  }
-
-  function onSignPointerUp() {
-    isDrawing.current = false
-  }
-
-  function clearSignature() {
-    const canvas = signatureCanvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    setHasSignature(false)
+  // Fecha de nacimiento faltante: se carga desde el modal (define quién firma).
+  async function saveDob() {
+    if (!dobInput || !patient) return
+    setDobSaving(true)
+    setSaveError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await apiFetch(`/patients/${patientId}`, {
+        method: 'PATCH',
+        token: session.access_token,
+        body: JSON.stringify({ date_of_birth: dobInput }),
+      })
+      setPatient({ ...patient, date_of_birth: dobInput })
+      setSignerType(consentSignerRule(ageFromDob(dobInput)) === 'guardian_required' ? 'guardian' : 'patient')
+      void qc.invalidateQueries({ queryKey: ['patient', patientId] })
+      void qc.invalidateQueries({ queryKey: ['patients'] })
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'No se pudo guardar la fecha de nacimiento')
+    } finally {
+      setDobSaving(false)
+    }
   }
 
   // ── Save consent ────────────────────────────────────────────
 
   async function handleSave() {
-    if (!selectedTemplate || !hasSignature || !signatureCanvasRef.current) return
+    if (!selectedTemplate || !effectiveSigner || !hasSignature || !mainPadRef.current) return
+    if (involvesGuardian && (!signerName.trim() || !signerDocument.trim() || !signerRelationship)) {
+      setSaveError('Completá nombre, vínculo y DNI del representante')
+      return
+    }
+    if (authorityRequired && !signerAuthority.trim()) {
+      setSaveError('Indicá el instrumento que habilita al representante')
+      return
+    }
+    if (involvesGuardian && (!identityVerified || !bondEvidence)) {
+      setSaveError('Confirmá que verificaste el DNI del representante e indicá cómo se acreditó el vínculo')
+      return
+    }
+    if (signerRule === 'guardian_required' && !patientHeard) {
+      setSaveError('Confirmá que informaste al paciente y lo escuchaste según su edad y madurez')
+      return
+    }
+    if (effectiveSigner === 'patient_and_guardian' && (!hasGuardianSignature || !guardianPadRef.current)) {
+      setSaveError('Falta la firma del representante')
+      return
+    }
+    setSaveError('')
     setSaving(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const signatureData = signatureCanvasRef.current.toDataURL('image/png')
+      const signatureData = mainPadRef.current.toDataURL()
       const renderedHtml = renderConsentHtml(selectedTemplate.content_html)
       await apiFetch('/consents', {
         method: 'POST',
@@ -560,6 +796,20 @@ export default function PatientConsentsPage() {
           template_id: selectedTemplate.id,
           content_html: renderedHtml,
           signature_data: signatureData,
+          signer_type: effectiveSigner,
+          ...(signerRule === 'guardian_if_invasive' ? { treatment_invasive: treatmentInvasive } : {}),
+          ...(signerRule === 'guardian_required' ? { patient_heard: patientHeard } : {}),
+          ...(involvesGuardian ? {
+            signer_name: signerName.trim(),
+            signer_document: signerDocument.trim(),
+            signer_relationship: signerRelationship,
+            signer_authority: authorityRequired ? signerAuthority.trim() : undefined,
+            signer_identity_verified: identityVerified,
+            signer_bond_evidence: bondEvidence,
+          } : {}),
+          ...(effectiveSigner === 'patient_and_guardian' ? {
+            guardian_signature_data: guardianPadRef.current!.toDataURL(),
+          } : {}),
         }),
       })
       const updated = await apiFetch(`/consents?patient_id=${patientId}`, { token: session.access_token })
@@ -571,6 +821,8 @@ export default function PatientConsentsPage() {
         setHasSignature(false)
         setSaved(false)
       }, 1800)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'No se pudo guardar el consentimiento')
     } finally {
       setSaving(false)
     }
@@ -708,7 +960,7 @@ export default function PatientConsentsPage() {
                       <span className="text-xs text-app3">{dateStr}</span>
                     </div>
                     <p className="text-sm text-app2 mt-0.5 truncate">
-                      {c.status === 'signed' ? 'Firmado por el paciente' : c.status}
+                      {c.status === 'signed' ? signedByText(c.signer_type) : c.status}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -742,21 +994,20 @@ export default function PatientConsentsPage() {
                           />
                         </div>
 
-                        {/* Signature */}
-                        <div>
-                          <p className="text-xs font-semibold text-app2 uppercase tracking-wider mb-2">Firma del paciente</p>
-                          {detail.signature_data ? (
-                            <div className="border border-app rounded-xl overflow-hidden bg-white" style={{ maxWidth: 320 }}>
-                              <img
-                                src={detail.signature_data}
-                                alt="Firma del paciente"
-                                className="w-full object-contain"
-                                style={{ maxHeight: 120 }}
-                              />
+                        {/* Signatures */}
+                        <div className="space-y-3">
+                          {signatureEntries(detail).map(sig => (
+                            <div key={sig.label}>
+                              <p className="text-xs font-semibold text-app2 uppercase tracking-wider mb-2">{sig.label}</p>
+                              {sig.data ? (
+                                <div className="border border-app rounded-xl overflow-hidden bg-white" style={{ maxWidth: 320 }}>
+                                  <img src={sig.data} alt="Firma" className="w-full object-contain" style={{ maxHeight: 120 }} />
+                                </div>
+                              ) : (
+                                <p className="text-sm text-app3 italic">Sin firma registrada</p>
+                              )}
                             </div>
-                          ) : (
-                            <p className="text-sm text-app3 italic">Sin firma registrada</p>
-                          )}
+                          ))}
                           {detail.signed_at && (
                             <p className="text-xs text-app3 mt-2">
                               Firmado el {new Date(detail.signed_at).toLocaleDateString('es-AR', {
@@ -866,7 +1117,7 @@ export default function PatientConsentsPage() {
             <div className="bg-white max-h-96 overflow-y-auto">
               <div
                 className="px-6 py-6 text-gray-800 text-sm leading-relaxed [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mb-3 [&_h2]:mt-0 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_li]:mb-1 [&_p]:mb-3 [&_strong]:font-semibold"
-                dangerouslySetInnerHTML={{ __html: renderConsentHtml(selectedTemplate.content_html) }}
+                dangerouslySetInnerHTML={{ __html: renderPreviewHtml(selectedTemplate.content_html) }}
               />
             </div>
 
@@ -883,28 +1134,151 @@ export default function PatientConsentsPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-app2 uppercase tracking-wider">Firma del paciente</p>
-                    <button onClick={clearSignature} className="text-xs text-app3 hover:text-app transition-colors">
-                      Limpiar
-                    </button>
-                  </div>
-                  <div className="relative rounded-xl border-2 border-dashed border-app overflow-hidden bg-white">
-                    {!hasSignature && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-                        <p className="text-gray-300 text-sm">Firme aquí</p>
+                  {/* Quién firma (CCyC art. 26) */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-app2 uppercase tracking-wider">¿Quién firma?</p>
+                      {patientAge !== null && <span className="text-xs text-app3">{patientAge} años</span>}
+                    </div>
+
+                    {(signerRule === 'dob_required' || (patientAge !== null && patientAge < 18)) && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                        {CONSENT_RULE_HINT[signerRule]}
+                      </p>
+                    )}
+
+                    {signerRule === 'dob_required' && (
+                      <div className="flex gap-2">
+                        <input type="date" value={dobInput} onChange={e => setDobInput(e.target.value)}
+                          max={new Date().toISOString().slice(0, 10)}
+                          className="flex-1 bg-surface2 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                        <button type="button" onClick={saveDob} disabled={!dobInput || dobSaving}
+                          className="px-4 py-2 rounded-lg bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-40 text-white text-sm font-semibold">
+                          {dobSaving ? 'Guardando…' : 'Guardar fecha'}
+                        </button>
                       </div>
                     )}
-                    <canvas
-                      ref={signatureCanvasRef}
-                      className="w-full block"
-                      style={{ height: 160, touchAction: 'none' }}
-                      onPointerDown={onSignPointerDown}
-                      onPointerMove={onSignPointerMove}
-                      onPointerUp={onSignPointerUp}
-                      onPointerLeave={onSignPointerUp}
-                    />
+
+                    {signerRule === 'guardian_if_invasive' && (
+                      <div className="space-y-1.5">
+                        <p className="text-sm text-app2">¿El tratamiento es invasivo o compromete la salud del paciente?</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { v: true, label: 'Sí, invasivo' },
+                            { v: false, label: 'No invasivo' },
+                          ] as const).map(opt => (
+                            <button key={String(opt.v)} type="button" onClick={() => setTreatmentInvasive(opt.v)}
+                              className={`py-2 rounded-xl text-sm font-semibold border transition-all ${
+                                treatmentInvasive === opt.v ? 'border-[#00C4BC] bg-[#00C4BC]/10 text-[#00C4BC]' : 'border-app bg-surface2 text-app2 hover:border-app2'
+                              }`}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {allowedSigners.length > 1 && (
+                      <div className={`grid gap-2 ${allowedSigners.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                        {allowedSigners.map(v => (
+                          <button key={v} type="button" onClick={() => setSignerType(v)}
+                            className={`py-2 px-1 rounded-xl text-xs sm:text-sm font-semibold border transition-all ${
+                              effectiveSigner === v ? 'border-[#00C4BC] bg-[#00C4BC]/10 text-[#00C4BC]' : 'border-app bg-surface2 text-app2 hover:border-app2'
+                            }`}>
+                            {SIGNER_TYPE_LABEL[v]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {allowedSigners.length === 1 && effectiveSigner && (
+                      <p className="text-sm text-app2">Firma: <span className="font-semibold text-app">{SIGNER_TYPE_LABEL[effectiveSigner]}</span></p>
+                    )}
+
+                    {involvesGuardian && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px] gap-2">
+                          <input value={signerName} onChange={e => setSignerName(e.target.value)}
+                            placeholder="Nombre y apellido del representante"
+                            className="bg-surface2 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                          <select value={signerRelationship} onChange={e => setSignerRelationship(e.target.value)}
+                            className="bg-surface2 border border-app rounded-lg px-2 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
+                            <option value="">Vínculo *</option>
+                            {CONTACT_RELATIONSHIPS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
+                          <input value={signerDocument} onChange={e => setSignerDocument(e.target.value)}
+                            placeholder="DNI *" inputMode="numeric"
+                            className="bg-surface2 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                        </div>
+                        {authorityRequired && (
+                          <div>
+                            <input value={signerAuthority} onChange={e => setSignerAuthority(e.target.value)}
+                              placeholder={signerRule === 'patient'
+                                ? 'Instrumento que lo habilita (ej.: sentencia de curatela/apoyo, juzgado y fecha) *'
+                                : 'Instrumento que lo habilita (ej.: delegación art. 643, guarda judicial) *'}
+                              className="w-full bg-surface2 border border-app rounded-lg px-3 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]" />
+                            <p className="text-xs text-app3 mt-1">
+                              {signerRule === 'patient'
+                                ? 'Desde los 16 años decide el paciente: que firme solo un representante requiere un instrumento que lo habilite.'
+                                : 'Solo la madre, el padre o el tutor pueden firmar por un menor sin más. Para otro vínculo, dejá constancia del instrumento.'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Verificación del firmante (080): prueba de la firma electrónica (Ley 25.506 art. 5) */}
+                        <div className="bg-surface2/60 border border-app rounded-lg p-3 space-y-2">
+                          <label className="flex items-start gap-2.5 text-sm text-app2 cursor-pointer">
+                            <input type="checkbox" checked={identityVerified} onChange={e => setIdentityVerified(e.target.checked)}
+                              className="mt-0.5 accent-[#00C4BC]" />
+                            <span>Verifiqué la identidad del representante con su DNI</span>
+                          </label>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <span className="text-sm text-app2 shrink-0">Vínculo acreditado con:</span>
+                            <select value={bondEvidence} onChange={e => setBondEvidence(e.target.value)}
+                              className="flex-1 bg-surface2 border border-app rounded-lg px-2 py-2 text-app text-sm focus:outline-none focus:border-[#00C4BC]">
+                              <option value="">Seleccionar… *</option>
+                              {BOND_EVIDENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </div>
+                          {bondEvidence === 'declaracion' && (
+                            <p className="text-xs text-amber-700 dark:text-amber-400">
+                              Queda constancia de que el vínculo fue declarado por el firmante, sin documentación. Si podés, pedí la partida de nacimiento.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {signerRule === 'guardian_required' && (
+                      <label className="flex items-start gap-2.5 text-sm text-app2 cursor-pointer">
+                        <input type="checkbox" checked={patientHeard} onChange={e => setPatientHeard(e.target.checked)}
+                          className="mt-0.5 accent-[#00C4BC]" />
+                        <span>
+                          Le expliqué el tratamiento al paciente y lo escuché según su edad y madurez
+                          <span className="block text-xs text-app3">Derecho del niño a ser oído (CCyC arts. 26 y 707; Ley 26.529 art. 2 inc. e).</span>
+                        </span>
+                      </label>
+                    )}
                   </div>
+
+                  {effectiveSigner && (
+                    <SignaturePad
+                      key={effectiveSigner === 'guardian' ? 'main-guardian' : 'main-patient'}
+                      ref={mainPadRef}
+                      label={effectiveSigner === 'guardian' ? 'Firma del representante' : 'Firma del paciente'}
+                      onChange={setHasSignature}
+                    />
+                  )}
+                  {effectiveSigner === 'patient_and_guardian' && (
+                    <SignaturePad
+                      key="guardian-assist"
+                      ref={guardianPadRef}
+                      label="Firma del representante (asistencia)"
+                      onChange={setHasGuardianSignature}
+                    />
+                  )}
+                  {saveError && (
+                    <p className="text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{saveError}</p>
+                  )}
                   <div className="flex gap-3 justify-end">
                     <button
                       onClick={() => { setShowSignModal(false); setSelectedTemplate(null) }}
@@ -914,7 +1288,10 @@ export default function PatientConsentsPage() {
                     </button>
                     <button
                       onClick={handleSave}
-                      disabled={!hasSignature || saving}
+                      disabled={!effectiveSigner || !hasSignature || saving
+                        || (effectiveSigner === 'patient_and_guardian' && !hasGuardianSignature)
+                        || (involvesGuardian && (!identityVerified || !bondEvidence))
+                        || (signerRule === 'guardian_required' && !patientHeard)}
                       className="px-6 py-2.5 rounded-xl bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-40 text-white text-sm font-bold transition-all active:scale-95 shadow-sm shadow-[#00C4BC]/20"
                     >
                       {saving ? 'Guardando...' : 'Firmar y guardar'}

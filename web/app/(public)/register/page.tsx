@@ -190,10 +190,11 @@ function translateError(msg: string): string {
 }
 
 // ── Invite banner ──────────────────────────────────────────────
-function InviteBanner({ clinicName }: { clinicName: string }) {
+function InviteBanner({ clinicName, isAdministrative }: { clinicName: string; isAdministrative?: boolean }) {
   return (
     <div className="p-3 bg-[#E6F8F1] border border-[#00C4BC]/30 rounded-xl text-[#00C4BC] text-sm text-center font-medium">
       Fuiste invitado a unirte a <span className="font-bold">{clinicName}</span>
+      {isAdministrative && <> como <span className="font-bold">Administrativo/a</span></>}
     </div>
   )
 }
@@ -208,6 +209,9 @@ function RegisterForm() {
   const [inviteClinic, setInviteClinic] = useState<{ id: string; name: string } | null>(null)
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken)
+  // Rol del invite: un Administrativo no atiende → no elige especialidad.
+  const [inviteRole, setInviteRole] = useState<string | null>(null)
+  const isAdministrative = inviteRole === 'receptionist'
 
   const [form, setForm] = useState({ clinic_name: '', first_name: '', last_name: '', email: '', password: '', discipline: MULTI_SPECIALTY_ENABLED ? '' : 'dentistry' })
   const [submitted, setSubmitted] = useState(false)
@@ -224,7 +228,7 @@ function RegisterForm() {
   useEffect(() => {
     if (!inviteToken) return
     apiFetch(`/professionals/invite/${inviteToken}`)
-      .then(res => setInviteClinic(res.data.clinic))
+      .then(res => { setInviteClinic(res.data.clinic); setInviteRole(res.data.role ?? null) })
       .catch(err => setInviteError(err.message))
       .finally(() => setInviteLoading(false))
   }, [inviteToken])
@@ -250,7 +254,8 @@ function RegisterForm() {
       const body: Record<string, string> = {
         email: form.email, password: form.password,
         first_name: form.first_name, last_name: form.last_name,
-        discipline: form.discipline,
+        // La columna discipline es obligatoria; para un Administrativo no se usa.
+        discipline: isAdministrative ? 'dentistry' : form.discipline,
       }
       if (inviteToken) { body.invite_token = inviteToken } else { body.clinic_name = form.clinic_name }
       await apiFetch('/auth/register', { method: 'POST', body: JSON.stringify(body) })
@@ -276,6 +281,68 @@ function RegisterForm() {
     )
   }
 
+  // Modal de login: se usa en el formulario y en la pantalla de éxito del invite
+  // (antes solo se renderizaba en el formulario, y "Ingresar a mi consultorio"
+  // de la pantalla de éxito no hacía nada).
+  const loginModal = showLoginModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-8 relative shadow-2xl">
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-4 right-4 text-[#6B7280] hover:text-[#0F1720] transition-colors text-xl leading-none"
+            >
+              ✕
+            </button>
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-extrabold text-[#0F1720]">
+                Vital<span className="text-[#00C4BC]">OS</span>
+              </h1>
+              <p className="text-[#6B7280] mt-2 text-sm">Ingresá a tu consultorio</p>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">Email</label>
+                <input
+                  type="email" value={form.email} onChange={() => {}} readOnly
+                  className="w-full border border-[#E5E7EB] bg-[#F3F4F6] rounded-xl px-4 py-3 text-[#0F1720] focus:outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">Contraseña</label>
+                <div className="relative">
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
+                    onChange={e => setLoginPassword(e.target.value)}
+                    placeholder="••••••••" required
+                    className="w-full border border-[#E5E7EB] bg-[#F3F4F6] rounded-xl px-4 py-3 pr-12 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:border-[#00C4BC] transition-colors text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(v => !v)}
+                    aria-label={showLoginPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute inset-y-0 right-0 flex items-center px-4 text-[#9CA3AF] hover:text-[#0F1720] transition-colors"
+                  >
+                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              {loginError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                  {loginError}
+                </div>
+              )}
+              <button
+                type="submit" disabled={loginLoading}
+                className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                {loginLoading ? 'Ingresando...' : 'Entrar a mi consultorio'}
+                {!loginLoading && <ArrowRight className="h-4 w-4" />}
+              </button>
+            </form>
+          </div>
+        </div>
+      )
+
   // Success state
   if (submitted) {
     // Invite flow: user is already confirmed, show login modal
@@ -297,6 +364,7 @@ function RegisterForm() {
           >
             Ingresar a mi consultorio <ArrowRight className="h-5 w-5" />
           </button>
+          {loginModal}
         </div>
       )
     }
@@ -342,7 +410,7 @@ function RegisterForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {inviteClinic && <InviteBanner clinicName={inviteClinic.name} />}
+        {inviteClinic && <InviteBanner clinicName={inviteClinic.name} isAdministrative={isAdministrative} />}
 
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
@@ -420,7 +488,7 @@ function RegisterForm() {
         </div>
 
         {/* Especialidad profesional */}
-        {MULTI_SPECIALTY_ENABLED && (
+        {MULTI_SPECIALTY_ENABLED && !isAdministrative && (
         <div>
           <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">
             ¿Cuál es tu especialidad?
@@ -466,7 +534,7 @@ function RegisterForm() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || inviteLoading || !form.discipline}
+          disabled={loading || inviteLoading || (!form.discipline && !isAdministrative)}
           className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-[#00C4BC]/20 mt-2"
         >
           {loading
@@ -512,65 +580,7 @@ function RegisterForm() {
         </div>
       )}
 
-      {/* Login modal */}
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-8 relative shadow-2xl">
-            <button
-              onClick={() => setShowLoginModal(false)}
-              className="absolute top-4 right-4 text-[#6B7280] hover:text-[#0F1720] transition-colors text-xl leading-none"
-            >
-              ✕
-            </button>
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-extrabold text-[#0F1720]">
-                Vital<span className="text-[#00C4BC]">OS</span>
-              </h1>
-              <p className="text-[#6B7280] mt-2 text-sm">Ingresá a tu consultorio</p>
-            </div>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">Email</label>
-                <input
-                  type="email" value={form.email} onChange={() => {}} readOnly
-                  className="w-full border border-[#E5E7EB] bg-[#F3F4F6] rounded-xl px-4 py-3 text-[#0F1720] focus:outline-none text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-[#0F1720] uppercase tracking-wider mb-2">Contraseña</label>
-                <div className="relative">
-                  <input
-                    type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
-                    onChange={e => setLoginPassword(e.target.value)}
-                    placeholder="••••••••" required
-                    className="w-full border border-[#E5E7EB] bg-[#F3F4F6] rounded-xl px-4 py-3 pr-12 text-[#0F1720] placeholder-[#9CA3AF] focus:outline-none focus:border-[#00C4BC] transition-colors text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(v => !v)}
-                    aria-label={showLoginPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute inset-y-0 right-0 flex items-center px-4 text-[#9CA3AF] hover:text-[#0F1720] transition-colors"
-                  >
-                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              {loginError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-                  {loginError}
-                </div>
-              )}
-              <button
-                type="submit" disabled={loginLoading}
-                className="w-full bg-[#00C4BC] hover:bg-[#00aaa3] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                {loginLoading ? 'Ingresando...' : 'Entrar a mi consultorio'}
-                {!loginLoading && <ArrowRight className="h-4 w-4" />}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {loginModal}
     </div>
   )
 }

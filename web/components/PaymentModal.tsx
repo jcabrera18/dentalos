@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api'
 import { downloadReceiptPNG } from '@/components/generateReceipt'
 import { InvoiceModal } from '@/components/InvoiceModal'
 import { consultationTypesFor } from '@/lib/capabilities'
+import { usePermissions, useProfessionals, useInvoiceIssuer } from '@/lib/queries'
 
 export const METODOS = [
   { value: 'cash', label: '💵 Efectivo' },
@@ -22,7 +23,7 @@ function formatThousands(value: string) {
   return Number(digits).toLocaleString('es-AR')
 }
 
-export function PaymentModal({ token, patients: initialPatients, professionals, payment, preselectedPatientId, prefillAmount, clinicName, myProfessionalName, profesionalIvaCondition, hasAfipConfig, onClose, onSaved }: {
+export function PaymentModal({ token, patients: initialPatients, professionals: professionalsProp, payment, preselectedPatientId, prefillAmount, clinicName, myProfessionalName, profesionalIvaCondition, hasAfipConfig, onClose, onSaved }: {
   token: string
   patients: any[]
   professionals: any[]
@@ -37,6 +38,13 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
   onSaved: (success?: { patientName: string; amount: number; remaining: number }) => void
 }) {
   const isEditing = Boolean(payment)
+  // Administrativo: no atiende, así que el cobro se imputa a un profesional
+  // explícito (la API lo exige) y la factura sale a nombre de ese profesional.
+  const access = usePermissions()
+  const requireProfessional = !access.clinicalAccess
+  const { data: clinicProfessionals = [] } = useProfessionals()
+  const professionals: any[] = requireProfessional ? clinicProfessionals : professionalsProp
+  const getIssuer = useInvoiceIssuer()
   const [form, setForm] = useState(() => ({
     patient_id: payment?.patient_id ?? preselectedPatientId ?? '',
     concept: payment?.concept ?? '',
@@ -47,6 +55,13 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
     notes: payment?.notes ?? '',
     professional_id: payment?.professional_id ?? '',
   }))
+
+  // Una sola opción y es obligatoria → preseleccionarla.
+  useEffect(() => {
+    if (requireProfessional && !form.professional_id && professionals.length === 1) {
+      setForm(f => ({ ...f, professional_id: professionals[0].id }))
+    }
+  }, [requireProfessional, professionals, form.professional_id])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [successData, setSuccessData] = useState<{ patientName: string; amount: number; remaining: number; createdPayment: any } | null>(null)
@@ -138,6 +153,7 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
     e.preventDefault()
     if (!form.patient_id) { setError('Seleccioná un paciente'); return }
     if (paidAmount < 0) { setError('Ingresá un monto válido'); return }
+    if (requireProfessional && !form.professional_id) { setError('Elegí el profesional al que corresponde el cobro'); return }
     if (paidAmount === 0 && totalAmount <= 0) {
       setError('Si no entrega nada, cargá el total del servicio para dejarlo en cuenta corriente')
       return
@@ -196,7 +212,11 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
   }
 
   if (successData) {
-    const canInvoice = hasAfipConfig && profesionalIvaCondition && successData.createdPayment?.id
+    const issuer = requireProfessional
+      ? getIssuer(form.professional_id || successData.createdPayment?.professional_id)
+      : { configured: !!hasAfipConfig, ivaCondition: profesionalIvaCondition }
+    const issuerIvaCondition = issuer.ivaCondition
+    const canInvoice = issuer.configured && issuerIvaCondition && successData.createdPayment?.id
 
     return (
       <>
@@ -261,9 +281,10 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
               id: successData.createdPayment.id,
               amount: paidAmount,
               patient_name: successData.patientName,
+              patient_id: form.patient_id || undefined,
               concept: form.concept || undefined,
             }}
-            profesionalIvaCondition={profesionalIvaCondition!}
+            profesionalIvaCondition={issuerIvaCondition!}
             token={token}
             onClose={() => setShowInvoiceModal(false)}
             onSuccess={() => {}}
@@ -360,12 +381,14 @@ export function PaymentModal({ token, patients: initialPatients, professionals, 
             </div>
 
             {/* Profesional */}
-            {professionals.length > 1 && (
+            {(professionals.length > 1 || requireProfessional) && (
               <div>
-                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">Profesional</label>
+                <label className="block text-xs font-semibold text-app3 uppercase tracking-wider mb-1.5">
+                  Profesional{requireProfessional ? ' *' : ''}
+                </label>
                 <select value={form.professional_id} onChange={e => set('professional_id', e.target.value)}
                   className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-app text-sm focus:outline-none focus:border-[#00C4BC] appearance-none">
-                  <option value="">— Sin especificar —</option>
+                  <option value="">{requireProfessional ? 'Elegí un profesional' : '— Sin especificar —'}</option>
                   {professionals.map(p => (
                     <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
                   ))}

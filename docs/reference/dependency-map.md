@@ -11,14 +11,14 @@ Convención: **archivo frontend** → `endpoints API` → *tablas/vistas princip
 |--------|-----------|---------------|
 | `layout.tsx` (shell, planes, pagos) | `/subscription/status`, `/nave/preference`, `/nave/payment-status`, `/mercadopago/preference`, `/professionals/invite` | `clinics`, `nave_payments`, `mp_payments`, `professional_invites` |
 | `dashboard/page.tsx` | `/appointments/dashboard`, `/appointments/:id/complete`, `/payments` | `appointments`, `v_daily_agenda`, `payments`, `treatments` |
-| `agenda/page.tsx` | `/appointments` (CRUD + `/calendar`), `/patients`, `/schedule-blocks` | `appointments`, `schedule_blocks`, `patients` |
+| `agenda/page.tsx` | `/appointments` (CRUD + `/calendar`), `/patients`, `/patients/:id/contact`, `/schedule-blocks` | `appointments`, `schedule_blocks`, `patients` |
 | `patients/page.tsx` | `/patients` | `patients` (+ `search_patients`) |
 | `patients/[id]/PatientDetailClient.tsx` | `/patients/:id`(+`/account-summary`), `/payments`, `/invoices`, `/consents`(+`/templates`), `/treatments/odontogram`, `/treatments/tooth-diagnostics` | `patients`, `payments`, `invoices`, `consents`, `odontogram`, `tooth_diagnostics`, `v_patient_account_summary` |
 | `patients/[id]/appointment/page.tsx` | `/appointments`, `/professionals`, `/patients/:id`, `/auth/me` | `appointments`, `professionals` |
 | `patients/[id]/clinical-history/page.tsx` | `/patients/:id/clinical-history`(+`/signatures`), `/patients/:id`, `/auth/me` | `patients` (JSONB historia), `clinical_history_signatures` |
 | `patients/[id]/consents/page.tsx` | `/consents`(+`/templates`), `/patients/:id`, `/auth/me` | `consents`, `consent_templates`, `global_consent_templates` |
 | `patients/[id]/quotes/page.tsx` | `/quotes`, `/professionals`, `/patients/:id` | `quotes`, `professionals` |
-| `settings/page.tsx` | `/auth/me`, `/professionals`(+`/:id`,`/invite`), `/professionals/me/afip-config` | `professionals`, `clinics`, `professional_invites` |
+| `settings/page.tsx` | `/auth/me`, `/professionals`(+`/:id`,`/invite`,`/:id/permissions`), `/professionals/me/afip-config` | `professionals`, `clinics`, `professional_invites`, `audit_log` |
 | `stats/clinical/page.tsx` | `/appointments/stats/clinical`, `/appointments/stats/period`, `/patients?limit=1` | `appointments`, `clinical_stats` RPC |
 | `stats/financial/page.tsx` | `/finance/kpis`, `/finance/movements`, `/expenses`, `/invoices`, `/payments`, `/professionals`, `/professionals/me/afip-config` | `payments`, `expenses`, `invoices`, `finance_*` RPC, `v_daily_cash` |
 
@@ -27,7 +27,7 @@ Convención: **archivo frontend** → `endpoints API` → *tablas/vistas princip
 | Componente | Endpoints | Nota |
 |------------|-----------|------|
 | `PaymentModal.tsx` | `/patients`(+`/account-summary`), `/patients?q=` | Alta de pago + saldo cta. corriente |
-| `InvoiceModal.tsx` | `/invoices` | Emisión AFIP |
+| `InvoiceModal.tsx` | `/invoices`, `/patients/:id/contact` (facturar a paciente o responsable) | Emisión AFIP |
 | `PatientFilesSection.tsx` | `/patients/:id/files` | Binarios — **fuera** del cache persistido |
 | `PatientAppointmentsSection.tsx` | `/appointments/:id` | — |
 | `PatientNotesSection.tsx` | `/patients/:id` | — |
