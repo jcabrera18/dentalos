@@ -10,15 +10,15 @@ Convención: **archivo frontend** → `endpoints API` → *tablas/vistas princip
 | Página | Endpoints | Tablas/vistas |
 |--------|-----------|---------------|
 | `layout.tsx` (shell, planes, pagos) | `/subscription/status`, `/nave/preference`, `/nave/payment-status`, `/mercadopago/preference`, `/professionals/invite` | `clinics`, `nave_payments`, `mp_payments`, `professional_invites` |
-| `dashboard/page.tsx` | `/appointments/dashboard`, `/appointments/:id/complete`, `/payments` | `appointments`, `v_daily_agenda`, `payments`, `treatments` |
-| `agenda/page.tsx` | `/appointments` (CRUD + `/calendar`), `/patients`, `/patients/:id/contact`, `/schedule-blocks` | `appointments`, `schedule_blocks`, `patients` |
+| `dashboard/page.tsx` | `/appointments/dashboard`, `/appointments/:id/complete`, `/payments`, `/indications`(+`/templates`) | `appointments`, `v_daily_agenda`, `payments`, `treatments`, `indication_templates`, `patient_indications` |
+| `agenda/page.tsx` | `/appointments` (CRUD + `/calendar`), `/patients`, `/patients/:id/contact`, `/schedule-blocks`, `/indications`(+`/templates`) | `appointments`, `schedule_blocks`, `patients`, `indication_templates`, `patient_indications` |
 | `patients/page.tsx` | `/patients` | `patients` (+ `search_patients`) |
-| `patients/[id]/PatientDetailClient.tsx` | `/patients/:id`(+`/account-summary`), `/payments`, `/invoices`, `/consents`(+`/templates`), `/treatments/odontogram`, `/treatments/tooth-diagnostics` | `patients`, `payments`, `invoices`, `consents`, `odontogram`, `tooth_diagnostics`, `v_patient_account_summary` |
+| `patients/[id]/PatientDetailClient.tsx` | `/patients/:id`(+`/account-summary`), `/payments`, `/invoices`, `/consents`(+`/templates`), `/treatments/odontogram`, `/treatments/tooth-diagnostics`, `/indications`(+`/templates`) | `patients`, `payments`, `invoices`, `consents`, `odontogram`, `tooth_diagnostics`, `v_patient_account_summary`, `patient_indications` |
 | `patients/[id]/appointment/page.tsx` | `/appointments`, `/professionals`, `/patients/:id`, `/auth/me` | `appointments`, `professionals` |
 | `patients/[id]/clinical-history/page.tsx` | `/patients/:id/clinical-history`(+`/signatures`), `/patients/:id`, `/auth/me` | `patients` (JSONB historia), `clinical_history_signatures` |
 | `patients/[id]/consents/page.tsx` | `/consents`(+`/templates`), `/patients/:id`, `/auth/me` | `consents`, `consent_templates`, `global_consent_templates` |
 | `patients/[id]/quotes/page.tsx` | `/quotes`, `/professionals`, `/patients/:id` | `quotes`, `professionals` |
-| `settings/page.tsx` | `/auth/me`, `/professionals`(+`/:id`,`/invite`,`/:id/permissions`), `/professionals/me/afip-config` | `professionals`, `clinics`, `professional_invites`, `audit_log` |
+| `settings/page.tsx` | `/auth/me`, `/professionals`(+`/:id`,`/invite`,`/:id/permissions`), `/professionals/me/afip-config`, `/indications/templates` | `professionals`, `clinics`, `professional_invites`, `audit_log`, `indication_templates` |
 | `stats/clinical/page.tsx` | `/appointments/stats/clinical`, `/appointments/stats/period`, `/patients?limit=1` | `appointments`, `clinical_stats` RPC |
 | `stats/financial/page.tsx` | `/finance/kpis`, `/finance/movements`, `/expenses`, `/invoices`, `/payments`, `/professionals`, `/professionals/me/afip-config` | `payments`, `expenses`, `invoices`, `finance_*` RPC, `v_daily_cash` |
 

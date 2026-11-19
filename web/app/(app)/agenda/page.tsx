@@ -7,10 +7,11 @@ import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useProfessionals, usePermissions, useCalendar, queryKeys, authedApiFetch, type CalendarData } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, CheckCircle2, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight, Share2, Download, Copy, MapPin } from 'lucide-react'
+import { Play, CheckCircle, CheckCircle2, XCircle, UserCheck, Clock, AlertTriangle, X, Lock, ChevronDown, ChevronLeft, ChevronRight, Share2, Download, Copy, MapPin, ClipboardList } from 'lucide-react'
 import { consultationTypesFor, DISCIPLINE_LABELS, normalizeDiscipline } from '@/lib/capabilities'
 import { generateAppointmentImage, type AppointmentCardData } from '@/components/generateReceipt'
 import { AppointmentContactLine } from '@/components/AppointmentContactLine'
+import { IndicationsModal } from '@/components/IndicationsModal'
 import { CONTACT_RELATIONSHIPS, GUARDIAN_RELATIONSHIPS } from '@/lib/patientContact'
 import { professionalColor, professionalInitials, professionalShortName } from '@/lib/professionalColor'
 
@@ -242,6 +243,11 @@ export default function AgendaPage() {
   const [newBlockDate, setNewBlockDate] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<any>(null)
   const [showMobileBlocks, setShowMobileBlocks] = useState(false)
+  // Indicaciones post-consulta: aviso tras marcar "Atendido" + modal de envío.
+  const [indicationsPrompt, setIndicationsPrompt] = useState<any>(null)
+  const [indicationsAppt, setIndicationsAppt] = useState<any>(null)
+  const access = usePermissions()
+  const canSendIndications = access.can('indications.send')
   const router   = useRouter()
   const supabase = createClient()
   const qc = useQueryClient()
@@ -350,8 +356,13 @@ export default function AgendaPage() {
       method: 'PATCH',
       body: JSON.stringify({ status })
     })
+    // Al marcar "Atendido", ofrecer (sin bloquear) enviar indicaciones al paciente.
+    const appt = status === 'completed' && canSendIndications
+      ? appointments.find((a: any) => a.id === id) ?? null
+      : null
     await refetchCalendar()
     setSelectedAppt(null)
+    if (appt) setIndicationsPrompt(appt)
   }
 
   async function deleteAppt(id: string) {
@@ -557,6 +568,12 @@ export default function AgendaPage() {
 
           {/* Secondary actions */}
           <div className="px-5 pb-5 pt-0 space-y-2 border-t border-app pt-4">
+            {selectedAppt.status === 'completed' && canSendIndications && (
+              <button onClick={() => { setIndicationsAppt(selectedAppt); setSelectedAppt(null) }}
+                className="w-full flex items-center justify-center gap-2 bg-[#E6F8F1] dark:bg-[#00C4BC]/10 hover:bg-[#00C4BC] hover:text-white text-[#00C4BC] font-semibold py-2.5 rounded-xl text-sm transition-all active:scale-95">
+                <ClipboardList size={15} /> Enviar indicaciones
+              </button>
+            )}
             <button onClick={() => router.push(`/patients/${selectedAppt.patient_id}`)}
               className="w-full bg-surface2 hover:bg-surface3 border border-app active:scale-95 text-app py-2.5 rounded-xl text-sm font-medium transition-all">
               Ver ficha del paciente →
@@ -1412,6 +1429,38 @@ export default function AgendaPage() {
       )}
 
       <ApptModal />
+
+      {/* Aviso tras "Atendido": enviar indicaciones (no bloquea la agenda) */}
+      {indicationsPrompt && !indicationsAppt && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md bg-surface border border-app rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 animate-fade-in-up">
+          <div className="w-9 h-9 rounded-full bg-[#E6F8F1] dark:bg-[#00C4BC]/10 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={18} className="text-[#00C4BC]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-app truncate">{indicationsPrompt.patient_name} · Atendido</div>
+            <div className="text-xs text-app3">¿Enviar indicaciones al paciente?</div>
+          </div>
+          <button onClick={() => { setIndicationsAppt(indicationsPrompt); setIndicationsPrompt(null) }}
+            className="bg-[#00C4BC] hover:bg-[#00aaa3] text-white text-xs font-bold px-3 py-2 rounded-lg flex-shrink-0 active:scale-95">
+            Enviar
+          </button>
+          <button onClick={() => setIndicationsPrompt(null)} aria-label="Cerrar"
+            className="w-7 h-7 rounded-full hover:bg-surface2 text-app3 flex items-center justify-center flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {indicationsAppt && (
+        <IndicationsModal
+          patientId={indicationsAppt.patient_id}
+          patientName={indicationsAppt.patient_name ?? ''}
+          appointmentId={indicationsAppt.id}
+          professionalId={indicationsAppt.professional_id}
+          appointmentType={indicationsAppt.appointment_type}
+          onClose={() => setIndicationsAppt(null)}
+        />
+      )}
     </div>
   )
 }

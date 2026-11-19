@@ -13,6 +13,7 @@ import { downloadAccountStatementPNG, downloadReceiptPNG } from '@/components/ge
 import { PatientNotesSection } from '@/components/PatientNotesSection'
 import { PatientFilesSection } from '@/components/PatientFilesSection'
 import { PatientAppointmentsSection } from '@/components/PatientAppointmentsSection'
+import { PatientIndicationsSection } from '@/components/PatientIndicationsSection'
 import { ClinicalSummaryCard } from '@/components/clinical/ClinicalSummaryCard'
 import { hasCapability, normalizeDiscipline } from '@/lib/capabilities'
 import { PatientContactFields } from '@/components/PatientContactFields'
@@ -985,6 +986,14 @@ export default function PatientDetailClient({
                     ))}
                 </div>
               </div>
+            )}
+
+            {/* Indicaciones enviadas al paciente (post-consulta) */}
+            {access.can('indications.send') && (
+              <PatientIndicationsSection
+                patientId={params.id as string}
+                patientName={`${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim()}
+              />
             )}
 
             {/* Historial clínico */}

@@ -6,8 +6,9 @@ import { apiFetch } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe, useDashboard, useUpdateAppointmentStatus, usePermissions, useInvoiceIssuer, useProfessionals, queryKeys } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
-import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown } from 'lucide-react'
+import { Play, CheckCircle, XCircle, UserCheck, CreditCard, Clock, CalendarDays, MoreHorizontal, FileText, ChevronDown, ClipboardList } from 'lucide-react'
 import { InvoiceModal } from '@/components/InvoiceModal'
+import { IndicationsModal } from '@/components/IndicationsModal'
 import { NotificationBell } from '@/components/NotificationBell'
 import { WaitingRoom, ProfessionalSummary, TomorrowToConfirm, ProfChip } from '@/components/ReceptionDashboard'
 import { professionalColor } from '@/lib/professionalColor'
@@ -25,6 +26,8 @@ export default function DashboardPage() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [createdPayment, setCreatedPayment] = useState<any>(null)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  // Indicaciones post-consulta del turno recién atendido (imagen para WhatsApp).
+  const [indicationsAppt, setIndicationsAppt] = useState<any>(null)
   const [inactiveOpen, setInactiveOpen] = useState(false)
   // Recepción: filtro de la agenda de hoy por profesional ('' = todos).
   const [profFilter, setProfFilter] = useState('')
@@ -740,6 +743,17 @@ export default function DashboardPage() {
 
       </main>
 
+      {indicationsAppt && (
+        <IndicationsModal
+          patientId={indicationsAppt.patient_id}
+          patientName={indicationsAppt.patient_name ?? ''}
+          appointmentId={indicationsAppt.id}
+          professionalId={indicationsAppt.professional_id}
+          appointmentType={indicationsAppt.appointment_type}
+          onClose={() => setIndicationsAppt(null)}
+        />
+      )}
+
       {/* Modal — Confirmar atención */}
       {showNotesModal && pendingAppt && (
         <div
@@ -764,6 +778,15 @@ export default function DashboardPage() {
                     <CalendarDays size={16} />
                     Coordinar próximo turno
                   </button>
+                  {access.can('indications.send') && (
+                    <button
+                      onClick={() => setIndicationsAppt(pendingAppt)}
+                      className="w-full bg-surface2 hover:bg-surface3 border border-app text-app font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <ClipboardList size={15} />
+                      Enviar indicaciones
+                    </button>
+                  )}
                   {myAfipConfigured && createdPayment?.id && (
                     <button
                       onClick={() => setShowInvoiceModal(true)}

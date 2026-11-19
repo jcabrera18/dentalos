@@ -66,6 +66,11 @@ Webhooks Twilio: `POST /inbound` (paciente confirma/cancela) · `POST /status`
 `GET /` · `POST /` · `GET /:id` · `GET /templates`
 `POST /` acepta `signer_type` (`patient`|`guardian`|`patient_and_guardian`), `signer_name`, `signer_document`, `signer_relationship`, `signer_authority`, `guardian_signature_data`, `treatment_invasive`, `patient_heard`, `signer_identity_verified`, `signer_bond_evidence`; las constancias legales las agrega el servidor al `content_html`. Reglas CCyC art. 26 → `400` con `code` (`PATIENT_HEARD_REQUIRED`, `SIGNER_IDENTITY_NOT_VERIFIED`, `SIGNER_BOND_EVIDENCE_REQUIRED`, `PATIENT_DOB_REQUIRED`, `GUARDIAN_SIGNATURE_REQUIRED`, `TREATMENT_INVASIVE_REQUIRED`, `ADOLESCENT_SIGNATURE_REQUIRED`, `ASSISTED_SIGNATURE_REQUIRED`, `GUARDIAN_IDENTITY_REQUIRED`, `GUARDIAN_RELATIONSHIP_REQUIRED`, `GUARDIAN_SIGNATURE_MISSING`, `SIGNER_AUTHORITY_REQUIRED`) (078/079).
 
+## indications — `/indications` · `indications/routes.ts`
+Plantillas: `GET /templates` (`?discipline=`, `?include_inactive=true`; copia perezosa de las base de `indications/defaults.ts`) · `POST /templates` · `PATCH /templates/:id` · `DELETE /templates/:id` (soft).
+Envíos: `GET /?patient_id=` (historial, contenido descifrado) · `POST /` (registra un envío: `patient_id`, `appointment_id?`, `template_id?`, `professional_id?`, `title`, `items[]`, `footer_note?`).
+Acceso: leer plantillas + enviar + historial = permiso `indications.send`; escribir plantillas = `clinical` (081).
+
 ## schedule-blocks — `/schedule-blocks` · `schedule-blocks/routes.ts`
 `GET /` · `POST /` · `DELETE /:id` (bloqueos de agenda)
 

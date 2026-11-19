@@ -758,3 +758,266 @@ function buildStatementCanvas(data: AccountStatementData): HTMLCanvasElement {
 
   return canvas
 }
+
+// ── Indicaciones al paciente ───────────────────────────────────────────────
+
+export type IndicationsCardData = {
+  title: string
+  /** Ítems; `**texto**` se dibuja en negrita. */
+  items: string[]
+  footerNote?: string | null
+  patientName: string
+  date: Date | string
+  professionalName?: string | null
+  /** Matrícula del profesional tratante, p.ej. "M.P. 1234". */
+  licenseNumber?: string | null
+  clinicName?: string | null
+}
+
+type Run = { text: string; bold: boolean }
+type Word = { text: string; bold: boolean; space: boolean }
+
+/** Separa `**negrita**` en tramos. Un `**` sin cerrar se dibuja literal. */
+function parseBold(text: string): Run[] {
+  const runs: Run[] = []
+  const re = /\*\*(.+?)\*\*/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    if (m.index > last) runs.push({ text: text.slice(last, m.index), bold: false })
+    runs.push({ text: m[1], bold: true })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) runs.push({ text: text.slice(last), bold: false })
+  return runs
+}
+
+/** Ajuste de línea con tramos en negrita. Devuelve líneas como listas de palabras. */
+function wrapRich(
+  ctx: CanvasRenderingContext2D, text: string, maxW: number, size: number, font: string,
+): Word[][] {
+  // Palabras con su estilo; `space` indica si van precedidas por un espacio.
+  const words: Word[] = []
+  let pendingSpace = false
+  for (const run of parseBold(text)) {
+    const parts = run.text.split(/(\s+)/)
+    for (const part of parts) {
+      if (!part) continue
+      if (/^\s+$/.test(part)) { pendingSpace = true; continue }
+      words.push({ text: part, bold: run.bold, space: pendingSpace && words.length > 0 })
+      pendingSpace = false
+    }
+  }
+
+  const widthOf = (w: Word) => {
+    ctx.font = `${w.bold ? 'bold ' : ''}${size}px ${font}`
+    return ctx.measureText(w.text).width
+  }
+  ctx.font = `${size}px ${font}`
+  const spaceW = ctx.measureText(' ').width
+
+  const lines: Word[][] = []
+  let cur: Word[] = []
+  let curW = 0
+  for (const w of words) {
+    const ww = widthOf(w)
+    const add = (cur.length && w.space ? spaceW : 0) + ww
+    if (cur.length && curW + add > maxW) {
+      lines.push(cur)
+      cur = [{ ...w, space: false }]
+      curW = ww
+    } else {
+      cur.push(cur.length ? w : { ...w, space: false })
+      curW += add
+    }
+  }
+  if (cur.length) lines.push(cur)
+  return lines
+}
+
+function drawRichLine(
+  ctx: CanvasRenderingContext2D, line: Word[], x: number, y: number, size: number, font: string, color: string,
+) {
+  ctx.font = `${size}px ${font}`
+  const spaceW = ctx.measureText(' ').width
+  ctx.textAlign = 'left'
+  ctx.fillStyle = color
+  let cx = x
+  for (const w of line) {
+    if (w.space) cx += spaceW
+    ctx.font = `${w.bold ? 'bold ' : ''}${size}px ${font}`
+    ctx.fillText(w.text, cx, y)
+    cx += ctx.measureText(w.text).width
+  }
+}
+
+/** Indicaciones (PNG) para compartir por WhatsApp — simil comprobante/presupuesto. */
+export async function generateIndicationsImage(
+  data: IndicationsCardData,
+): Promise<{ dataUrl: string; blob: Blob }> {
+  const canvas = buildIndicationsCanvas(data)
+  const dataUrl = canvas.toDataURL('image/png')
+  const blob = await new Promise<Blob>((resolve) =>
+    canvas.toBlob((b) => resolve(b!), 'image/png'),
+  )
+  return { dataUrl, blob }
+}
+
+function buildIndicationsCanvas(data: IndicationsCardData): HTMLCanvasElement {
+  const IW = 440 // un poco más ancha que el comprobante: listas largas
+  const INNER_W = IW - PAD * 2
+  const FONT = 'Arial, Helvetica, sans-serif'
+  const ITEM_SIZE = 13
+  const ITEM_LH = 18
+  const BULLET_W = 16
+  const ITEM_GAP = 7
+
+  const items = data.items.map((s) => s.trim()).filter(Boolean)
+  const tmp = document.createElement('canvas').getContext('2d')!
+
+  tmp.font = `bold 18px ${FONT}`
+  const titleLines = wrapText(tmp, data.title.trim(), INNER_W)
+  const itemLines = items.map((it) => wrapRich(tmp, it, INNER_W - BULLET_W, ITEM_SIZE, FONT))
+  const footer = data.footerNote?.trim() || ''
+  tmp.font = `bold 11px ${FONT}`
+  const footerLines = footer ? wrapText(tmp, footer, INNER_W - 28) : []
+  const prof = [data.professionalName?.trim(), data.licenseNumber?.trim()].filter(Boolean).join(' · ')
+
+  // Altura
+  let H = 4 + PAD
+  if (data.clinicName) H += 26 + 10 + 17       // clínica + separador
+  H += titleLines.length * 24 + 8               // título
+  H += 48 + 18                                  // caja paciente/fecha + gap
+  for (const lines of itemLines) H += lines.length * ITEM_LH + ITEM_GAP
+  H += 10
+  if (footerLines.length) H += 20 + footerLines.length * 15 + 16
+  if (prof) H += 40
+  H += 16 + 1 + 52 + PAD                        // gap + separador + marca
+
+  const canvas = document.createElement('canvas')
+  canvas.width = IW * DPR
+  canvas.height = H * DPR
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(DPR, DPR)
+
+  ctx.fillStyle = C.white
+  ctx.fillRect(0, 0, IW, H)
+  ctx.fillStyle = C.teal
+  ctx.fillRect(0, 0, IW, 4)
+
+  let y = 4 + PAD
+
+  // --- HEADER ---
+  if (data.clinicName) {
+    ctx.fillStyle = C.dark
+    ctx.font = `bold 15px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.fillText(data.clinicName, PAD, y + 16)
+    ctx.fillStyle = C.light
+    ctx.font = `8px ${FONT}`
+    ctx.textAlign = 'right'
+    ctx.fillText('INDICACIONES', IW - PAD, y + 15)
+    y += 26 + 10
+    ctx.strokeStyle = C.border
+    ctx.lineWidth = 0.75
+    ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(IW - PAD, y); ctx.stroke()
+    y += 17
+  }
+
+  // --- TÍTULO ---
+  ctx.fillStyle = C.dark
+  ctx.font = `bold 18px ${FONT}`
+  ctx.textAlign = 'center'
+  for (const line of titleLines) {
+    ctx.fillText(line, IW / 2, y + 18)
+    y += 24
+  }
+  y += 8
+
+  // --- PACIENTE / FECHA ---
+  ctx.fillStyle = C.tealBg
+  roundRect(ctx, PAD, y, INNER_W, 48, 8)
+  ctx.fill()
+  ctx.textAlign = 'left'
+  ctx.fillStyle = C.teal
+  ctx.font = `bold 8px ${FONT}`
+  ctx.fillText('PACIENTE', PAD + 12, y + 16)
+  ctx.textAlign = 'right'
+  ctx.fillText('FECHA', IW - PAD - 12, y + 16)
+  ctx.fillStyle = C.dark
+  ctx.font = `bold 14px ${FONT}`
+  ctx.textAlign = 'left'
+  ctx.fillText(data.patientName, PAD + 12, y + 35, INNER_W - 140)
+  ctx.font = `12px ${FONT}`
+  ctx.textAlign = 'right'
+  ctx.fillText(fmtDate(data.date), IW - PAD - 12, y + 35)
+  y += 48 + 18
+
+  // --- ÍTEMS ---
+  for (const lines of itemLines) {
+    ctx.fillStyle = C.teal
+    ctx.beginPath()
+    ctx.arc(PAD + 4, y + 9, 2.6, 0, Math.PI * 2)
+    ctx.fill()
+    for (const line of lines) {
+      drawRichLine(ctx, line, PAD + BULLET_W, y + 13, ITEM_SIZE, FONT, C.dark)
+      y += ITEM_LH
+    }
+    y += ITEM_GAP
+  }
+  y += 10
+
+  // --- AVISO (recuadro ámbar) ---
+  if (footerLines.length) {
+    const boxH = 20 + footerLines.length * 15
+    ctx.fillStyle = C.amberBg
+    roundRect(ctx, PAD, y, INNER_W, boxH, 8)
+    ctx.fill()
+    ctx.fillStyle = C.amber
+    ctx.fillRect(PAD, y + 6, 3, boxH - 12)
+    ctx.font = `bold 11px ${FONT}`
+    ctx.textAlign = 'left'
+    let fy = y + 10
+    for (const line of footerLines) {
+      ctx.fillText(line, PAD + 14, fy + 11)
+      fy += 15
+    }
+    y += boxH + 16
+  }
+
+  // --- PROFESIONAL ---
+  if (prof) {
+    ctx.fillStyle = C.light
+    ctx.font = `bold 8px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.fillText('PROFESIONAL', PAD, y + 10)
+    ctx.fillStyle = C.mid
+    ctx.font = `bold 12px ${FONT}`
+    ctx.fillText(prof, PAD, y + 27, INNER_W)
+    y += 40
+  }
+
+  y += 16
+  ctx.strokeStyle = C.border
+  ctx.lineWidth = 0.75
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(IW - PAD, y); ctx.stroke()
+  y += 1
+
+  // --- MARCA ---
+  ctx.font = `bold 11px ${FONT}`
+  const pre = 'Tu consultorio, más simple con Vital'
+  const preW = ctx.measureText(pre).width
+  const osW = ctx.measureText('OS').width
+  const fx = Math.floor((IW - preW - osW) / 2)
+  ctx.textAlign = 'left'
+  ctx.fillStyle = C.mid
+  ctx.fillText(pre, fx, y + 22)
+  ctx.fillStyle = C.teal
+  ctx.fillText('OS', fx + preW, y + 22)
+  ctx.fillStyle = C.light
+  ctx.font = `9px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.fillText('vitalos.com.ar', IW / 2, y + 38)
+
+  return canvas
+}

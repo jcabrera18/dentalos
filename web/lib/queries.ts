@@ -38,6 +38,8 @@ export const queryKeys = {
   patientContact: (id: string) => ['patient', id, 'contact'] as const,
   notificationsInbox: ['notifications', 'inbox'] as const,
   notificationsUnread: ['notifications', 'unread-count'] as const,
+  indicationTemplates: ['indications', 'templates'] as const,
+  patientIndications: (id: string) => ['patient', id, 'indications'] as const,
 }
 
 // ── Notificaciones in-app (campana) ──────────────────────
@@ -373,6 +375,98 @@ export function useUpdateAppointmentStatus() {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.dashboard })
       void qc.invalidateQueries({ queryKey: ['appointments', 'calendar'] })
+    },
+  })
+}
+
+// ── Indicaciones al paciente ─────────────────────────────
+// Plantillas de la clínica (todas las disciplinas) + historial de envíos por
+// paciente. Enviar = permiso `indications.send`; editar plantillas = acceso clínico.
+export type IndicationTemplate = {
+  id: string
+  discipline: string
+  name: string
+  title: string
+  items: string[]
+  footer_note: string | null
+  appointment_types: string[]
+  is_active: boolean
+}
+
+export type PatientIndication = {
+  id: string
+  patient_id: string
+  appointment_id: string | null
+  template_id: string | null
+  professional_id: string | null
+  sent_by: string | null
+  created_at: string
+  title: string
+  items: string[]
+  footer_note: string | null
+  professional?: { first_name: string; last_name: string; license_number: string | null } | null
+}
+
+export type IndicationTemplateInput = Omit<IndicationTemplate, 'id'>
+
+// Todas las plantillas no borradas (activas e inactivas): el modal filtra activas,
+// la configuración muestra todas.
+export function useIndicationTemplates(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.indicationTemplates,
+    queryFn: async (): Promise<IndicationTemplate[]> =>
+      (await authedApiFetch('/indications/templates?include_inactive=true')).data ?? [],
+    enabled,
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+export function usePatientIndications(patientId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.patientIndications(patientId),
+    queryFn: async (): Promise<PatientIndication[]> =>
+      (await authedApiFetch(`/indications?patient_id=${patientId}`)).data ?? [],
+    enabled: enabled && Boolean(patientId),
+  })
+}
+
+export function useSaveIndicationTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...input }: Partial<IndicationTemplateInput> & { id?: string }) =>
+      (await authedApiFetch(id ? `/indications/templates/${id}` : '/indications/templates', {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify(input),
+      })).data as IndicationTemplate,
+    onSettled: () => { void qc.invalidateQueries({ queryKey: queryKeys.indicationTemplates }) },
+  })
+}
+
+export function useDeleteIndicationTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => authedApiFetch(`/indications/templates/${id}`, { method: 'DELETE' }),
+    onSettled: () => { void qc.invalidateQueries({ queryKey: queryKeys.indicationTemplates }) },
+  })
+}
+
+export type SendIndicationInput = {
+  patient_id: string
+  appointment_id?: string
+  template_id?: string
+  professional_id?: string
+  title: string
+  items: string[]
+  footer_note?: string | null
+}
+
+export function useLogIndication() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: SendIndicationInput) =>
+      (await authedApiFetch('/indications', { method: 'POST', body: JSON.stringify(input) })).data as PatientIndication,
+    onSettled: (_d, _e, vars) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.patientIndications(vars.patient_id) })
     },
   })
 }

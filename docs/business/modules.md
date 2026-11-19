@@ -16,6 +16,7 @@ Lista de módulos **que existen en el código** (verificado contra rutas de la A
 | **Facturación AFIP** | ✅ | `InvoiceModal`, stats | `/invoices` | CAE electrónico, PDF+QR, cert/key por profesional |
 | **Recordatorios WhatsApp** | ✅ | config en `settings` | `/notifications` + worker | BullMQ/Twilio, cuota por plan, confirmación por respuesta |
 | **Notificaciones in-app** | ✅ | `NotificationBell` | `/notifications/inbox` | Campana del staff, realtime (`app_notifications`) |
+| **Indicaciones al paciente** | ✅ | ficha del paciente, agenda/dashboard al marcar *Atendido*, Configuración | `/indications` | Plantillas por clínica → imagen PNG para WhatsApp; historial de envíos cifrado |
 | **Consentimientos** | ✅ | `patients/[id]/consents` | `/consents` | Plantillas globales + por clínica, firma/estado |
 | **Profesionales / Consultorios** | ✅ | `settings/` | `/professionals`, `/auth` | Invites por token, roles, config WhatsApp/AFIP, onboarding de clínica |
 | **Suscripciones / Planes** | ✅ | `layout` (modal planes) | `/subscription`, `/nave`, `/mercadopago` | Trial 14d, planes free/basic/pro/clinic/enterprise, cobro Nave/MP |

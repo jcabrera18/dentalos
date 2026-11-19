@@ -18,6 +18,7 @@ Fuente de verdad: `../dentalos-api/src/supabase/migrations/*.sql` (numeradas 001
 | `quotes` | Presupuestos (módulo 026). Numeración vía `generate_quote_number`. |
 | `invoices` + items | Facturas AFIP con CAE (034/038). |
 | `expenses` | Egresos. |
+| `indication_templates`, `patient_indications` | Indicaciones al paciente (081). Plantillas por clínica y `discipline` (`items` jsonb, `**negrita**`, `footer_note`, `appointment_types` para sugerir; base en código, copia perezosa). Envíos: `content_enc` cifrado (AEAD, columna `content`), `professional_id` tratante y `sent_by`; solo INSERT/SELECT para `authenticated`. No están en la barrera RLS clínica de 077: el Administrativo puede enviar. |
 | `consents`, `consent_templates`, `global_consent_templates` | Consentimientos informados y plantillas (globales + por clínica). Firmante y constancias CCyC art. 26: `signer_type` (`patient`/`guardian`/`patient_and_guardian`), `signer_*_enc`, `guardian_signature_data_enc`, `treatment_invasive` (078/079), `patient_heard`, `signer_identity_verified`, `signer_bond_evidence` (080). |
 | `clinical_history_signatures` | Firmas de historia clínica (036). |
 | `notifications` | Historial de notificaciones enviadas. |

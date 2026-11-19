@@ -42,6 +42,7 @@ export const PERMISSIONS = [
   'notifications.manage',
   'finance.view',
   'expenses.manage',
+  'indications.send',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -80,6 +81,10 @@ export const PERMISSION_LABELS: Record<Permission, { label: string; description:
     label: 'Gastos',
     description: 'Ver y registrar gastos de la clínica.',
   },
+  'indications.send': {
+    label: 'Indicaciones al paciente',
+    description: 'Enviar las indicaciones post-consulta (plantillas de la clínica) por WhatsApp e historial de envíos. No permite editar las plantillas.',
+  },
 }
 
 export const DEFAULT_PERMISSIONS: Record<Role, PermissionMap> = {
@@ -95,6 +100,7 @@ export const DEFAULT_PERMISSIONS: Record<Role, PermissionMap> = {
     'notifications.manage': true,
     'finance.view': false,
     'expenses.manage': false,
+    'indications.send': true,
   },
 }
 

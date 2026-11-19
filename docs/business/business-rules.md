@@ -62,12 +62,21 @@ Enum DB `plan_type`; `displayName` es el nombre comercial:
   - `< 13`: constancia de que el niño fue informado y oído según su madurez (`patient_heard`, arts. 26 y 707).
   - Se guarda `signer_type`, vínculo, nombre/DNI/instrumento del firmante y firma del representante (cifrados), `treatment_invasive`, `patient_heard`, `signer_identity_verified`, `signer_bond_evidence` y `patient_age_at_signing`. Las constancias (carácter del tratamiento, representación/asistencia, verificación, derecho a ser oído) las **genera la API** (`buildSignerStatementsHtml`) y las anexa al `content_html` antes de cifrarlo; el navegador solo las muestra como vista previa. Placeholders nuevos: `{{signer_name}}`, `{{signer_document}}`, `{{signer_relationship}}`.
 
+## Indicaciones al paciente (migración 081)
+- Plantillas por clínica y especialidad. Las base (todas las especialidades, en `indications/defaults.ts`) se copian solas la primera vez; si la clínica borra una, no reaparece. Son **borradores** a validar por cada profesional.
+- Se ofrecen al marcar un turno como *Atendido* (agenda: aviso no bloqueante; dashboard: botón en la confirmación) y desde la ficha del paciente. Se **sugiere** la plantilla cuyo `appointment_types` coincide con el tipo de turno.
+- Al enviar se pueden destildar/editar/agregar ítems **solo para ese envío**; la plantilla no cambia.
+- La imagen (Canvas, sin deps) lleva clínica, paciente, fecha, ítems, aviso final y profesional tratante + matrícula. Se comparte con la hoja nativa (mobile) o copiar/descargar (desktop).
+- Cada envío (compartir/copiar/descargar) queda registrado en `patient_indications` con el contenido cifrado; uno por contenido dentro de la misma sesión del modal.
+- Profesional tratante: el indicado, o el del turno, o quien envía si atiende. Debe ser de la clínica y con acceso clínico.
+- Permisos: enviar e historial = `indications.send` (Administrativo: **sí** por defecto, configurable); crear/editar/borrar plantillas = solo roles con acceso clínico.
+
 ## Roles (`user_role`)
 `owner`, `admin`, `professional`, `receptionist` (UI: **Administrativo/a**). La autorización efectiva es server-side (API + RLS); el frontend solo oculta UI.
 
 ### Rol Administrativo (`receptionist`)
 - Gestiona la clínica **sin acceso a información clínica**: historia clínica, evoluciones, odontograma/tratamientos, archivos médicos, consentimientos, alergias/medicación/notas del paciente y notas clínicas del turno. Ese bloqueo **no es configurable**.
-- Permisos por usuario (`professionals.permissions`, catálogo en `lib/permissions.ts`, editable por owner/admin en Configuración → Equipo). Defaults: agenda de **todos** los profesionales, datos de contacto de pacientes, cobros, presupuestos, facturación AFIP y recordatorios = **sí**; estadísticas/finanzas y gastos = **no**.
+- Permisos por usuario (`professionals.permissions`, catálogo en `lib/permissions.ts`, editable por owner/admin en Configuración → Equipo). Defaults: agenda de **todos** los profesionales, datos de contacto de pacientes, cobros, presupuestos, facturación AFIP, recordatorios e indicaciones al paciente = **sí**; estadísticas/finanzas y gastos = **no**.
 - Ocupa un lugar del plan como cualquier usuario (`checkProfessionalLimit` cuenta todas las filas activas).
 - Se invita con el mismo link de "Invitar al equipo" eligiendo el rol; al registrarse no elige especialidad ni matrícula.
 - No atiende: no aparece como columna de agenda ni como opción de profesional; cobros y presupuestos que carga deben imputarse a un profesional explícito; las facturas salen a nombre del **profesional del cobro** (con su CUIT/certificado).

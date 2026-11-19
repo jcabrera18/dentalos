@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/api'
 import { usePermissions } from '@/lib/queries'
 import { InviteRolePicker } from '@/components/InviteRolePicker'
 import { TeamPermissionsSection } from '@/components/TeamPermissionsSection'
+import { IndicationTemplatesSection } from '@/components/IndicationTemplatesSection'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal, useAppTheme } from '@/app/providers'
@@ -1448,6 +1449,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          <IndicationTemplatesSection myDiscipline={selfProfessional?.discipline} />
           <AccountActionsSection canInvite={access.isOwnerOrAdmin} />
         </div>
 
