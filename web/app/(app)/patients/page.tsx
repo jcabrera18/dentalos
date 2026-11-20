@@ -13,7 +13,12 @@ import { useSubscription } from '@/lib/useSubscription'
 import { usePlansModal } from '@/app/providers'
 
 function daysAgoLabel(dateStr: string): string {
-  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000)
+  // Diferencia en días de calendario (hora local), no en bloques de 24 h:
+  // un turno de ayer a la tarde visto hoy a la mañana es "ayer", no "hoy".
+  const d = new Date(dateStr)
+  const now = new Date()
+  const startOf = (x: Date) => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate())
+  const days = Math.round((startOf(now) - startOf(d)) / 86_400_000)
   if (days <= 0) return 'hoy'
   if (days === 1) return 'ayer'
   if (days < 365) return `hace ${days} días`
